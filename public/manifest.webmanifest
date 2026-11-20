@@ -1,0 +1,16 @@
+{
+  "name": "Meta Ecom MKT Hub",
+  "short_name": "MKT Hub",
+  "description": "Phần mềm giao việc, duyệt ấn phẩm và theo dõi tiến độ nội bộ Team Marketing Meta Ecom",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

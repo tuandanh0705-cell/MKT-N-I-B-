@@ -1,0 +1,50 @@
+{
+  "name": "meta-ecom-mkt-crm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:dev": "prisma dev"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.0.0",
+    "@prisma/client": "^7.0.0",
+    "@types/web-push": "^3.6.4",
+    "bcryptjs": "^3.0.2",
+    "clsx": "^2.1.1",
+    "dotenv": "^17.2.3",
+    "jose": "^6.1.0",
+    "lucide-react": "^0.553.0",
+    "next": "^16.0.0",
+    "nodemailer": "^7.0.10",
+    "pg": "^8.16.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.4.0",
+    "three": "^0.187.0",
+    "web-push": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^24.10.0",
+    "@types/nodemailer": "^7.0.4",
+    "@types/pg": "^8.15.6",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/three": "^0.187.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.39.1",
+    "eslint-config-next": "^16.0.0",
+    "postcss": "^8.5.6",
+    "prisma": "^7.0.0",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.20.6"
+  }
+}
