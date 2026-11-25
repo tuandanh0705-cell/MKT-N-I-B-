@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" width="220" height="220">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#dcfce7"/>
+      <stop offset="100%" stop-color="#86efac"/>
+    </linearGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <rect x="14" y="12" width="192" height="192" rx="44" fill="#ffffff"/>
+    <rect x="22" y="20" width="176" height="176" rx="38" fill="url(#bg)"/>
+    <circle cx="52" cy="46" r="14" fill="#ffffff" opacity="0.18"/>
+    <circle cx="174" cy="54" r="9" fill="#ffffff" opacity="0.22"/>
+    
+      <circle cx="110" cy="94" r="48" fill="#10b981" stroke="#ffffff" stroke-width="6"/>
+      <path d="M84 95 L102 113 L139 75" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      <g transform="translate(110,44) rotate(-8)">
+        <ellipse cx="0" cy="8" rx="38" ry="10" fill="#facc15" stroke="#92400e" stroke-width="3"/>
+        <path d="M-22 6 C-22 -14, 22 -14, 22 6 Z" fill="#fde047" stroke="#92400e" stroke-width="3"/>
+        <rect x="-22" y="0" width="44" height="6" rx="2" fill="#ef4444"/>
+      </g>
+      <path d="M44 82 L49 92 L59 95 L49 98 L44 108 L39 98 L29 95 L39 92 Z" fill="#facc15"/>
+      <path d="M174 78 L178 85 L185 88 L178 91 L174 98 L170 91 L163 88 L170 85 Z" fill="#facc15"/>
+    
+    <g transform="translate(110, 174)">
+      <rect x="-86" y="-22" width="172" height="40" rx="20" fill="#ffffff"/>
+      <rect x="-82" y="-18" width="164" height="32" rx="16" fill="#059669"/>
+      <text x="0" y="5" text-anchor="middle" font-family="'Segoe UI', 'Roboto', 'Noto Sans', Arial, sans-serif" font-weight="900" font-size="19" fill="#ffffff" letter-spacing="0.3">DUYỆT LUÔN!</text>
+    </g>
+  </g>
+</svg>

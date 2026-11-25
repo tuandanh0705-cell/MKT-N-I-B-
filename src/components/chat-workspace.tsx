@@ -12,21 +12,26 @@ import {
   Plus,
   Send,
   ShieldCheck,
+  Smile,
+  Sparkles,
   X,
 } from "lucide-react";
 import { DenDenMushiIcon } from "@/components/pirate-art";
 import { ChatRoomsSidebar } from "@/components/chat-rooms-sidebar";
 import { ChatMessageStream } from "@/components/chat-message-stream";
+import { ChatEmojiStickerPicker } from "@/components/chat-emoji-sticker-picker";
 import {
   ChatCreateGroupModal,
   ChatGroupSettingsModal,
   ChatImageLightbox,
 } from "@/components/chat-modals";
 import { useToast } from "@/components/toast-provider";
+import { formatStickerMessageContent } from "@/lib/chat-stickers";
 import type {
   ChatMessageItem,
   ChatParticipantUser,
   ChatRoomSummary,
+  ChatStickerItem,
 } from "@/types/crm";
 import type { DepartmentScope, UserRole } from "@/generated/prisma/client";
 
@@ -39,7 +44,7 @@ const STEALTH_ALIASES = [
   "🔥 Kẻ Giấu Mặt",
 ];
 
-const QUICK_EMOJIS = ["👍", "🔥", "❤️", "😂", "🏴‍☠️", "🎉", "🚀"];
+const QUICK_EMOJIS = ["👍", "🔥", "❤️", "😂", "🎉"];
 
 interface ChatWorkspaceProps {
   currentUser: {
@@ -121,6 +126,8 @@ export function ChatWorkspace({
 
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerTab, setPickerTab] = useState<"EMOJI" | "STICKER">("EMOJI");
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const activeRoomIdRef = useRef<string | null>(activeRoomId);
@@ -198,6 +205,22 @@ export function ChatWorkspace({
       })
     );
     chatInputRef.current?.focus();
+  }
+
+  function handleInsertEmoji(emoji: string) {
+    const el = chatInputRef.current;
+    if (!el) {
+      setDraft((prev) => prev + emoji);
+      return;
+    }
+    const start = el.selectionStart ?? draft.length;
+    const end = el.selectionEnd ?? draft.length;
+    setDraft((prev) => prev.slice(0, start) + emoji + prev.slice(end));
+    requestAnimationFrame(() => {
+      el.focus();
+      const nextPos = start + emoji.length;
+      el.setSelectionRange(nextPos, nextPos);
+    });
   }
 
   async function handleAttachImageFile(file: File | null | undefined) {
@@ -474,12 +497,12 @@ export function ChatWorkspace({
     }
   }
 
-  async function handleSendMessage(e?: React.FormEvent) {
-    e?.preventDefault();
+  async function sendPayload(
+    cleanText: string,
+    cleanUrl: string,
+    options?: { keepComposer?: boolean }
+  ) {
     if (!activeRoom) return;
-
-    const cleanText = draft.trim();
-    const cleanUrl = attachmentUrl.trim();
     if (!cleanText && !cleanUrl) return;
 
     const targetRoomId = activeRoom.id;
@@ -516,9 +539,11 @@ export function ChatWorkspace({
 
     // Optimistic UI: hiện bong bóng ngay lập tức (<10ms) & giải phóng ô nhập để gửi liên tiếp
     updateRoomMessages(targetRoomId, (prev) => [...prev, optimisticMsg]);
-    setDraft("");
-    setAttachmentUrl("");
-    setShowLinkInput(false);
+    if (!options?.keepComposer) {
+      setDraft("");
+      setAttachmentUrl("");
+      setShowLinkInput(false);
+    }
     setRooms((prev) => {
       const updated = prev.map((r) =>
         r.id === targetRoomId
@@ -556,8 +581,10 @@ export function ChatWorkspace({
         updateRoomMessages(targetRoomId, (prev) =>
           prev.filter((m) => m.id !== tempId)
         );
-        setDraft((cur) => (cur ? cur : cleanText));
-        if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
+        if (!options?.keepComposer) {
+          setDraft((cur) => (cur ? cur : cleanText));
+          if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
+        }
         showToast(data.error || "Không gửi được tin nhắn.", "error");
         return;
       }
@@ -581,10 +608,26 @@ export function ChatWorkspace({
       updateRoomMessages(targetRoomId, (prev) =>
         prev.filter((m) => m.id !== tempId)
       );
-      setDraft((cur) => (cur ? cur : cleanText));
-      if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
+      if (!options?.keepComposer) {
+        setDraft((cur) => (cur ? cur : cleanText));
+        if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
+      }
       showToast("Lỗi kết nối khi gửi tin nhắn.", "error");
     }
+  }
+
+  async function handleSendMessage(e?: React.FormEvent) {
+    e?.preventDefault();
+    setPickerOpen(false);
+    await sendPayload(draft.trim(), attachmentUrl.trim());
+  }
+
+  async function handleSendSticker(sticker: ChatStickerItem) {
+    await sendPayload(
+      formatStickerMessageContent(sticker.name),
+      sticker.imageUrl,
+      { keepComposer: true }
+    );
   }
 
   async function handleRecallMessage(messageId: string) {
@@ -707,12 +750,23 @@ export function ChatWorkspace({
               {/* Khung soạn tin & Thanh bật/tắt Ẩn danh */}
               <form
                 onSubmit={handleSendMessage}
-                className={`p-3 border-t transition-colors ${
+                className={`relative p-3 border-t transition-colors ${
                   anonymousMode && activeRoom.allowAnonymous
                     ? "bg-indigo-950/5 border-indigo-300"
                     : "bg-[#FFFDF7] border-amber-100"
                 }`}
               >
+                <ChatEmojiStickerPicker
+                  open={pickerOpen}
+                  initialTab={pickerTab}
+                  currentUserId={currentUser.id}
+                  currentUserRole={currentUser.role}
+                  align="right"
+                  onClose={() => setPickerOpen(false)}
+                  onSelectEmoji={handleInsertEmoji}
+                  onSelectSticker={handleSendSticker}
+                />
+
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                   <div className="flex flex-wrap items-center gap-1.5">
                     {activeRoom.allowAnonymous && (
@@ -797,17 +851,61 @@ export function ChatWorkspace({
                   </div>
 
                   <div className="flex items-center gap-1">
-                    {QUICK_EMOJIS.map((em) => (
-                      <button
-                        key={em}
-                        type="button"
-                        onClick={() => setDraft((d) => d + em)}
-                        className="text-sm hover:scale-125 transition px-0.5 cursor-pointer"
-                        title={`Chèn ${em}`}
-                      >
-                        {em}
-                      </button>
-                    ))}
+                    <div className="hidden xl:flex items-center gap-0.5 mr-1">
+                      {QUICK_EMOJIS.map((em) => (
+                        <button
+                          key={em}
+                          type="button"
+                          onClick={() => handleInsertEmoji(em)}
+                          className="text-sm hover:scale-125 transition px-0.5 cursor-pointer"
+                          title={`Chèn nhanh ${em}`}
+                        >
+                          {em}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (pickerOpen && pickerTab === "EMOJI") {
+                          setPickerOpen(false);
+                        } else {
+                          setPickerTab("EMOJI");
+                          setPickerOpen(true);
+                        }
+                      }}
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer ${
+                        pickerOpen && pickerTab === "EMOJI"
+                          ? "bg-amber-100 border-amber-400 text-amber-950"
+                          : "bg-white border-amber-200 text-slate-700 hover:bg-amber-50"
+                      }`}
+                      title="Mở kho biểu tượng cảm xúc đầy đủ"
+                    >
+                      <Smile className="w-3.5 h-3.5 text-amber-500" />
+                      Emoji
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (pickerOpen && pickerTab === "STICKER") {
+                          setPickerOpen(false);
+                        } else {
+                          setPickerTab("STICKER");
+                          setPickerOpen(true);
+                        }
+                      }}
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer ${
+                        pickerOpen && pickerTab === "STICKER"
+                          ? "bg-[#0B2545] border-[#0B2545] text-amber-300"
+                          : "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100"
+                      }`}
+                      title="Mở kho Sticker & tự thêm Sticker"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Sticker
+                    </button>
                   </div>
                 </div>
 

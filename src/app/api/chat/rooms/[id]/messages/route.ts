@@ -7,6 +7,7 @@ import {
   serializeChatMessage,
 } from "@/lib/chat";
 import { createNotification } from "@/lib/notifications";
+import { isBuiltInStickerUrl } from "@/lib/chat-stickers";
 
 export async function GET(
   request: Request,
@@ -159,9 +160,10 @@ export async function POST(
       const isInlineImage = /^data:image\/(png|jpeg|jpg|webp|gif);base64,/i.test(
         attachmentUrl
       );
-      if (!isHttpUrl && !isInlineImage) {
+      const isBuiltInSticker = isBuiltInStickerUrl(attachmentUrl);
+      if (!isHttpUrl && !isInlineImage && !isBuiltInSticker) {
         return NextResponse.json(
-          { error: "Đính kèm chỉ hỗ trợ link http(s) hoặc ảnh tải lên." },
+          { error: "Đính kèm chỉ hỗ trợ link http(s), ảnh tải lên hoặc sticker." },
           { status: 400 }
         );
       }

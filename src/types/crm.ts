@@ -499,6 +499,18 @@ export interface ChatRoomSummary {
   lastMessage: ChatMessageItem | null;
 }
 
+export interface ChatStickerItem {
+  id: string;
+  name: string;
+  packName: string;
+  imageUrl: string;
+  isShared: boolean;
+  isBuiltIn?: boolean;
+  createdById: string | null;
+  createdByName?: string | null;
+  createdAt?: string;
+}
+
 export interface ProjectChannelSuggestions {
   fanpages: string[];
   tiktoks: string[];

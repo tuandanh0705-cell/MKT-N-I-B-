@@ -12,6 +12,12 @@ import {
   X,
 } from "lucide-react";
 import { PirateAvatar } from "@/components/pirate-art";
+import {
+  getStickerNameFromContent,
+  isImageOrStickerAttachment,
+  isPureEmojiMessage,
+  isStickerMessage,
+} from "@/lib/chat-stickers";
 import type {
   ChatMessageItem,
   ChatParticipantUser,
@@ -25,13 +31,6 @@ function formatChatTime(iso: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(d);
-}
-
-function isImageAttachmentUrl(url: string | null | undefined): boolean {
-  if (!url) return false;
-  return (
-    /^data:image\//i.test(url) || /\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(url)
-  );
 }
 
 function escapeRegExp(s: string) {
@@ -322,60 +321,104 @@ export function ChatMessageStream({
                       </button>
                     )}
 
-                    <div
-                      className={`rounded-2xl px-3.5 py-2 text-xs sm:text-sm leading-relaxed shadow-sm whitespace-pre-wrap break-words transition-opacity ${
-                        msg.pending ? "opacity-75" : ""
-                      } ${
-                        msg.isAnonymous
-                          ? mine
-                            ? "bg-indigo-900 text-amber-50 border border-indigo-500 rounded-br-sm"
-                            : "bg-indigo-950 text-indigo-50 border border-indigo-700 rounded-bl-sm"
-                          : mine
-                            ? "bg-[#0B2545] text-white rounded-br-sm"
-                            : "bg-white text-slate-800 border border-amber-200/80 rounded-bl-sm"
-                      }`}
-                    >
-                      {renderMessageTextWithLinks(
+                    {(() => {
+                      const stickerMsg = isStickerMessage(
                         msg.content,
-                        mine || msg.isAnonymous,
-                        mentionNames
-                      )}
+                        msg.attachmentUrl
+                      );
+                      const pureEmojiMsg =
+                        !msg.attachmentUrl && isPureEmojiMessage(msg.content);
 
-                      {msg.attachmentUrl && (
-                        <div className="mt-2 pt-1.5 border-t border-white/15">
-                          {isImageAttachmentUrl(msg.attachmentUrl) ? (
-                            <button
-                              type="button"
-                              onClick={() => onOpenLightbox(msg.attachmentUrl!)}
-                              className="block rounded-xl overflow-hidden border border-black/10 hover:opacity-95 cursor-pointer"
-                            >
-                              <Image
-                                src={msg.attachmentUrl}
-                                alt="Ảnh đính kèm"
-                                width={320}
-                                height={240}
-                                unoptimized
-                                className="max-h-56 w-auto object-cover rounded-xl"
-                              />
-                            </button>
-                          ) : (
-                            <a
-                              href={msg.attachmentUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`inline-flex items-center gap-1 text-xs font-bold underline ${
-                                mine || msg.isAnonymous
-                                  ? "text-amber-300"
-                                  : "text-sky-600"
-                              }`}
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              Mở link đính kèm
-                            </a>
+                      if (stickerMsg && msg.attachmentUrl) {
+                        const stickerLabel = getStickerNameFromContent(msg.content);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => onOpenLightbox(msg.attachmentUrl!)}
+                            title={stickerLabel}
+                            className={`group/stk block p-1 rounded-2xl transition hover:scale-105 cursor-pointer ${
+                              msg.pending ? "opacity-70" : ""
+                            }`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={msg.attachmentUrl}
+                              alt={stickerLabel}
+                              className="w-32 h-32 sm:w-36 sm:h-36 object-contain drop-shadow-sm select-none"
+                            />
+                          </button>
+                        );
+                      }
+
+                      if (pureEmojiMsg) {
+                        return (
+                          <div
+                            className={`px-1 py-0.5 text-3xl sm:text-4xl leading-none tracking-wide select-text transition-opacity ${
+                              msg.pending ? "opacity-70" : ""
+                            }`}
+                          >
+                            {msg.content}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          className={`rounded-2xl px-3.5 py-2 text-xs sm:text-sm leading-relaxed shadow-sm whitespace-pre-wrap break-words transition-opacity ${
+                            msg.pending ? "opacity-75" : ""
+                          } ${
+                            msg.isAnonymous
+                              ? mine
+                                ? "bg-indigo-900 text-amber-50 border border-indigo-500 rounded-br-sm"
+                                : "bg-indigo-950 text-indigo-50 border border-indigo-700 rounded-bl-sm"
+                              : mine
+                                ? "bg-[#0B2545] text-white rounded-br-sm"
+                                : "bg-white text-slate-800 border border-amber-200/80 rounded-bl-sm"
+                          }`}
+                        >
+                          {renderMessageTextWithLinks(
+                            msg.content,
+                            mine || msg.isAnonymous,
+                            mentionNames
+                          )}
+
+                          {msg.attachmentUrl && (
+                            <div className="mt-2 pt-1.5 border-t border-white/15">
+                              {isImageOrStickerAttachment(msg.attachmentUrl) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenLightbox(msg.attachmentUrl!)}
+                                  className="block rounded-xl overflow-hidden border border-black/10 hover:opacity-95 cursor-pointer"
+                                >
+                                  <Image
+                                    src={msg.attachmentUrl}
+                                    alt="Ảnh đính kèm"
+                                    width={320}
+                                    height={240}
+                                    unoptimized
+                                    className="max-h-56 w-auto object-cover rounded-xl"
+                                  />
+                                </button>
+                              ) : (
+                                <a
+                                  href={msg.attachmentUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`inline-flex items-center gap-1 text-xs font-bold underline ${
+                                    mine || msg.isAnonymous
+                                      ? "text-amber-300"
+                                      : "text-sky-600"
+                                  }`}
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  Mở link đính kèm
+                                </a>
+                              )}
+                            </div>
                           )}
                         </div>
-                      )}
-                    </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

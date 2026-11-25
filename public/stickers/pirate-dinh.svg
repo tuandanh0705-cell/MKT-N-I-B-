@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" width="220" height="220">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f3e8ff"/>
+      <stop offset="100%" stop-color="#d8b4fe"/>
+    </linearGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <rect x="14" y="12" width="192" height="192" rx="44" fill="#ffffff"/>
+    <rect x="22" y="20" width="176" height="176" rx="38" fill="url(#bg)"/>
+    <circle cx="52" cy="46" r="14" fill="#ffffff" opacity="0.18"/>
+    <circle cx="174" cy="54" r="9" fill="#ffffff" opacity="0.22"/>
+    
+      <path d="M76 50 H144 V82 C144 106 128 120 110 120 C92 120 76 106 76 82 Z" fill="#facc15" stroke="#ffffff" stroke-width="5"/>
+      <path d="M76 58 C56 58 54 88 76 92" fill="none" stroke="#f59e0b" stroke-width="7" stroke-linecap="round"/>
+      <path d="M144 58 C164 58 166 88 144 92" fill="none" stroke="#f59e0b" stroke-width="7" stroke-linecap="round"/>
+      <rect x="102" y="118" width="16" height="18" fill="#f59e0b"/>
+      <rect x="82" y="132" width="56" height="14" rx="6" fill="#b45309" stroke="#ffffff" stroke-width="3"/>
+      <polygon points="110,64 115,76 128,77 118,85 121,98 110,91 99,98 102,85 92,77 105,76" fill="#ffffff"/>
+      <circle cx="54" cy="48" r="5" fill="#facc15"/>
+      <circle cx="168" cy="46" r="6" fill="#fde047"/>
+    
+    <g transform="translate(110, 174)">
+      <rect x="-86" y="-22" width="172" height="40" rx="20" fill="#ffffff"/>
+      <rect x="-82" y="-18" width="164" height="32" rx="16" fill="#7c3aed"/>
+      <text x="0" y="5" text-anchor="middle" font-family="'Segoe UI', 'Roboto', 'Noto Sans', Arial, sans-serif" font-weight="900" font-size="22" fill="#ffffff" letter-spacing="0.3">ĐỈNH KOUT!</text>
+    </g>
+  </g>
+</svg>

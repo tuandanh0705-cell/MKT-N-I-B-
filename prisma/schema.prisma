@@ -236,6 +236,7 @@ model User {
   createdChatRooms       ChatRoom[]              @relation("ChatRoomCreator")
   chatMemberships        ChatParticipant[]
   chatMessages           ChatMessage[]           @relation("ChatMessageSender")
+  chatStickers           ChatSticker[]           @relation("UserChatStickers")
   pushSubscriptions      PushSubscription[]
   activityLogs           ActivityLog[]           @relation("ActivityActor")
   quotes                 MotivationalQuote[]     @relation("QuoteAuthor")
@@ -545,6 +546,21 @@ model ChatMessage {
   sender User     @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([roomId, createdAt])
+}
+
+model ChatSticker {
+  id          String   @id @default(cuid())
+  name        String
+  packName    String   @default("Sticker Team")
+  imageUrl    String   @db.Text
+  isShared    Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  createdBy User @relation("UserChatStickers", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([isShared, createdAt])
+  @@index([createdById, createdAt])
 }
 
 model AppSetting {

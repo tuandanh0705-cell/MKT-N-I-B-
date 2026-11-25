@@ -9,12 +9,22 @@ import {
   Link2,
   MessageSquare,
   Send,
+  Smile,
+  Sparkles,
   X,
 } from "lucide-react";
 import { PirateAvatar } from "@/components/pirate-art";
+import { ChatEmojiStickerPicker } from "@/components/chat-emoji-sticker-picker";
 import { useToast } from "@/components/toast-provider";
+import {
+  formatStickerMessageContent,
+  getStickerNameFromContent,
+  isImageOrStickerAttachment,
+  isPureEmojiMessage,
+  isStickerMessage,
+} from "@/lib/chat-stickers";
 import { QC_CRITERIA } from "@/lib/qc-standards";
-import type { SimpleUser, TaskCommentItem } from "@/types/crm";
+import type { ChatStickerItem, SimpleUser, TaskCommentItem } from "@/types/crm";
 import type { UserRole } from "@/generated/prisma/client";
 
 interface ViewerInfo {
@@ -52,10 +62,7 @@ function formatShortVnTime(input: string | Date): string {
 }
 
 function isImageAttachment(url: string | null | undefined): boolean {
-  if (!url) return false;
-  return (
-    /^data:image\//i.test(url) || /\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(url)
-  );
+  return isImageOrStickerAttachment(url);
 }
 
 function escapeRegExp(s: string) {
@@ -183,6 +190,8 @@ export function TaskFeedbackChat({
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerTab, setPickerTab] = useState<"EMOJI" | "STICKER">("EMOJI");
 
   const commentsRef = useRef<TaskCommentItem[]>(comments);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -352,6 +361,22 @@ export function TaskFeedbackChat({
     inputRef.current?.focus();
   }
 
+  function handleInsertEmoji(emoji: string) {
+    const el = inputRef.current;
+    if (!el) {
+      setDraft((prev) => prev + emoji);
+      return;
+    }
+    const start = el.selectionStart ?? draft.length;
+    const end = el.selectionEnd ?? draft.length;
+    setDraft((prev) => prev.slice(0, start) + emoji + prev.slice(end));
+    requestAnimationFrame(() => {
+      el.focus();
+      const nextPos = start + emoji.length;
+      el.setSelectionRange(nextPos, nextPos);
+    });
+  }
+
   async function handleAttachImage(file: File | null | undefined) {
     if (!file) return;
     setUploadingImage(true);
@@ -370,10 +395,11 @@ export function TaskFeedbackChat({
     }
   }
 
-  async function handleSend(e?: React.FormEvent) {
-    e?.preventDefault();
-    const cleanText = draft.trim();
-    const cleanUrl = attachmentUrl.trim();
+  async function sendCommentPayload(
+    cleanText: string,
+    cleanUrl: string,
+    options?: { keepComposer?: boolean }
+  ) {
     if (!cleanText && !cleanUrl) return;
 
     const isDataImage = Boolean(cleanUrl && /^data:image\//i.test(cleanUrl));
@@ -405,9 +431,11 @@ export function TaskFeedbackChat({
       commentsRef.current = next;
       return next;
     });
-    setDraft("");
-    setAttachmentUrl("");
-    setShowLinkInput(false);
+    if (!options?.keepComposer) {
+      setDraft("");
+      setAttachmentUrl("");
+      setShowLinkInput(false);
+    }
     scrollToBottom(true);
 
     try {
@@ -426,8 +454,10 @@ export function TaskFeedbackChat({
           commentsRef.current = next;
           return next;
         });
-        setDraft((cur) => (cur ? cur : cleanText));
-        if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
+        if (!options?.keepComposer) {
+          setDraft((cur) => (cur ? cur : cleanText));
+          if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
+        }
         showToast(data.error || "Không gửi được feedback.", "error");
         return;
       }
@@ -451,18 +481,34 @@ export function TaskFeedbackChat({
         commentsRef.current = next;
         return next;
       });
-      setDraft((cur) => (cur ? cur : cleanText));
-      if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
+      if (!options?.keepComposer) {
+        setDraft((cur) => (cur ? cur : cleanText));
+        if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
+      }
       showToast("Lỗi kết nối máy chủ khi gửi feedback.", "error");
     }
+  }
+
+  async function handleSend(e?: React.FormEvent) {
+    e?.preventDefault();
+    setPickerOpen(false);
+    await sendCommentPayload(draft.trim(), attachmentUrl.trim());
+  }
+
+  async function handleSendSticker(sticker: ChatStickerItem) {
+    await sendCommentPayload(
+      formatStickerMessageContent(sticker.name),
+      sticker.imageUrl,
+      { keepComposer: true }
+    );
   }
 
   const myUserId = viewer?.id || currentUserId;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden flex flex-col">
+    <div className="relative rounded-2xl border border-slate-200 bg-white flex flex-col">
       {/* Header */}
-      <div className="px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-amber-50/80 via-white to-sky-50/70 flex items-center justify-between gap-2">
+      <div className="rounded-t-2xl px-3.5 py-2.5 border-b border-slate-100 bg-gradient-to-r from-amber-50/80 via-white to-sky-50/70 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <MessageSquare className="w-4 h-4 text-amber-600 shrink-0" />
           <h4 className="text-xs font-extrabold text-slate-900 truncate">
@@ -540,75 +586,104 @@ export function TaskFeedbackChat({
                     </span>
                   </div>
 
-                  <div
-                    className={`rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-xs whitespace-pre-wrap break-words transition-opacity ${
-                      c.pending ? "opacity-75" : ""
-                    } ${
-                      isMine
-                        ? "bg-[#0B2545] text-white rounded-br-sm"
-                        : "bg-white text-slate-800 border border-amber-200/80 rounded-bl-sm"
-                    }`}
-                  >
-                    {renderTextWithLinksAndMentions(
-                      c.content,
-                      isMine,
-                      mentionNames
-                    )}
+                  {isStickerMessage(c.content, c.attachmentUrl) &&
+                  c.attachmentUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setLightboxUrl(c.attachmentUrl!)}
+                      title={getStickerNameFromContent(c.content)}
+                      className={`block p-1 rounded-2xl transition hover:scale-105 cursor-pointer ${
+                        c.pending ? "opacity-70" : ""
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={c.attachmentUrl}
+                        alt={getStickerNameFromContent(c.content)}
+                        className="w-28 h-28 object-contain drop-shadow-sm select-none"
+                      />
+                    </button>
+                  ) : !c.attachmentUrl &&
+                    flags.length === 0 &&
+                    isPureEmojiMessage(c.content) ? (
+                    <div
+                      className={`px-1 py-0.5 text-3xl leading-none select-text ${
+                        c.pending ? "opacity-70" : ""
+                      }`}
+                    >
+                      {c.content}
+                    </div>
+                  ) : (
+                    <div
+                      className={`rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-xs whitespace-pre-wrap break-words transition-opacity ${
+                        c.pending ? "opacity-75" : ""
+                      } ${
+                        isMine
+                          ? "bg-[#0B2545] text-white rounded-br-sm"
+                          : "bg-white text-slate-800 border border-amber-200/80 rounded-bl-sm"
+                      }`}
+                    >
+                      {renderTextWithLinksAndMentions(
+                        c.content,
+                        isMine,
+                        mentionNames
+                      )}
 
-                    {flags.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {flags.map((code) => {
-                          const info = QC_CRITERIA.find((q) => q.code === code);
-                          return (
-                            <span
-                              key={code}
-                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                                isMine
-                                  ? "bg-rose-500/25 text-rose-100 border border-rose-300/30"
-                                  : "bg-rose-100 text-rose-800"
+                      {flags.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {flags.map((code) => {
+                            const info = QC_CRITERIA.find((q) => q.code === code);
+                            return (
+                              <span
+                                key={code}
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                  isMine
+                                    ? "bg-rose-500/25 text-rose-100 border border-rose-300/30"
+                                    : "bg-rose-100 text-rose-800"
+                                }`}
+                              >
+                                {code}
+                                {info ? `: ${info.group}` : ""}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {c.attachmentUrl && (
+                        <div className="mt-2 pt-1.5 border-t border-current/15">
+                          {isImageAttachment(c.attachmentUrl) ? (
+                            <button
+                              type="button"
+                              onClick={() => setLightboxUrl(c.attachmentUrl!)}
+                              className="block rounded-xl overflow-hidden border border-black/10 hover:opacity-95 cursor-pointer"
+                            >
+                              <Image
+                                src={c.attachmentUrl}
+                                alt="Ảnh minh họa feedback"
+                                width={280}
+                                height={200}
+                                unoptimized
+                                className="max-h-44 w-auto object-cover rounded-xl"
+                              />
+                            </button>
+                          ) : (
+                            <a
+                              href={c.attachmentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`inline-flex items-center gap-1 text-[11px] font-bold underline ${
+                                isMine ? "text-amber-300" : "text-sky-600"
                               }`}
                             >
-                              {code}
-                              {info ? `: ${info.group}` : ""}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {c.attachmentUrl && (
-                      <div className="mt-2 pt-1.5 border-t border-current/15">
-                        {isImageAttachment(c.attachmentUrl) ? (
-                          <button
-                            type="button"
-                            onClick={() => setLightboxUrl(c.attachmentUrl!)}
-                            className="block rounded-xl overflow-hidden border border-black/10 hover:opacity-95 cursor-pointer"
-                          >
-                            <Image
-                              src={c.attachmentUrl}
-                              alt="Ảnh minh họa feedback"
-                              width={280}
-                              height={200}
-                              unoptimized
-                              className="max-h-44 w-auto object-cover rounded-xl"
-                            />
-                          </button>
-                        ) : (
-                          <a
-                            href={c.attachmentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`inline-flex items-center gap-1 text-[11px] font-bold underline ${
-                              isMine ? "text-amber-300" : "text-sky-600"
-                            }`}
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            Mở link tham khảo
-                          </a>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                              <ExternalLink className="w-3 h-3" />
+                              Mở link tham khảo
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -619,10 +694,20 @@ export function TaskFeedbackChat({
       {/* Composer */}
       <form
         onSubmit={handleSend}
-        className={`border-t border-slate-100 bg-white space-y-2 ${
+        className={`relative rounded-b-2xl border-t border-slate-100 bg-white space-y-2 ${
           compact ? "p-2.5" : "p-3"
         }`}
       >
+        <ChatEmojiStickerPicker
+          open={pickerOpen}
+          initialTab={pickerTab}
+          currentUserId={viewer?.id || currentUserId}
+          currentUserRole={viewer?.role || currentUserRole}
+          align="left"
+          onClose={() => setPickerOpen(false)}
+          onSelectEmoji={handleInsertEmoji}
+          onSelectSticker={handleSendSticker}
+        />
         {filteredMentions.length > 0 && (
           <div className="flex flex-wrap items-center gap-1 bg-violet-50/70 border border-violet-200 rounded-xl px-2 py-1.5">
             <span className="text-[10px] font-bold text-violet-700 px-1">
@@ -712,6 +797,44 @@ export function TaskFeedbackChat({
               }`}
             >
               <Link2 className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (pickerOpen && pickerTab === "EMOJI") {
+                  setPickerOpen(false);
+                } else {
+                  setPickerTab("EMOJI");
+                  setPickerOpen(true);
+                }
+              }}
+              title="Biểu tượng cảm xúc"
+              className={`p-1.5 rounded-lg cursor-pointer transition ${
+                pickerOpen && pickerTab === "EMOJI"
+                  ? "bg-amber-100 text-amber-800"
+                  : "text-slate-500 hover:text-amber-600 hover:bg-amber-50"
+              }`}
+            >
+              <Smile className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (pickerOpen && pickerTab === "STICKER") {
+                  setPickerOpen(false);
+                } else {
+                  setPickerTab("STICKER");
+                  setPickerOpen(true);
+                }
+              }}
+              title="Sticker & Tự thêm Sticker"
+              className={`p-1.5 rounded-lg cursor-pointer transition ${
+                pickerOpen && pickerTab === "STICKER"
+                  ? "bg-[#0B2545] text-amber-300"
+                  : "text-slate-500 hover:text-amber-700 hover:bg-amber-50"
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
             </button>
             {mentionCandidates.length > 0 && (
               <button
