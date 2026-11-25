@@ -34,20 +34,23 @@ export default async function ChatPage({
 
   let initialMessages: ReturnType<typeof serializeChatMessage>[] = [];
   if (initialRoomId) {
-    const rawMessages = await prisma.chatMessage.findMany({
-      where: { roomId: initialRoomId },
-      orderBy: { createdAt: "asc" },
-      take: 120,
-      include: { sender: { select: CHAT_USER_SELECT } },
-    });
-    initialMessages = rawMessages.map((m) => serializeChatMessage(m, user.id));
-
-    await prisma.chatParticipant.update({
-      where: {
-        roomId_userId: { roomId: initialRoomId, userId: user.id },
-      },
-      data: { lastReadAt: new Date() },
-    });
+    const [rawMessagesDesc] = await Promise.all([
+      prisma.chatMessage.findMany({
+        where: { roomId: initialRoomId },
+        orderBy: { createdAt: "desc" },
+        take: 80,
+        include: { sender: { select: CHAT_USER_SELECT } },
+      }),
+      prisma.chatParticipant.update({
+        where: {
+          roomId_userId: { roomId: initialRoomId, userId: user.id },
+        },
+        data: { lastReadAt: new Date() },
+      }),
+    ]);
+    initialMessages = rawMessagesDesc
+      .reverse()
+      .map((m) => serializeChatMessage(m, user.id));
 
     const targetRoom = rooms.find((r) => r.id === initialRoomId);
     if (targetRoom) targetRoom.unreadCount = 0;

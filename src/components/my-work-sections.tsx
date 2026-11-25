@@ -52,7 +52,9 @@ export function MyWorkWeekStrip({
             ? "Nghỉ CN"
             : "Nghỉ phép"
           : hasKpi
-            ? `${dayKpi!.allDoneMet ? "✓ " : ""}${dayKpi!.totalDone}/${dayKpi!.totalTarget}`
+            ? dayKpi!.totalDone === 0 && dayKpi!.totalSubmitted > 0
+              ? `⏳ ${dayKpi!.totalSubmitted}/${dayKpi!.totalTarget}`
+              : `${dayKpi!.allDoneMet ? "✓ " : ""}${dayKpi!.totalDone}/${dayKpi!.totalTarget}`
             : count > 0
               ? `${count} việc`
               : "0";
@@ -62,11 +64,13 @@ export function MyWorkWeekStrip({
           : hasKpi
             ? dayKpi!.allDoneMet
               ? "bg-emerald-100 text-emerald-800"
-              : dayKpi!.totalPlanned > 0
-                ? "bg-amber-100 text-amber-800"
-                : isSelected
-                  ? "bg-slate-200/80 text-slate-700"
-                  : "bg-slate-100 text-slate-400"
+              : dayKpi!.totalSubmitted > 0
+                ? "bg-sky-100 text-sky-800"
+                : dayKpi!.totalPlanned > 0
+                  ? "bg-amber-100 text-amber-800"
+                  : isSelected
+                    ? "bg-slate-200/80 text-slate-700"
+                    : "bg-slate-100 text-slate-400"
             : count > 0
               ? "bg-amber-100 text-amber-800"
               : "text-transparent select-none";

@@ -12,12 +12,6 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   }
-  if (user.role !== "LEADER") {
-    return NextResponse.json(
-      { error: "Chỉ Leader mới có quyền gửi nhắc việc khẩn." },
-      { status: 403 }
-    );
-  }
 
   const { id } = await context.params;
   const task = await prisma.task.findUnique({
@@ -35,14 +29,24 @@ export async function POST(
     );
   }
 
+  if (user.role !== "LEADER" && task.requesterId !== user.id) {
+    return NextResponse.json(
+      { error: "Chỉ Leader hoặc người giao việc mới có quyền gửi nhắc tiến độ." },
+      { status: 403 }
+    );
+  }
+
+  const isLeaderRemind = user.role === "LEADER";
   const notif = await createNotification({
     userId: task.assignee.id,
     type: "REMINDER",
-    title: `Leader nhắc việc gấp: ${task.code}`,
+    title: isLeaderRemind
+      ? `🔔 Leader nhắc việc gấp: ${task.code}`
+      : `🔔 ${user.name} nhắc tiến độ: ${task.code}`,
     message: `${user.name} nhắc bạn kiểm tra & cập nhật tiến độ đầu việc "${task.title}" (${task.project.name}) • Hạn: ${formatVnDateTime(task.dueAt)}.`,
-    linkUrl: `/projects/${task.project.slug}`,
-    sendEmailNow: true,
-    actionLabel: "Mở thẻ công việc ngay",
+    linkUrl: `/my-work?taskId=${task.id}&openChat=1`,
+    sendEmailNow: isLeaderRemind,
+    actionLabel: "Mở thẻ công việc & phản hồi",
   });
 
   return NextResponse.json({

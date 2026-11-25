@@ -5,6 +5,7 @@ import { Camera } from "lucide-react";
 import { MediaBriefBoard, type MediaBriefKind } from "@/components/media-brief-board";
 import { CreateTaskModal } from "@/components/create-task-modal";
 import { TaskDrawer } from "@/components/task-drawer";
+import type { VideoOrderKind } from "@/lib/media-brief";
 import type {
   CapacityItem,
   SimpleProject,
@@ -35,6 +36,8 @@ export function MediaOrdersPageClient({
   const [createOpen, setCreateOpen] = useState(false);
   const [createBriefKind, setCreateBriefKind] =
     useState<MediaBriefKind>("MEDIA_IMAGE");
+  const [createVideoKind, setCreateVideoKind] =
+    useState<VideoOrderKind>("SHOOT_AND_EDIT");
 
   function handleTaskUpdated(updated: TaskItem) {
     setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
@@ -77,28 +80,32 @@ export function MediaOrdersPageClient({
         }
         onTaskUpdated={handleTaskUpdated}
         onTaskDeleted={handleTaskDeleted}
-        onOpenCreateModal={(kind) => {
+        onOpenCreateModal={(kind, videoKind) => {
           setCreateBriefKind(kind);
+          if (videoKind) setCreateVideoKind(videoKind);
           setCreateOpen(true);
         }}
       />
 
       <CreateTaskModal
-        key={`global-media-${createBriefKind}-${createOpen ? "open" : "closed"}`}
+        key={`global-media-${createBriefKind}-${createVideoKind}-${createOpen ? "open" : "closed"}`}
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         projects={projects}
         users={users}
         initialCapacity={capacity}
+        currentUserId={currentUserId}
         defaultProjectId={projects[0]?.id}
         defaultTaskType={createBriefKind}
         defaultOrderMode="MEDIA"
+        defaultVideoKind={createVideoKind}
         onCreated={(newTask) => setTasks((prev) => [newTask, ...prev])}
       />
 
       <TaskDrawer
         taskId={activeTaskId}
         currentUserRole={currentUserRole}
+        centeredModal
         onClose={() => setActiveTaskId(null)}
         onUpdated={handleTaskUpdated}
         onDeleted={handleTaskDeleted}

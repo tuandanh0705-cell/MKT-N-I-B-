@@ -166,16 +166,17 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">
-                  Email thuyền viên
+                  Tài khoản / Email đăng nhập
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
-                    type="email"
+                    type="text"
+                    autoComplete="username"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="ten@metaecom.vn"
+                    placeholder="ten@metaecom.vn hoặc tên đăng nhập"
                     className="w-full rounded-xl border border-amber-200 bg-white pl-10 pr-3.5 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
                   />
                 </div>

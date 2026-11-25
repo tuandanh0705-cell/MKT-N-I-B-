@@ -78,9 +78,11 @@ export function ContentCalendarToolbar({
   return (
     <div className="bg-white rounded-2xl border-2 border-sky-200/80 p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-extrabold text-slate-900">
-          📝 Nội dung chi tiết ({filteredCount})
-        </h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-base font-extrabold text-slate-900">
+            📝 Nội dung chi tiết ({filteredCount})
+          </h2>
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button

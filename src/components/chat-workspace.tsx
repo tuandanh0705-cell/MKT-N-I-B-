@@ -118,7 +118,6 @@ export function ChatWorkspace({
     return Boolean(first?.name?.includes("Ẩn Danh"));
   });
   const [anonymousAlias, setAnonymousAlias] = useState<string>(STEALTH_ALIASES[0]);
-  const [sending, setSending] = useState(false);
 
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -126,10 +125,31 @@ export function ChatWorkspace({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const activeRoomIdRef = useRef<string | null>(activeRoomId);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const roomCacheRef = useRef<Map<string, ChatMessageItem[]>>(
+    new Map(initialRoomId ? [[initialRoomId, initialMessages]] : [])
+  );
+  const pollTickRef = useRef<number>(0);
 
   useEffect(() => {
     activeRoomIdRef.current = activeRoomId;
   }, [activeRoomId]);
+
+  const updateRoomMessages = useCallback(
+    (
+      roomId: string,
+      updater: (prev: ChatMessageItem[]) => ChatMessageItem[]
+    ): boolean => {
+      const prev = roomCacheRef.current.get(roomId) ?? [];
+      const next = updater(prev);
+      if (next === prev) return false;
+      roomCacheRef.current.set(roomId, next);
+      if (activeRoomIdRef.current === roomId) {
+        setMessages(next);
+      }
+      return true;
+    },
+    []
+  );
 
   const activeRoom = useMemo(
     () => rooms.find((r) => r.id === activeRoomId) ?? null,
@@ -250,13 +270,60 @@ export function ChatWorkspace({
       setAnonymousMode(
         Boolean(target?.name?.includes("Ẩn Danh") && target.allowAnonymous)
       );
-      setLoadingRoom(true);
+
+      // Hiển thị tức thì tin nhắn đã cache của phòng này (0ms)
+      const cached = roomCacheRef.current.get(roomId);
+      if (cached && cached.length > 0) {
+        setMessages(cached);
+        setLoadingRoom(false);
+        scrollToBottom(false);
+      } else {
+        setMessages([]);
+        setLoadingRoom(true);
+      }
 
       try {
-        const res = await fetch(`/api/chat/rooms/${roomId}/messages`);
+        const lastConfirmed = cached
+          ? [...cached].reverse().find((m) => !m.pending)
+          : undefined;
+        const url = lastConfirmed
+          ? `/api/chat/rooms/${roomId}/messages?after=${encodeURIComponent(
+              lastConfirmed.createdAt
+            )}`
+          : `/api/chat/rooms/${roomId}/messages`;
+
+        const res = await fetch(url);
         if (res.ok && activeRoomIdRef.current === roomId) {
           const data = await res.json();
-          setMessages(data.messages || []);
+          if (data.incremental) {
+            const incoming: ChatMessageItem[] = data.messages || [];
+            const deletedSet = new Set<string>(data.deletedIds || []);
+            const changed = updateRoomMessages(roomId, (prev) => {
+              let dirty = false;
+              const existingIds = new Set(prev.map((m) => m.id));
+              const updated = prev.map((m) => {
+                if (deletedSet.has(m.id) && !m.isDeleted) {
+                  dirty = true;
+                  return { ...m, isDeleted: true, content: "", attachmentUrl: null };
+                }
+                return m;
+              });
+              for (const m of incoming) {
+                if (!existingIds.has(m.id)) {
+                  dirty = true;
+                  updated.push(m);
+                }
+              }
+              return dirty ? updated : prev;
+            });
+            if (changed) scrollToBottom(false);
+          } else {
+            const loaded: ChatMessageItem[] = data.messages || [];
+            roomCacheRef.current.set(roomId, loaded);
+            setMessages(loaded);
+            scrollToBottom(false);
+          }
+
           setRooms((prev) => {
             const updated = prev.map((r) =>
               r.id === roomId ? { ...r, unreadCount: 0 } : r
@@ -264,62 +331,125 @@ export function ChatWorkspace({
             broadcastTotalUnread(updated);
             return updated;
           });
-          scrollToBottom(false);
         }
       } finally {
         setLoadingRoom(false);
       }
     },
-    [rooms, broadcastTotalUnread, scrollToBottom]
+    [rooms, broadcastTotalUnread, scrollToBottom, updateRoomMessages]
   );
 
   useEffect(() => {
     let active = true;
-    const poll = async () => {
-      if (document.visibilityState !== "visible") return;
-      const currentId = activeRoomIdRef.current;
-      try {
-        const roomsRes = await fetch("/api/chat/rooms");
-        if (roomsRes.ok && active) {
-          const rData = await roomsRes.json();
-          const fetchedRooms: ChatRoomSummary[] = rData.rooms || [];
-          const normalized = fetchedRooms.map((r) =>
-            r.id === currentId ? { ...r, unreadCount: 0 } : r
-          );
-          setRooms(normalized);
-          broadcastTotalUnread(normalized);
-        }
+    let inFlight = false;
 
-        if (currentId) {
-          const msgRes = await fetch(`/api/chat/rooms/${currentId}/messages`);
-          if (msgRes.ok && active && activeRoomIdRef.current === currentId) {
-            const mData = await msgRes.json();
-            setMessages((prev) => {
-              const next: ChatMessageItem[] = mData.messages || [];
-              if (
-                prev.length === next.length &&
-                prev[prev.length - 1]?.id === next[next.length - 1]?.id &&
-                prev[prev.length - 1]?.isDeleted ===
-                  next[next.length - 1]?.isDeleted
-              ) {
-                return prev;
-              }
-              scrollToBottom(true);
-              return next;
-            });
-          }
-        }
-      } catch {
-        // Bỏ qua lỗi mạng thoáng qua khi polling
+    const refreshRoomsList = async (currentId: string | null) => {
+      const roomsRes = await fetch("/api/chat/rooms?poll=1");
+      if (roomsRes.ok && active) {
+        const rData = await roomsRes.json();
+        const fetchedRooms: ChatRoomSummary[] = rData.rooms || [];
+        const normalized = fetchedRooms.map((r) =>
+          r.id === currentId ? { ...r, unreadCount: 0 } : r
+        );
+        setRooms(normalized);
+        broadcastTotalUnread(normalized);
       }
     };
 
-    const timer = setInterval(poll, 3500);
+    const poll = async (forceRooms = false) => {
+      if (document.visibilityState !== "visible" || inFlight) return;
+      inFlight = true;
+      const currentId = activeRoomIdRef.current;
+      pollTickRef.current += 1;
+      let hasNewIncoming = false;
+
+      try {
+        if (currentId) {
+          const cached = roomCacheRef.current.get(currentId) ?? [];
+          const lastConfirmed = [...cached].reverse().find((m) => !m.pending);
+          const url = lastConfirmed
+            ? `/api/chat/rooms/${currentId}/messages?after=${encodeURIComponent(
+                lastConfirmed.createdAt
+              )}`
+            : `/api/chat/rooms/${currentId}/messages`;
+
+          const msgRes = await fetch(url);
+          if (msgRes.ok && active && activeRoomIdRef.current === currentId) {
+            const mData = await msgRes.json();
+            if (mData.incremental) {
+              const incoming: ChatMessageItem[] = mData.messages || [];
+              const deletedSet = new Set<string>(mData.deletedIds || []);
+              if (incoming.length > 0) hasNewIncoming = true;
+
+              const changed = updateRoomMessages(currentId, (prev) => {
+                let dirty = false;
+                const existingIds = new Set(prev.map((m) => m.id));
+                const next = prev.map((m) => {
+                  if (deletedSet.has(m.id) && !m.isDeleted) {
+                    dirty = true;
+                    return { ...m, isDeleted: true, content: "", attachmentUrl: null };
+                  }
+                  return m;
+                });
+                for (const m of incoming) {
+                  if (!existingIds.has(m.id)) {
+                    dirty = true;
+                    next.push(m);
+                  }
+                }
+                return dirty ? next : prev;
+              });
+              if (changed && incoming.length > 0) {
+                scrollToBottom(true);
+              }
+            } else {
+              const loaded: ChatMessageItem[] = mData.messages || [];
+              const changed = updateRoomMessages(currentId, (prev) => {
+                if (
+                  prev.length === loaded.length &&
+                  prev[prev.length - 1]?.id === loaded[loaded.length - 1]?.id &&
+                  prev[prev.length - 1]?.isDeleted ===
+                    loaded[loaded.length - 1]?.isDeleted
+                ) {
+                  return prev;
+                }
+                return loaded;
+              });
+              if (changed) scrollToBottom(true);
+            }
+          }
+        }
+
+        // Chỉ refresh danh sách phòng mỗi 3 nhịp (~5.4s), khi có tin mới, hoặc khi vừa quay lại tab
+        if (forceRooms || hasNewIncoming || pollTickRef.current % 3 === 0) {
+          await refreshRoomsList(currentId);
+        }
+      } catch {
+        // Bỏ qua lỗi mạng thoáng qua khi polling
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === "visible") {
+        void poll(true);
+      }
+    };
+
+    const timer = setInterval(() => {
+      void poll(false);
+    }, 1800);
+    window.addEventListener("focus", onFocusOrVisible);
+    document.addEventListener("visibilitychange", onFocusOrVisible);
+
     return () => {
       active = false;
       clearInterval(timer);
+      window.removeEventListener("focus", onFocusOrVisible);
+      document.removeEventListener("visibilitychange", onFocusOrVisible);
     };
-  }, [broadcastTotalUnread, scrollToBottom]);
+  }, [broadcastTotalUnread, scrollToBottom, updateRoomMessages]);
 
   async function handleStartDirectChat(targetUserId: string) {
     try {
@@ -352,72 +482,132 @@ export function ChatWorkspace({
     const cleanUrl = attachmentUrl.trim();
     if (!cleanText && !cleanUrl) return;
 
+    const targetRoomId = activeRoom.id;
     const useAnon = Boolean(anonymousMode && activeRoom.allowAnonymous);
-    setSending(true);
+    const chosenAlias = useAnon ? anonymousAlias : null;
+    const isDataImage = Boolean(cleanUrl && /^data:image\//i.test(cleanUrl));
+    const displayContent =
+      cleanText ||
+      (isDataImage ? "🖼️ Đã gửi 1 hình ảnh" : "📎 Đã gửi 1 liên kết tài liệu");
+
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const optimisticMsg: ChatMessageItem = {
+      id: tempId,
+      roomId: targetRoomId,
+      content: displayContent,
+      isAnonymous: useAnon,
+      anonymousAlias: chosenAlias,
+      attachmentUrl: cleanUrl || null,
+      isDeleted: false,
+      isMine: true,
+      pending: true,
+      createdAt: new Date().toISOString(),
+      sender: useAnon
+        ? null
+        : {
+            id: currentUser.id,
+            name: currentUser.name,
+            title: "",
+            avatarColor: currentUser.avatarColor,
+            pirateCharacter: currentUser.pirateCharacter ?? null,
+            departmentScope: currentUser.departmentScope,
+          },
+    };
+
+    // Optimistic UI: hiện bong bóng ngay lập tức (<10ms) & giải phóng ô nhập để gửi liên tiếp
+    updateRoomMessages(targetRoomId, (prev) => [...prev, optimisticMsg]);
+    setDraft("");
+    setAttachmentUrl("");
+    setShowLinkInput(false);
+    setRooms((prev) => {
+      const updated = prev.map((r) =>
+        r.id === targetRoomId
+          ? {
+              ...r,
+              lastMessage: optimisticMsg,
+              lastMessageAt: optimisticMsg.createdAt,
+              unreadCount: 0,
+            }
+          : r
+      );
+      return [...updated].sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+        return (
+          new Date(b.lastMessageAt).getTime() -
+          new Date(a.lastMessageAt).getTime()
+        );
+      });
+    });
+    scrollToBottom(true);
+
     try {
-      const res = await fetch(`/api/chat/rooms/${activeRoom.id}/messages`, {
+      const res = await fetch(`/api/chat/rooms/${targetRoomId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content: cleanText,
           attachmentUrl: cleanUrl || null,
           isAnonymous: useAnon,
-          anonymousAlias: useAnon ? anonymousAlias : null,
+          anonymousAlias: chosenAlias,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
+        updateRoomMessages(targetRoomId, (prev) =>
+          prev.filter((m) => m.id !== tempId)
+        );
+        setDraft((cur) => (cur ? cur : cleanText));
+        if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
         showToast(data.error || "Không gửi được tin nhắn.", "error");
         return;
       }
 
       const sent: ChatMessageItem = data.message;
-      setMessages((prev) => [...prev, sent]);
-      setDraft("");
-      setAttachmentUrl("");
-      setShowLinkInput(false);
-
-      setRooms((prev) => {
-        const updated = prev.map((r) =>
-          r.id === activeRoom.id
-            ? {
-                ...r,
-                lastMessage: sent,
-                lastMessageAt: sent.createdAt,
-                unreadCount: 0,
-              }
-            : r
-        );
-        return [...updated].sort((a, b) => {
-          if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-          return (
-            new Date(b.lastMessageAt).getTime() -
-            new Date(a.lastMessageAt).getTime()
-          );
-        });
+      updateRoomMessages(targetRoomId, (prev) => {
+        const alreadyHasReal = prev.some((m) => m.id === sent.id);
+        if (alreadyHasReal) {
+          return prev.filter((m) => m.id !== tempId);
+        }
+        return prev.map((m) => (m.id === tempId ? sent : m));
       });
-      scrollToBottom(true);
-    } finally {
-      setSending(false);
+      setRooms((prev) =>
+        prev.map((r) =>
+          r.id === targetRoomId && r.lastMessage?.id === tempId
+            ? { ...r, lastMessage: sent, lastMessageAt: sent.createdAt }
+            : r
+        )
+      );
+    } catch {
+      updateRoomMessages(targetRoomId, (prev) =>
+        prev.filter((m) => m.id !== tempId)
+      );
+      setDraft((cur) => (cur ? cur : cleanText));
+      if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
+      showToast("Lỗi kết nối khi gửi tin nhắn.", "error");
     }
   }
 
   async function handleRecallMessage(messageId: string) {
-    const res = await fetch(`/api/chat/messages/${messageId}`, {
-      method: "DELETE",
-    });
-    if (res.ok) {
-      setMessages((prev) =>
+    const targetRoomId = activeRoomIdRef.current;
+    // Optimistic recall
+    if (targetRoomId) {
+      updateRoomMessages(targetRoomId, (prev) =>
         prev.map((m) =>
           m.id === messageId
             ? { ...m, isDeleted: true, content: "", attachmentUrl: null }
             : m
         )
       );
+    }
+    const res = await fetch(`/api/chat/messages/${messageId}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
       showToast("Đã thu hồi tin nhắn.", "info");
     } else {
       const data = await res.json().catch(() => ({}));
       showToast(data.error || "Không thể thu hồi tin nhắn.", "error");
+      if (targetRoomId) void handleSelectRoom(targetRoomId);
     }
   }
 
@@ -729,7 +919,7 @@ export function ChatWorkspace({
 
                   <button
                     type="submit"
-                    disabled={sending || (!draft.trim() && !attachmentUrl.trim())}
+                    disabled={!draft.trim() && !attachmentUrl.trim()}
                     className={`rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-bold text-white inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50 ${
                       anonymousMode && activeRoom.allowAnonymous
                         ? "bg-indigo-700 hover:bg-indigo-800"

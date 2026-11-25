@@ -1,0 +1,42 @@
+name: MKT Hub Scheduled Reminders
+
+on:
+  schedule:
+    # 09:00 giờ VN (02:00 UTC) - Check-in đầu ngày & cảnh báo task đến hạn
+    - cron: "0 2 * * *"
+    # 12:00 giờ VN Thứ 6 (05:00 UTC T6) - Nhắc lập Plan tuần sau
+    - cron: "0 5 * * 5"
+    # 15:00 giờ VN (08:00 UTC) - Nhắc Content nộp ấn phẩm ngày mai chờ duyệt
+    - cron: "0 8 * * *"
+    # 16:00 giờ VN (09:00 UTC) - Tổng hợp hàng đợi gửi Leader duyệt
+    - cron: "0 9 * * *"
+    # 17:30 giờ VN (10:30 UTC) - Nhắc Media bàn giao cuối ngày & Content gửi Brief mới (D-2)
+    - cron: "30 10 * * *"
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "Slot nhắc lịch thủ công (MORNING_CHECKIN | WEEKLY_PLAN | AFTERNOON_SUBMIT | LEADER_REVIEW | EVENING_HANDOVER)"
+        required: false
+        default: ""
+
+jobs:
+  trigger-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Vercel Reminder Endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          MANUAL_SLOT: ${{ github.event.inputs.slot }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Thiếu secret APP_URL hoặc CRON_SECRET trong GitHub Repository Secrets."
+            exit 1
+          fi
+          TARGET_URL="${APP_URL%/}/api/cron/reminders"
+          if [ -n "$MANUAL_SLOT" ]; then
+            TARGET_URL="${TARGET_URL}?slot=${MANUAL_SLOT}&force=1"
+          fi
+          curl --fail --show-error --silent \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${TARGET_URL}"

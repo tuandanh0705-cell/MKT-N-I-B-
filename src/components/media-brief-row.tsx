@@ -11,7 +11,12 @@ import {
 } from "lucide-react";
 import { TASK_STATUS_META, isTaskOverdue } from "@/lib/constants";
 import { formatVnDateTime } from "@/lib/dates";
-import { normalizeMediaBriefItems } from "@/lib/media-brief";
+import {
+  VIDEO_ORDER_KIND_META,
+  countFilledScriptRows,
+  getItemVideoOrderKind,
+  normalizeMediaBriefItems,
+} from "@/lib/media-brief";
 import { canUserDeleteTask } from "@/lib/task-delete";
 import type { TaskItem } from "@/types/crm";
 import type { TaskStatus, UserRole } from "@/generated/prisma/client";
@@ -189,9 +194,13 @@ export function MediaBriefRow({
             className={`rounded-full border px-2.5 py-1 text-[11px] font-bold cursor-pointer ${stMeta.colorClass}`}
           >
             {allStatuses.map((st) => {
+              const memberCanFinalizeApproved =
+                t.status === "APPROVED_FINAL" &&
+                (st === "PUBLISHED" || st === "DONE");
               const disabledOpt =
                 currentUserRole !== "LEADER" &&
                 !memberEditableStatuses.has(st) &&
+                !memberCanFinalizeApproved &&
                 st !== t.status;
               return (
                 <option key={st} value={st} disabled={disabledOpt}>
@@ -325,14 +334,31 @@ export function MediaBriefRow({
               PIC: {t.assignee.name}
             </span>
           )}
-          {briefItems.map((it, itemIdx) => (
-            <span
-              key={it.id}
-              className="rounded bg-slate-100 border border-slate-200 px-1.5 py-0.5 font-medium text-slate-700"
-            >
-              {isVideoRow ? `Video ${itemIdx + 1}` : `Ảnh ${itemIdx + 1}`}: {it.ratio}
-            </span>
-          ))}
+          {briefItems.map((it, itemIdx) => {
+            const vidKind = isVideoRow ? getItemVideoOrderKind(it) : null;
+            const filledRows = isVideoRow ? countFilledScriptRows(it) : 0;
+            return (
+              <span
+                key={it.id}
+                className={`rounded border px-1.5 py-0.5 font-medium ${
+                  vidKind
+                    ? VIDEO_ORDER_KIND_META[vidKind].badgeClass
+                    : "bg-slate-100 border-slate-200 text-slate-700"
+                }`}
+              >
+                {isVideoRow ? `Video ${itemIdx + 1}` : `Ảnh ${itemIdx + 1}`}
+                {vidKind
+                  ? ` • ${VIDEO_ORDER_KIND_META[vidKind].badgeEmoji} ${VIDEO_ORDER_KIND_META[vidKind].shortLabel}${
+                      filledRows > 0
+                        ? ` (${filledRows} ${
+                            vidKind === "SHOOT_AND_EDIT" ? "cảnh" : "scene"
+                          })`
+                        : ""
+                    }`
+                  : `: ${it.ratio}`}
+              </span>
+            );
+          })}
           {briefAsset && (
             <a
               href={briefAsset.url}

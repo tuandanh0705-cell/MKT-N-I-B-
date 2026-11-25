@@ -22,6 +22,7 @@ export const TASK_CARD_INCLUDE = {
     select: {
       id: true,
       name: true,
+      role: true,
       title: true,
       avatarColor: true,
       pirateCharacter: true,

@@ -7,13 +7,15 @@ import {
   serializeChatMessage,
 } from "@/lib/chat";
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   }
 
-  const rooms = await getUserChatRoomsWithMeta(user.id);
+  const { searchParams } = new URL(request.url);
+  const isPoll = searchParams.get("poll") === "1";
+  const rooms = await getUserChatRoomsWithMeta(user.id, { skipEnsure: isPoll });
   return NextResponse.json({ rooms });
 }
 

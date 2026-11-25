@@ -17,7 +17,6 @@ import {
   parseGoogleSheetTimelineTsv,
 } from "@/lib/content-plan";
 import { getVnDateString } from "@/lib/dates";
-import { getPlatformChannelMeta } from "@/lib/platform-meta";
 import { canUserDeleteTask, softDeleteTasksByIds } from "@/lib/task-delete";
 import type {
   ProjectChannelSuggestions,
@@ -76,7 +75,6 @@ export function ProjectContentCalendarPanel({
   const [qRoute, setQRoute] = useState("EDUCATE");
   const [qTitle, setQTitle] = useState("");
   const [qPlatform, setQPlatform] = useState("Fanpage");
-  const [qChannel, setQChannel] = useState("");
   const [qFormat, setQFormat] = useState("Ảnh");
   const [qPicId, setQPicId] = useState(currentUserId);
   const [creatingQuick, setCreatingQuick] = useState(false);
@@ -264,7 +262,6 @@ export function ProjectContentCalendarPanel({
           projectId: project.id,
           title: qTitle.trim(),
           platform: qPlatform,
-          publishChannel: qChannel.trim() || null,
           taskType: "CONTENT_SOCIAL",
           isMediaOrder: false,
           contentAngle: qRoute || null,
@@ -281,7 +278,7 @@ export function ProjectContentCalendarPanel({
       }
       onTasksAdded([data.task]);
       setQTitle("");
-      setQChannel("");
+      setQuickOpen(false);
       showToast(
         "Đã thêm dòng vào Lịch Đăng Bài! Bấm cột Bài viết để soạn nội dung."
       );
@@ -444,16 +441,19 @@ export function ProjectContentCalendarPanel({
                     value={qTitle}
                     onChange={(e) => setQTitle(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") {
+                      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                         e.preventDefault();
-                        handleQuickAdd(e);
+                        void handleQuickAdd(e);
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setQuickOpen(false);
                       }
                     }}
                     placeholder="Nhập ý tưởng / tiêu đề..."
                     className="w-full rounded-lg border border-sky-300 bg-white px-2.5 py-1 text-xs font-semibold"
                   />
                 </td>
-                <td className="p-2 space-y-1">
+                <td className="p-2">
                   <div className="flex items-center gap-1.5">
                     <PlatformLogo platform={qPlatform} size="xs" />
                     <select
@@ -468,15 +468,6 @@ export function ProjectContentCalendarPanel({
                       ))}
                     </select>
                   </div>
-                  <input
-                    type="text"
-                    value={qChannel}
-                    onChange={(e) => setQChannel(e.target.value)}
-                    placeholder={
-                      getPlatformChannelMeta(qPlatform).channelShortLabel + "..."
-                    }
-                    className="w-full rounded-lg border border-sky-200 bg-white px-2 py-0.5 text-[11px]"
-                  />
                 </td>
                 <td className="p-2 text-[11px] text-slate-500">
                   Lưu xong bấm vào đây để viết bài &amp; AI Check
@@ -577,7 +568,9 @@ export function ProjectContentCalendarPanel({
       <OutputInspectorModal
         task={inspectingTask}
         open={Boolean(inspectingTask)}
+        currentUserId={currentUserId}
         currentUserRole={currentUserRole}
+        users={users}
         aiResult={inspectingTask ? getAiResultForTask(inspectingTask) : null}
         aiLoading={Boolean(
           inspectingTask && aiCheckingTaskId === inspectingTask.id

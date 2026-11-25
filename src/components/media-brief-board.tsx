@@ -3,15 +3,22 @@
 import { useMemo, useState } from "react";
 import {
   Camera,
+  Clapperboard,
   Film,
   Image as ImageIcon,
   Plus,
+  Scissors,
   Search,
   Trash2,
   X,
 } from "lucide-react";
 import { TASK_STATUS_META } from "@/lib/constants";
 import { getPresetDateTimeLocal } from "@/lib/dates";
+import {
+  createEmptyMediaBriefItem,
+  getTaskPrimaryVideoKind,
+  type VideoOrderKind,
+} from "@/lib/media-brief";
 import { canUserDeleteTask, softDeleteTasksByIds } from "@/lib/task-delete";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { MediaBriefRow, formatVnShortDate } from "@/components/media-brief-row";
@@ -34,7 +41,7 @@ interface MediaBriefBoardProps {
   onTaskCreated: (task: TaskItem) => void;
   onTaskUpdated: (task: TaskItem) => void;
   onTaskDeleted?: (taskId: string) => void;
-  onOpenCreateModal?: (kind: MediaBriefKind) => void;
+  onOpenCreateModal?: (kind: MediaBriefKind, videoKind?: VideoOrderKind) => void;
 }
 
 const ALL_STATUSES: TaskStatus[] = [
@@ -53,8 +60,6 @@ const MEMBER_EDITABLE_STATUSES = new Set<TaskStatus>([
   "BRIEF_REVIEW",
   "IN_PROGRESS",
   "WAITING_APPROVAL",
-  "PUBLISHED",
-  "DONE",
 ]);
 
 export function MediaBriefBoard({
@@ -75,6 +80,9 @@ export function MediaBriefBoard({
 
   // Chọn loại tab: Brief Ảnh, Brief Video hoặc Đơn Ngoài Team
   const [briefKind, setBriefKind] = useState<MediaBriefTabKind>("MEDIA_IMAGE");
+  const [videoKindFilter, setVideoKindFilter] = useState<
+    "ALL" | VideoOrderKind
+  >("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [projectFilter, setProjectFilter] = useState<string>("ALL");
@@ -95,6 +103,8 @@ export function MediaBriefBoard({
   );
   const [qTitle, setQTitle] = useState("");
   const [qQty, setQQty] = useState(1);
+  const [qVideoKind, setQVideoKind] =
+    useState<VideoOrderKind>("SHOOT_AND_EDIT");
   const [qDeadline, setQDeadline] = useState(() =>
     getPresetDateTimeLocal(2, 17, 30)
   );
@@ -137,6 +147,24 @@ export function MediaBriefBoard({
     () => mediaTasks.filter((t) => t.taskType === "MEDIA_VIDEO").length,
     [mediaTasks]
   );
+  const shootVideoCount = useMemo(
+    () =>
+      mediaTasks.filter(
+        (t) =>
+          t.taskType === "MEDIA_VIDEO" &&
+          getTaskPrimaryVideoKind(t.mediaBriefItemsJson) === "SHOOT_AND_EDIT"
+      ).length,
+    [mediaTasks]
+  );
+  const editVideoCount = useMemo(
+    () =>
+      mediaTasks.filter(
+        (t) =>
+          t.taskType === "MEDIA_VIDEO" &&
+          getTaskPrimaryVideoKind(t.mediaBriefItemsJson) === "EDIT_ONLY"
+      ).length,
+    [mediaTasks]
+  );
   const outsideCount = useMemo(
     () => mediaTasks.filter((t) => Boolean(t.isOutsideDepartment)).length,
     [mediaTasks]
@@ -153,6 +181,11 @@ export function MediaBriefBoard({
                 (t.isMediaOrder || t.taskType === "MEDIA_IMAGE")
               : t.taskType === "MEDIA_VIDEO";
         if (!matchesKind) return false;
+        if (briefKind === "MEDIA_VIDEO" && videoKindFilter !== "ALL") {
+          if (getTaskPrimaryVideoKind(t.mediaBriefItemsJson) !== videoKindFilter) {
+            return false;
+          }
+        }
         if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
         if (
           showProjectColumn &&
@@ -178,6 +211,7 @@ export function MediaBriefBoard({
   }, [
     mediaTasks,
     briefKind,
+    videoKindFilter,
     statusFilter,
     showProjectColumn,
     projectFilter,
@@ -256,21 +290,30 @@ export function MediaBriefBoard({
     if (!targetProjectId || !qTitle.trim()) return;
     setCreatingQuick(true);
     try {
+      const isQuickVideo = briefKind === "MEDIA_VIDEO";
+      const quickQty = Math.max(1, Number(qQty || 1));
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: targetProjectId,
           title: qTitle.trim(),
-          taskType: briefKind === "MEDIA_VIDEO" ? "MEDIA_VIDEO" : "MEDIA_IMAGE",
+          taskType: isQuickVideo ? "MEDIA_VIDEO" : "MEDIA_IMAGE",
           isMediaOrder: true,
           isOutsideDepartment: briefKind === "OUTSIDE_TEAM",
-          quantity: Math.max(1, Number(qQty || 1)),
+          quantity: quickQty,
           dueAt: qDeadline ? new Date(qDeadline).toISOString() : null,
           assigneeId: qAssigneeId || null,
           briefLinkUrl: qBriefUrl.trim() || undefined,
           description: qNote.trim() || null,
-          platform: briefKind === "MEDIA_VIDEO" ? "TikTok" : "Fanpage",
+          platform: isQuickVideo ? "TikTok" : "Fanpage",
+          ...(isQuickVideo
+            ? {
+                mediaBriefItemsJson: Array.from({ length: quickQty }, () =>
+                  createEmptyMediaBriefItem(true, undefined, undefined, qVideoKind)
+                ),
+              }
+            : {}),
         }),
       });
       const data = await res.json();
@@ -468,6 +511,75 @@ export function MediaBriefBoard({
           </div>
         )}
 
+        {/* Phân loại riêng cho tab Brief Video: Loại 1 Quay & Dựng | Loại 2 Dựng Video */}
+        {briefKind === "MEDIA_VIDEO" && (
+          <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/40 px-3 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-extrabold text-emerald-950 mr-1">
+                Phân loại Video:
+              </span>
+              <button
+                type="button"
+                onClick={() => setVideoKindFilter("ALL")}
+                className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
+                  videoKindFilter === "ALL"
+                    ? "bg-slate-900 text-white"
+                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                Tất cả ({videoCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setVideoKindFilter("SHOOT_AND_EDIT")}
+                className={`rounded-lg px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 transition cursor-pointer ${
+                  videoKindFilter === "SHOOT_AND_EDIT"
+                    ? "bg-emerald-700 text-white shadow-2xs"
+                    : "bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-50"
+                }`}
+              >
+                <Clapperboard className="w-3 h-3" />
+                Loại 1: Quay &amp; Dựng ({shootVideoCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setVideoKindFilter("EDIT_ONLY")}
+                className={`rounded-lg px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 transition cursor-pointer ${
+                  videoKindFilter === "EDIT_ONLY"
+                    ? "bg-violet-700 text-white shadow-2xs"
+                    : "bg-white border border-violet-200 text-violet-800 hover:bg-violet-50"
+                }`}
+              >
+                <Scissors className="w-3 h-3" />
+                Loại 2: Dựng Video ({editVideoCount})
+              </button>
+            </div>
+
+            {onOpenCreateModal && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenCreateModal("MEDIA_VIDEO", "SHOOT_AND_EDIT")
+                  }
+                  className="rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-2.5 py-1 text-[11px] font-extrabold inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                >
+                  <Clapperboard className="w-3 h-3" />
+                  + Order Quay &amp; Dựng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenCreateModal("MEDIA_VIDEO", "EDIT_ONLY")}
+                  className="rounded-lg bg-violet-700 hover:bg-violet-800 text-white px-2.5 py-1 text-[11px] font-extrabold inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                >
+                  <Scissors className="w-3 h-3" />
+                  + Order Dựng Video
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Bộ lọc gọn & Tổng số lượng */}
         <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-slate-100 text-xs">
           <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[240px]">
@@ -604,8 +716,8 @@ export function MediaBriefBoard({
                   {formatVnShortDate(new Date())}
                 </td>
                 <td className="py-2.5 px-3 whitespace-nowrap">
-                  <span className="inline-flex rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold text-orange-800">
-                    {currentUserRole === "LEADER" ? "Đang làm" : "Duyệt Brief"}
+                  <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[11px] font-bold text-sky-800">
+                    Đang làm
                   </span>
                 </td>
                 <td className="py-2.5 px-3">
@@ -647,6 +759,22 @@ export function MediaBriefBoard({
                     className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold"
                   />
                   <div className="flex flex-wrap gap-1.5">
+                    {briefKind === "MEDIA_VIDEO" && (
+                      <select
+                        value={qVideoKind}
+                        onChange={(e) =>
+                          setQVideoKind(e.target.value as VideoOrderKind)
+                        }
+                        className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-900"
+                      >
+                        <option value="SHOOT_AND_EDIT">
+                          🎥 Loại 1: Quay &amp; Dựng
+                        </option>
+                        <option value="EDIT_ONLY">
+                          ✂️ Loại 2: Dựng Video
+                        </option>
+                      </select>
+                    )}
                     <select
                       value={qAssigneeId}
                       onChange={(e) => setQAssigneeId(e.target.value)}

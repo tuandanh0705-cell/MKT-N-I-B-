@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Plus, RotateCcw, Settings2, Sparkles, Target, X } from "lucide-react";
+import { CheckCircle2, Plus, RotateCcw, Settings2, Target, X } from "lucide-react";
 import { DailyKpiTargetEditor } from "@/components/daily-kpi-editor";
 import { useToast } from "@/components/toast-provider";
 import type {
@@ -9,7 +9,7 @@ import type {
   DailyKpiProgressRow,
   DailyKpiSummaryResult,
 } from "@/lib/daily-kpi";
-import type { SimpleProject, TaskItem } from "@/types/crm";
+import type { SimpleProject } from "@/types/crm";
 import type { TaskType } from "@/generated/prisma/client";
 
 interface MyWorkDailyKpiPanelProps {
@@ -20,8 +20,6 @@ interface MyWorkDailyKpiPanelProps {
   isDefaultFallback: boolean;
   kpiSummary: DailyKpiSummaryResult;
   canCreateTasks: boolean;
-  syncingMissing: boolean;
-  onSyncAllMissing: () => Promise<void>;
   onQuickPrefillRow: (
     taskType: TaskType,
     remainingQty: number,
@@ -30,8 +28,7 @@ interface MyWorkDailyKpiPanelProps {
   ) => void;
   onTargetsSaved: (
     nextItems: DailyKpiItem[],
-    isDefaultFallback: boolean,
-    syncedTasks: TaskItem[]
+    isDefaultFallback: boolean
   ) => void;
 }
 
@@ -43,8 +40,6 @@ export function MyWorkDailyKpiPanel({
   isDefaultFallback,
   kpiSummary,
   canCreateTasks,
-  syncingMissing,
-  onSyncAllMissing,
   onQuickPrefillRow,
   onTargetsSaved,
 }: MyWorkDailyKpiPanelProps) {
@@ -66,8 +61,8 @@ export function MyWorkDailyKpiPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           resetToDefault
-            ? { resetToDefault: true, syncTodayNow: true }
-            : { items: draftItems, syncTodayNow: true }
+            ? { resetToDefault: true, syncTodayNow: false }
+            : { items: draftItems, syncTodayNow: false }
         ),
       });
       const data = await res.json();
@@ -75,17 +70,12 @@ export function MyWorkDailyKpiPanel({
         showToast(data.error || "Không lưu được KPI ngày.", "error");
         return;
       }
-      const syncedTasks: TaskItem[] = Array.isArray(data.createdTasks)
-        ? data.createdTasks
-        : [];
-      onTargetsSaved(data.items, Boolean(data.isDefaultFallback), syncedTasks);
+      onTargetsSaved(data.items, Boolean(data.isDefaultFallback));
       setEditing(false);
       showToast(
-        syncedTasks.length > 0
-          ? `Đã lưu KPI & đồng bộ ${syncedTasks.length} đầu việc mới vào To-Do List hôm nay!`
-          : resetToDefault
-            ? "Đã khôi phục các đầu việc KPI mặc định theo vai trò!"
-            : "Đã cập nhật & đồng bộ KPI hàng ngày!"
+        resetToDefault
+          ? "Đã khôi phục chỉ tiêu KPI mặc định theo vai trò!"
+          : "Đã lưu chỉ tiêu KPI ngày — hệ thống tự đo theo Task thật & Order của bạn!"
       );
     } catch {
       showToast("Lỗi kết nối máy chủ.", "error");
@@ -125,32 +115,24 @@ export function MyWorkDailyKpiPanel({
                 Xong {kpiSummary.totalDone}/{kpiSummary.totalTarget} (
                 {kpiSummary.donePercent}%)
               </span>
+              {kpiSummary.totalSubmitted > 0 && (
+                <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-800">
+                  Chờ duyệt: {kpiSummary.totalSubmitted}
+                </span>
+              )}
               <span className="text-[11px] font-semibold text-slate-500">
-                To-do đã lên lịch: {kpiSummary.totalPlanned}/{kpiSummary.totalTarget}
-                {isDefaultFallback ? " • Mặc định theo vị trí" : ""}
+                Đo từ Task thật &amp; Order ({kpiSummary.totalPlanned}/{kpiSummary.totalTarget} đã xếp)
+                {isDefaultFallback ? " • Mặc định" : ""}
               </span>
             </>
           ) : (
             <span className="text-xs text-slate-500">
-              Chưa cài đầu việc KPI hàng ngày
+              Chưa cài chỉ tiêu KPI hàng ngày
             </span>
           )}
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {!kpiSummary.allPlannedMet && canCreateTasks && !(dayOffReason && kpiSummary.totalPlanned === 0) && (
-            <button
-              type="button"
-              disabled={syncingMissing}
-              onClick={onSyncAllMissing}
-              className="inline-flex items-center gap-1 rounded-xl bg-[#0B2545] hover:bg-[#13315C] disabled:opacity-60 text-amber-300 px-2.5 py-1 text-[11px] font-extrabold transition cursor-pointer shadow-xs"
-            >
-              <Sparkles className="w-3 h-3" />
-              {syncingMissing
-                ? "Đang đồng bộ..."
-                : `Đồng bộ KPI sang ${dayLabel}`}
-            </button>
-          )}
           <button
             type="button"
             onClick={() => (editing ? setEditing(false) : openEditor())}
@@ -166,7 +148,7 @@ export function MyWorkDailyKpiPanel({
               </>
             ) : (
               <>
-                <Settings2 className="w-3 h-3 text-amber-600" /> Cài đầu việc KPI
+                <Settings2 className="w-3 h-3 text-amber-600" /> Cài chỉ tiêu KPI
               </>
             )}
           </button>
@@ -176,7 +158,7 @@ export function MyWorkDailyKpiPanel({
       {editing && (
         <div className="rounded-xl border border-amber-300 bg-white p-3 space-y-2.5 shadow-xs">
           <div className="text-xs font-bold text-slate-800">
-            Khai báo các đầu công việc KPI mỗi ngày (hệ thống tự đồng bộ sang To-Do List Hôm nay):
+            Cài chỉ tiêu KPI mỗi ngày (hệ thống tự cộng sản lượng từ Task thật &amp; Order Media của bạn, không tự đẻ task giả):
           </div>
           <DailyKpiTargetEditor
             items={draftItems}
@@ -199,7 +181,7 @@ export function MyWorkDailyKpiPanel({
               onClick={() => saveTargets(false)}
               className="rounded-xl bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-3.5 py-1.5 text-xs font-bold cursor-pointer"
             >
-              {savingConfig ? "Đang lưu..." : "Lưu & Đồng bộ vào To-Do Hôm nay"}
+              {savingConfig ? "Đang lưu..." : "Lưu chỉ tiêu KPI ngày"}
             </button>
           </div>
         </div>
@@ -212,6 +194,12 @@ export function MyWorkDailyKpiPanel({
               100,
               Math.round((row.doneQty / Math.max(1, row.target)) * 100)
             );
+            const submittedPct = Math.min(
+              100,
+              Math.round(
+                ((row.doneQty + row.submittedQty) / Math.max(1, row.target)) * 100
+              )
+            );
             const plannedPct = Math.min(
               100,
               Math.round((row.plannedQty / Math.max(1, row.target)) * 100)
@@ -222,9 +210,11 @@ export function MyWorkDailyKpiPanel({
                 className={`rounded-xl border px-3 py-2 bg-white space-y-1.5 ${
                   row.metDone
                     ? "border-emerald-200 bg-emerald-50/35"
-                    : row.metPlanned
-                      ? "border-amber-200"
-                      : "border-slate-200"
+                    : row.submittedQty > 0
+                      ? "border-sky-200 bg-sky-50/25"
+                      : row.metPlanned
+                        ? "border-amber-200"
+                        : "border-slate-200"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 text-xs">
@@ -235,9 +225,11 @@ export function MyWorkDailyKpiPanel({
                     className={`font-extrabold shrink-0 ${
                       row.metDone
                         ? "text-emerald-700"
-                        : row.metPlanned
-                          ? "text-amber-700"
-                          : "text-slate-600"
+                        : row.submittedQty > 0
+                          ? "text-sky-700"
+                          : row.metPlanned
+                            ? "text-amber-700"
+                            : "text-slate-600"
                     }`}
                   >
                     {row.doneQty}/{row.target} {row.unit}
@@ -250,6 +242,10 @@ export function MyWorkDailyKpiPanel({
                     style={{ width: `${plannedPct}%` }}
                   />
                   <div
+                    className="absolute inset-y-0 left-0 rounded-full bg-sky-500/90 transition-all"
+                    style={{ width: `${submittedPct}%` }}
+                  />
+                  <div
                     className="absolute inset-y-0 left-0 rounded-full bg-emerald-500 transition-all"
                     style={{ width: `${donePct}%` }}
                   />
@@ -258,10 +254,12 @@ export function MyWorkDailyKpiPanel({
                 <div className="flex items-center justify-between gap-2 text-[10px]">
                   <span className="text-slate-500">
                     {row.metDone
-                      ? "Đã hoàn thành KPI"
-                      : row.metPlanned
-                        ? `Đã có trong To-do (${row.plannedQty}/${row.target} ${row.unit})`
-                        : `Trong To-do: ${row.plannedQty}/${row.target} ${row.unit}`}
+                      ? "Đã đạt KPI"
+                      : row.submittedQty > 0
+                        ? `Chờ duyệt: ${row.submittedQty} • Đã xếp: ${row.plannedQty}/${row.target}`
+                        : row.metPlanned
+                          ? `Đã có trong To-do (${row.plannedQty}/${row.target} ${row.unit})`
+                          : `Trong To-do: ${row.plannedQty}/${row.target} ${row.unit}`}
                   </span>
                   {row.remainingToPlan > 0 && canCreateTasks && (
                     <button
@@ -277,7 +275,7 @@ export function MyWorkDailyKpiPanel({
                       className="inline-flex items-center gap-0.5 font-extrabold text-rose-600 hover:underline cursor-pointer shrink-0"
                     >
                       <Plus className="w-2.5 h-2.5" />
-                      Thêm {row.remainingToPlan} {row.unit}
+                      Tạo việc ({row.remainingToPlan} {row.unit})
                     </button>
                   )}
                 </div>

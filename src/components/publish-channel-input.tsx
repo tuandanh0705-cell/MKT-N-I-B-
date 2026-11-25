@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useState } from "react";
 import { PlatformLogo } from "@/components/platform-logo";
 import {
   getPlatformChannelMeta,
@@ -19,6 +19,8 @@ interface PublishChannelInputProps {
   inputClassName?: string;
 }
 
+const CUSTOM_OPTION_VALUE = "__CUSTOM_CHANNEL__";
+
 export function PublishChannelInput({
   platform,
   value,
@@ -29,9 +31,24 @@ export function PublishChannelInput({
   labelClassName,
   inputClassName,
 }: PublishChannelInputProps) {
-  const listId = useId();
   const meta = getPlatformChannelMeta(platform);
   const options = getSuggestionsForPlatform(platform, suggestions);
+  const [customMode, setCustomMode] = useState(false);
+
+  const trimmed = value.trim();
+  const hasSavedCustomValue =
+    Boolean(trimmed) &&
+    options.length > 0 &&
+    !options.some((opt) => opt.toLowerCase() === trimmed.toLowerCase());
+
+  const mergedOptions = hasSavedCustomValue ? [trimmed, ...options] : options;
+  const matchedOption =
+    mergedOptions.find((opt) => opt.toLowerCase() === trimmed.toLowerCase()) ||
+    "";
+
+  const controlClass =
+    inputClassName ||
+    "w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:outline-none";
 
   return (
     <div className={compact ? "space-y-1" : "space-y-1.5"}>
@@ -46,44 +63,47 @@ export function PublishChannelInput({
           <span>{meta.channelFieldLabel}</span>
         </label>
       )}
-      <input
-        type="text"
-        list={options.length > 0 ? listId : undefined}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={meta.channelPlaceholder}
-        className={
-          inputClassName ||
-          "w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:outline-none"
-        }
-      />
-      {options.length > 0 && (
-        <>
-          <datalist id={listId}>
-            {options.map((opt) => (
-              <option key={opt} value={opt} />
-            ))}
-          </datalist>
-          <div className="flex flex-wrap gap-1 pt-0.5">
-            {options.slice(0, 6).map((opt) => {
-              const active = value.trim().toLowerCase() === opt.toLowerCase();
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => onChange(opt)}
-                  className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition cursor-pointer ${
-                    active
-                      ? "border-blue-500 bg-blue-600 text-white"
-                      : "border-slate-200 bg-slate-50 hover:bg-blue-50 text-slate-700"
-                  }`}
-                >
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
-        </>
+
+      {mergedOptions.length > 0 && !customMode ? (
+        <select
+          value={matchedOption}
+          onChange={(e) => {
+            if (e.target.value === CUSTOM_OPTION_VALUE) {
+              setCustomMode(true);
+              onChange("");
+            } else {
+              onChange(e.target.value);
+            }
+          }}
+          className={controlClass}
+        >
+          <option value="">-- Chọn {meta.channelFieldLabel} --</option>
+          {mergedOptions.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+          <option value={CUSTOM_OPTION_VALUE}>+ Nhập tên kênh khác...</option>
+        </select>
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={meta.channelPlaceholder}
+            className={controlClass}
+          />
+          {mergedOptions.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setCustomMode(false)}
+              className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 px-2 py-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer"
+            >
+              Danh sách
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

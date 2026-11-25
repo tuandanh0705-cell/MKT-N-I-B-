@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isMediaProductionUser } from "@/lib/constants";
 import { buildProjectVisibilityWhere } from "@/lib/permissions";
 import { analyzeTaskOutputs, sortTasksForOutputCheck } from "@/lib/output-helpers";
 import { getGeminiConfigStatus } from "@/lib/gemini-ai";
@@ -13,12 +14,23 @@ import type { TaskItem } from "@/types/crm";
  */
 export async function getOutputsWorkspaceData(user: AuthUser) {
   const isLeader = user.role === "LEADER";
+  const isMediaProduction = isMediaProductionUser(
+    user.role,
+    user.departmentScope
+  );
 
   const [rawTasks, projects, users, aiConfig] = await Promise.all([
     prisma.task.findMany({
       where: isLeader
         ? { deletedAt: null }
-        : { deletedAt: null, assigneeId: user.id },
+        : isMediaProduction
+          ? {
+              deletedAt: null,
+              dailyKpiKey: null,
+              assigneeId: user.id,
+              status: { in: ["APPROVED_FINAL", "PUBLISHED", "DONE"] },
+            }
+          : { deletedAt: null, assigneeId: user.id },
       orderBy: [{ submittedAt: "desc" }, { updatedAt: "desc" }],
       include: TASK_WITH_RECENT_COMMENTS_INCLUDE,
     }),

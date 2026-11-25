@@ -33,6 +33,7 @@ export default async function OutputsPage({
     category?: string;
     projectId?: string;
     readiness?: string;
+    taskId?: string;
   }>;
 }) {
   const user = await getCurrentUser();
@@ -72,12 +73,14 @@ export default async function OutputsPage({
       currentUserId={user.id}
       currentUserName={user.name}
       currentUserRole={user.role}
+      currentUserScope={user.departmentScope}
       todayDateStr={getVnDateString()}
       initialAiConfig={data.aiConfig}
       initialMemberId={initialMemberId}
       initialCategory={initialCategory}
       initialProjectId={initialProjectId}
       initialReadiness={initialReadiness}
+      initialTaskId={resolvedParams.taskId}
     />
   );
 }

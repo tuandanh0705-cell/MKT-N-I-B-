@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { buildMediaBriefSummaryText } from "@/lib/media-brief";
 import { analyzeTaskOutputs, extractAssetPreviewImageUrl } from "@/lib/output-helpers";
 import { getQcCriteriaForTaskType } from "@/lib/qc-standards";
 import {
@@ -487,14 +488,10 @@ export async function runGeminiOutputQcCheck(
 
   const briefItemsPrompt =
     analyzed.mediaBriefItems.length > 0
-      ? analyzed.mediaBriefItems
-          .map(
-            (item, idx) =>
-              `  * Mục ${idx + 1} (Tỷ lệ: ${item.ratio}): ${
-                item.content || "(Chưa ghi nội dung)"
-              }${item.note ? ` | Ghi chú: ${item.note}` : ""}`
-          )
-          .join("\n")
+      ? buildMediaBriefSummaryText(
+          analyzed.mediaBriefItems,
+          analyzed.category === "VIDEO"
+        )
       : "  (Không có danh sách brief từng ảnh/video tách lẻ)";
 
   const extraNonDataLinks = (options?.extraImageUrls ?? []).filter(

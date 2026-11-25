@@ -11,7 +11,12 @@ import {
   X,
 } from "lucide-react";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
+import {
+  MyWorkActionTray,
+  MyWorkDelegatedTracker,
+} from "@/components/my-work-action-tray";
 import { MyWorkDailyKpiPanel } from "@/components/my-work-daily-kpi-panel";
+import { MyWorkMediaOrdersBoard } from "@/components/my-work-media-orders-board";
 import { MyWorkTopWidgets } from "@/components/my-work-top-widgets";
 import {
   MyWorkExtraAccordions,
@@ -23,9 +28,13 @@ import {
   isCompletedTaskStatus,
 } from "@/components/my-work-task-row";
 import { CreateTaskModal } from "@/components/create-task-modal";
-import { TaskDrawer } from "@/components/task-drawer";
+import { TaskDrawer, type DrawerTab } from "@/components/task-drawer";
 import { useToast } from "@/components/toast-provider";
-import { isTaskOverdue } from "@/lib/constants";
+import {
+  isMediaProductionUser,
+  isTaskOverdue,
+  taskRequiresLeaderApproval,
+} from "@/lib/constants";
 import {
   computeDailyKpiProgress,
   isDailyKpiDayOff,
@@ -68,6 +77,8 @@ interface MyWorkViewProps {
   initialDailyKpi?: DailyKpiItem[];
   initialDailyKpiIsDefault?: boolean;
   approvedLeaves?: ApprovedLeaveSpan[];
+  initialTaskId?: string;
+  initialOpenChat?: boolean;
 }
 
 const VN_WEEKDAYS_LONG = [
@@ -86,6 +97,22 @@ function addDaysYmd(ymd: string, delta: number): string {
   const anchor = new Date(`${ymd}T12:00:00+07:00`);
   anchor.setUTCDate(anchor.getUTCDate() + delta);
   return getVnDateString(anchor);
+}
+
+/**
+ * Ngày hiển thị trên To-Do List: ưu tiên `plannedDate` (ngày dự kiến làm),
+ * sau đó mới tới `dueAt` / `scheduledPublishAt`. Khi dời `plannedDate`, Deadline gốc `dueAt` vẫn giữ nguyên!
+ */
+function getEffectiveTaskDateStr(t: TaskItem): string | null {
+  if (t.plannedDate && /^\d{4}-\d{2}-\d{2}$/.test(t.plannedDate)) {
+    return t.plannedDate;
+  }
+  const done = isCompletedTaskStatus(t.status);
+  const ref =
+    t.dueAt ??
+    t.scheduledPublishAt ??
+    (done ? t.completedAt ?? t.createdAt : null);
+  return ref ? getVnDateString(new Date(ref)) : null;
 }
 
 export function MyWorkView({
@@ -109,8 +136,14 @@ export function MyWorkView({
   initialDailyKpi = [],
   initialDailyKpiIsDefault = true,
   approvedLeaves = [],
+  initialTaskId,
+  initialOpenChat = false,
 }: MyWorkViewProps) {
   const { showToast } = useToast();
+  const isMediaProduction = isMediaProductionUser(
+    currentUserRole,
+    currentUserScope
+  );
 
   const [prevInitialTasks, setPrevInitialTasks] = useState<TaskItem[]>(initialTasks);
   const [tasks, setTasks] = useState<TaskItem[]>(initialTasks);
@@ -130,7 +163,28 @@ export function MyWorkView({
   const [searchQuery, setSearchQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>("ALL");
   const [createOpen, setCreateOpen] = useState(false);
-  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+
+  const [prevDeepLinkKey, setPrevDeepLinkKey] = useState<string>(
+    `${initialTaskId ?? ""}:${initialOpenChat ? "1" : "0"}`
+  );
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(
+    initialTaskId && initialTasks.some((t) => t.id === initialTaskId)
+      ? initialTaskId
+      : null
+  );
+  const [drawerInitialTab, setDrawerInitialTab] = useState<DrawerTab | undefined>(
+    initialTaskId && initialOpenChat ? "CHAT" : undefined
+  );
+
+  const currentDeepLinkKey = `${initialTaskId ?? ""}:${initialOpenChat ? "1" : "0"}`;
+  if (prevDeepLinkKey !== currentDeepLinkKey) {
+    setPrevDeepLinkKey(currentDeepLinkKey);
+    if (initialTaskId && tasks.some((t) => t.id === initialTaskId)) {
+      setActiveTaskId(initialTaskId);
+      setDrawerInitialTab(initialOpenChat ? "CHAT" : undefined);
+    }
+  }
+
   const [deleteConfirmTask, setDeleteConfirmTask] = useState<TaskItem | null>(null);
   const [deletingTask, setDeletingTask] = useState(false);
   const [liveCheckinStatus, setLiveCheckinStatus] = useState<
@@ -138,7 +192,6 @@ export function MyWorkView({
   >(initialCheckin?.status ?? "NONE");
   const [celebrateNonce, setCelebrateNonce] = useState(0);
 
-  // Điều khiển mở/thu gọn chi tiết đầu việc theo từng taskId
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Record<string, boolean>>({});
   const [openSubtaskComposerId, setOpenSubtaskComposerId] = useState<string | null>(null);
 
@@ -158,10 +211,11 @@ export function MyWorkView({
   );
   const [inlineQuantity, setInlineQuantity] = useState<number>(1);
   const [creatingInline, setCreatingInline] = useState(false);
-  const [syncingKpi, setSyncingKpi] = useState(false);
   const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null);
+  const [bringingAllOverdue, setBringingAllOverdue] = useState(false);
+  const [remindingTaskId, setRemindingTaskId] = useState<string | null>(null);
 
-  // Thu gọn/mở mục Quá hạn, Sắp tới sau tuần này hoặc Đã xong
+  // Thu gọn/mở mục phụ ở đáy trang
   const [showBacklog, setShowBacklog] = useState(false);
   const [showFuture, setShowFuture] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -178,10 +232,9 @@ export function MyWorkView({
     [tasks, currentUserId]
   );
 
-  const currentList = tab === "ASSIGNED" ? assignedToMe : requestedByMe;
-  const filteredCurrentList = useMemo(() => {
+  const filteredAssigned = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return currentList.filter((t) => {
+    return assignedToMe.filter((t) => {
       if (projectFilter !== "ALL" && t.project.id !== projectFilter) return false;
       if (!q) return true;
       return (
@@ -189,12 +242,27 @@ export function MyWorkView({
         t.code.toLowerCase().includes(q) ||
         t.project.name.toLowerCase().includes(q) ||
         (t.publishChannel || "").toLowerCase().includes(q) ||
+        t.requester.name.toLowerCase().includes(q) ||
         normalizeSubtasks(t.subtasksJson).some((s) =>
           s.title.toLowerCase().includes(q)
         )
       );
     });
-  }, [currentList, projectFilter, searchQuery]);
+  }, [assignedToMe, projectFilter, searchQuery]);
+
+  const filteredRequested = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return requestedByMe.filter((t) => {
+      if (projectFilter !== "ALL" && t.project.id !== projectFilter) return false;
+      if (!q) return true;
+      return (
+        t.title.toLowerCase().includes(q) ||
+        t.code.toLowerCase().includes(q) ||
+        t.project.name.toLowerCase().includes(q) ||
+        (t.assignee?.name.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [requestedByMe, projectFilter, searchQuery]);
 
   const upcomingDays = useMemo(() => {
     return Array.from({ length: 7 }, (_, idx) => {
@@ -221,6 +289,60 @@ export function MyWorkView({
     });
   }, [windowStartStr, todayDate]);
 
+  // 3 nhóm cho Khung "Việc mới nhận & Cần xử lý" luôn nổi trên đầu tab Việc của tôi
+  const { revisionTasks, overdueOrCarryoverTasks, incomingTasks } = useMemo(() => {
+    const rev: TaskItem[] = [];
+    const ov: TaskItem[] = [];
+    const inc: TaskItem[] = [];
+
+    for (const t of filteredAssigned) {
+      if (isCompletedTaskStatus(t.status)) continue;
+
+      if (t.status === "REVISION_NEEDED") {
+        rev.push(t);
+        continue;
+      }
+
+      const effectiveYmd = getEffectiveTaskDateStr(t);
+      const isPlannedToday = t.plannedDate === todayDate;
+      const dueYmd = t.dueAt ? getVnDateString(new Date(t.dueAt)) : null;
+
+      // Việc quá hạn gốc hoặc tồn từ plannedDate trước hôm nay (mà chưa được kéo về Hôm nay)
+      if (
+        !isPlannedToday &&
+        ((dueYmd && dueYmd < todayDate) ||
+          (t.plannedDate && t.plannedDate < todayDate))
+      ) {
+        ov.push(t);
+        continue;
+      }
+
+      // Việc mới được Leader / đồng đội giao (hoặc Order Media có hạn nhiều ngày tới) hoặc việc chưa đặt ngày
+      if (effectiveYmd !== todayDate) {
+        const isDelegatedOrOrder =
+          t.requester.id !== currentUserId || t.isMediaOrder;
+        const isUnscheduled = !effectiveYmd;
+        if (isUnscheduled || isDelegatedOrOrder) {
+          inc.push(t);
+        }
+      }
+    }
+
+    const byDueAsc = (a: TaskItem, b: TaskItem) => {
+      const aTime = a.dueAt ? new Date(a.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      const bTime = b.dueAt ? new Date(b.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      return aTime - bTime;
+    };
+    ov.sort(byDueAsc);
+    inc.sort(byDueAsc);
+
+    return {
+      revisionTasks: rev,
+      overdueOrCarryoverTasks: ov,
+      incomingTasks: inc,
+    };
+  }, [filteredAssigned, todayDate, currentUserId]);
+
   const { dayBuckets, attentionTasks, futureTasks, completedTasks } = useMemo(() => {
     const windowSet = new Set(upcomingDays.map((d) => d.dateStr));
     const windowEndStr = upcomingDays[upcomingDays.length - 1]?.dateStr || todayDate;
@@ -233,20 +355,16 @@ export function MyWorkView({
     const future: TaskItem[] = [];
     const completed: TaskItem[] = [];
 
-    for (const t of filteredCurrentList) {
+    for (const t of filteredAssigned) {
       const done = isCompletedTaskStatus(t.status);
-      const ref =
-        t.dueAt ??
-        t.scheduledPublishAt ??
-        (done ? t.completedAt ?? t.createdAt : null);
+      const ymd = getEffectiveTaskDateStr(t);
 
-      if (!ref) {
+      if (!ymd) {
         if (done) completed.push(t);
         else attention.push(t);
         continue;
       }
 
-      const ymd = getVnDateString(new Date(ref));
       if (windowSet.has(ymd)) {
         buckets.get(ymd)?.push(t);
         continue;
@@ -270,7 +388,11 @@ export function MyWorkView({
       list.sort((a, b) => {
         const aDone = isCompletedTaskStatus(a.status) ? 1 : 0;
         const bDone = isCompletedTaskStatus(b.status) ? 1 : 0;
-        return aDone - bDone;
+        if (aDone !== bDone) return aDone - bDone;
+        const aRev = a.status === "REVISION_NEEDED" ? 0 : 1;
+        const bRev = b.status === "REVISION_NEEDED" ? 0 : 1;
+        if (aRev !== bRev) return aRev - bRev;
+        return 0;
       });
       buckets.set(key, list);
     }
@@ -287,8 +409,9 @@ export function MyWorkView({
       futureTasks: future,
       completedTasks: completed,
     };
-  }, [filteredCurrentList, upcomingDays, todayDate]);
+  }, [filteredAssigned, upcomingDays, todayDate]);
 
+  // Đo KPI ngày hoàn toàn từ Task thật & Order được giao theo ngày làm thực tế (`plannedDate ?? dueAt`)
   const kpiByDayMap = useMemo(() => {
     const windowSet = new Set(upcomingDays.map((d) => d.dateStr));
     const assignedByDate = new Map<string, TaskItem[]>();
@@ -297,13 +420,8 @@ export function MyWorkView({
     }
 
     for (const t of assignedToMe) {
-      const done = isCompletedTaskStatus(t.status);
-      const ref =
-        t.dueAt ??
-        t.scheduledPublishAt ??
-        (done ? t.completedAt ?? t.createdAt : null);
-      if (!ref) continue;
-      const ymd = getVnDateString(new Date(ref));
+      const ymd = getEffectiveTaskDateStr(t);
+      if (!ymd) continue;
       if (windowSet.has(ymd)) {
         assignedByDate.get(ymd)?.push(t);
       }
@@ -318,6 +436,53 @@ export function MyWorkView({
     }
     return result;
   }, [assignedToMe, upcomingDays, dailyKpiTargets]);
+
+  // Tóm tắt kế hoạch Hôm nay kết nối trực tiếp lên Widget Check-in sáng
+  const todayPlanSummary = useMemo(() => {
+    const list = isMediaProduction
+      ? assignedToMe.filter((t) => {
+          if (
+            t.status === "REVISION_NEEDED" ||
+            t.status === "IN_PROGRESS" ||
+            t.status === "BRIEF_REVIEW" ||
+            t.status === "DRAFT" ||
+            t.status === "WAITING_APPROVAL"
+          ) {
+            return true;
+          }
+          const completedYmd = t.completedAt
+            ? getVnDateString(new Date(t.completedAt))
+            : null;
+          return completedYmd === todayDate;
+        })
+      : assignedToMe.filter((t) => getEffectiveTaskDateStr(t) === todayDate);
+    let inProgress = 0;
+    let waitingApproval = 0;
+    let done = 0;
+    const titles: string[] = [];
+    for (const t of list) {
+      if (isCompletedTaskStatus(t.status) || t.status === "APPROVED_FINAL") {
+        done += 1;
+      } else if (t.status === "WAITING_APPROVAL") {
+        waitingApproval += 1;
+      } else {
+        inProgress += 1;
+        titles.push(t.title);
+      }
+    }
+    return {
+      total: list.length,
+      inProgress,
+      waitingApproval,
+      done,
+      titles,
+    };
+  }, [assignedToMe, isMediaProduction, todayDate]);
+
+  function openTaskDrawer(taskId: string, openChat = false, tabOverride?: DrawerTab) {
+    setDrawerInitialTab(tabOverride ?? (openChat ? "CHAT" : undefined));
+    setActiveTaskId(taskId);
+  }
 
   function handleTaskUpdated(updated: TaskItem) {
     setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
@@ -340,7 +505,7 @@ export function MyWorkView({
         setActiveTaskId((cur) => (cur && deletedIds.includes(cur) ? null : cur));
         setDeleteConfirmTask(null);
       } else if (failedCount > 0) {
-        window.alert("Không thể xóa đầu việc này. Vui lòng thử lại.");
+        showToast("Không thể xóa đầu việc này. Vui lòng thử lại.", "error");
       }
     } finally {
       setDeletingTask(false);
@@ -366,7 +531,9 @@ export function MyWorkView({
       const res = await fetch(`/api/tasks/${task.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(done ? { status: "IN_PROGRESS" } : { action: "MARK_DONE" }),
+        body: JSON.stringify(
+          done ? { status: "IN_PROGRESS" } : { action: "MARK_DONE" }
+        ),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -385,7 +552,52 @@ export function MyWorkView({
     }
   }
 
+  async function handleMarkPublished(task: TaskItem) {
+    setTogglingTaskId(task.id);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "MARK_PUBLISHED" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Không thể đánh dấu Đã đăng.", "error");
+        return;
+      }
+      handleTaskUpdated(data.task);
+      setCelebrateNonce((n) => n + 1);
+      showToast(`🚀 Đã đánh dấu "${task.title}" Đã lên sóng!`);
+    } catch {
+      showToast("Lỗi kết nối máy chủ.", "error");
+    } finally {
+      setTogglingTaskId(null);
+    }
+  }
+
   async function handleSubmitForReview(task: TaskItem) {
+    // Nếu là bài Content / Ảnh / Video mà chưa có link thành phẩm (DEMO/FINAL) hoặc Caption -> mở thẳng tab Output để nộp
+    const isMediaTask =
+      task.isMediaOrder ||
+      task.taskType === "MEDIA_IMAGE" ||
+      task.taskType === "MEDIA_VIDEO";
+    const hasDeliverableAsset = (task.assets ?? []).some(
+      (a) => a.kind === "DEMO" || a.kind === "FINAL" || a.kind === "PUBLISHED_LINK"
+    );
+    const hasOutput = isMediaTask
+      ? hasDeliverableAsset
+      : Boolean((task.caption || "").trim()) || (task.assets?.length ?? 0) > 0;
+    if (taskRequiresLeaderApproval(task) && !hasOutput) {
+      openTaskDrawer(task.id, false, "OUTPUT_QC");
+      showToast(
+        isMediaTask
+          ? "Hãy dán link file thành phẩm (Demo / Final) ở tab Output trước khi gửi Leader duyệt nhé!"
+          : "Hãy dán link sản phẩm hoặc viết nội dung ở tab Output trước khi gửi Leader duyệt nhé!",
+        "info"
+      );
+      return;
+    }
+
     setTogglingTaskId(task.id);
     try {
       const res = await fetch(`/api/tasks/${task.id}`, {
@@ -408,26 +620,90 @@ export function MyWorkView({
     }
   }
 
-  async function handleMoveTaskToToday(task: TaskItem) {
+  async function handlePlanTaskForDate(
+    task: TaskItem,
+    targetDateStr: string,
+    toastMessage: string
+  ) {
+    setTogglingTaskId(task.id);
     try {
       const res = await fetch(`/api/tasks/${task.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dueAt: new Date(`${todayDate}T17:30:00+07:00`).toISOString(),
-        }),
+        body: JSON.stringify({ plannedDate: targetDateStr }),
       });
       const data = await res.json();
-      if (res.ok) {
-        handleTaskUpdated(data.task);
-        showToast("Đã dời hạn về Hôm nay!");
+      if (!res.ok) {
+        showToast(data.error || "Không xếp lịch làm được.", "error");
+        return;
       }
+      handleTaskUpdated(data.task);
+      showToast(toastMessage);
     } catch {
-      showToast("Lỗi dời lịch.", "error");
+      showToast("Lỗi kết nối máy chủ.", "error");
+    } finally {
+      setTogglingTaskId(null);
     }
   }
 
-  async function handleInlineCreateTask(e: React.FormEvent, targetDateStr: string) {
+  async function handleBringAllOverdueToToday() {
+    if (overdueOrCarryoverTasks.length === 0) return;
+    setBringingAllOverdue(true);
+    try {
+      const updatedTasks = await Promise.all(
+        overdueOrCarryoverTasks.map(async (t) => {
+          const res = await fetch(`/api/tasks/${t.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ plannedDate: todayDate }),
+          });
+          if (!res.ok) return null;
+          const data = await res.json();
+          return (data.task as TaskItem) ?? null;
+        })
+      );
+      const valid = updatedTasks.filter((t): t is TaskItem => Boolean(t));
+      if (valid.length > 0) {
+        const byId = new Map(valid.map((t) => [t.id, t]));
+        setTasks((prev) => prev.map((t) => byId.get(t.id) ?? t));
+        setWindowStartStr(currentWeekStartStr);
+        setSelectedDateStr(todayDate);
+        showToast(
+          `Đã đưa ${valid.length} việc tồn vào kế hoạch làm Hôm nay (vẫn giữ nguyên Deadline gốc)!`
+        );
+      }
+    } catch {
+      showToast("Lỗi kết nối máy chủ.", "error");
+    } finally {
+      setBringingAllOverdue(false);
+    }
+  }
+
+  async function handleRemindDelegatedTask(task: TaskItem) {
+    setRemindingTaskId(task.id);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}/remind`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Không gửi được nhắc nhở.", "error");
+        return;
+      }
+      showToast(
+        `Đã gửi thông báo nhắc tiến độ tới ${task.assignee?.name || "người thực hiện"}!`
+      );
+    } catch {
+      showToast("Lỗi kết nối máy chủ.", "error");
+    } finally {
+      setRemindingTaskId(null);
+    }
+  }
+
+  async function handleInlineCreateTask(
+    e: React.FormEvent,
+    targetDateStr: string
+  ) {
     e.preventDefault();
     const cleaned = inlineTitle.trim();
     const targetProjectId = inlineProjectId || projects[0]?.id;
@@ -438,7 +714,9 @@ export function MyWorkView({
 
     setCreatingInline(true);
     try {
-      const dueIso = new Date(`${targetDateStr}T${inlineTime || "17:30"}:00+07:00`).toISOString();
+      const dueIso = new Date(
+        `${targetDateStr}T${inlineTime || "17:30"}:00+07:00`
+      ).toISOString();
 
       const res = await fetch("/api/tasks", {
         method: "POST",
@@ -448,6 +726,7 @@ export function MyWorkView({
           title: cleaned,
           assigneeId: currentUserId,
           dueAt: dueIso,
+          plannedDate: targetDateStr,
           taskType: inlineTaskType,
           quantity: Math.max(1, Number(inlineQuantity || 1)),
           status: "IN_PROGRESS",
@@ -462,7 +741,7 @@ export function MyWorkView({
       setInlineTitle("");
       setInlineQuantity(1);
       setInlineAddDayStr(null);
-      showToast("Đã thêm công việc mới & cập nhật KPI ngày!");
+      showToast("Đã thêm công việc mới vào To-Do List!");
     } catch {
       showToast("Lỗi kết nối máy chủ.", "error");
     } finally {
@@ -470,58 +749,15 @@ export function MyWorkView({
     }
   }
 
-  async function handleSyncMissingKpiForDay(
-    targetDateStr: string,
-    dayNum: number,
-    monthNum: number
-  ) {
-    if (projects.length === 0) {
-      showToast("Bạn chưa được gắn vào dự án nào để tạo đầu việc.", "error");
-      return;
-    }
-
-    setSyncingKpi(true);
-    try {
-      const res = await fetch("/api/my-work/sync-kpi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dateStr: targetDateStr }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || "Không đồng bộ được KPI.", "error");
-        return;
-      }
-      const created: TaskItem[] = Array.isArray(data.createdTasks)
-        ? data.createdTasks
-        : [];
-      if (created.length > 0) {
-        setTasks((prev) => {
-          const existingIds = new Set(prev.map((t) => t.id));
-          const uniqueNew = created.filter((t) => !existingIds.has(t.id));
-          return [...uniqueNew, ...prev];
-        });
-        showToast(
-          `Đã đồng bộ ${created.length} đầu việc KPI vào ngày ${dayNum}/${monthNum}!`
-        );
-      } else {
-        showToast(`To-Do List ngày ${dayNum}/${monthNum} đã có đủ các đầu việc KPI!`);
-      }
-    } catch {
-      showToast("Lỗi kết nối khi đồng bộ KPI.", "error");
-    } finally {
-      setSyncingKpi(false);
-    }
-  }
-
   const selectedDay =
     upcomingDays.find((d) => d.dateStr === selectedDateStr) ?? upcomingDays[0];
   const headerYear = Number((selectedDay?.dateStr || selectedDateStr).slice(0, 4));
   const headerMonth = Number((selectedDay?.dateStr || selectedDateStr).slice(5, 7));
+  const tomorrowStr = addDaysYmd(todayDate, 1);
 
   function renderTaskHierarchyRow(
     t: TaskItem,
-    options?: { allowMoveToday?: boolean }
+    options?: { allowMoveToday?: boolean; allowMoveTomorrow?: boolean }
   ) {
     const expanded = isTaskExpanded(t) || openSubtaskComposerId === t.id;
     return (
@@ -537,10 +773,12 @@ export function MyWorkView({
         openSubtaskComposerId={openSubtaskComposerId}
         togglingTaskId={togglingTaskId}
         allowMoveToday={options?.allowMoveToday}
+        allowMoveTomorrow={options?.allowMoveTomorrow}
         onToggleExpand={toggleTaskExpand}
         onToggleDone={handleToggleTaskDone}
+        onMarkPublished={handleMarkPublished}
         onSubmitForReview={handleSubmitForReview}
-        onOpenTask={setActiveTaskId}
+        onOpenTask={(id, openChat) => openTaskDrawer(id, Boolean(openChat))}
         onOpenSubtaskComposer={(target) => {
           setCollapsedTaskIds((prev) => ({ ...prev, [target.id]: false }));
           setOpenSubtaskComposerId((cur) =>
@@ -550,7 +788,20 @@ export function MyWorkView({
         onComposerOpenChange={(id, open) =>
           setOpenSubtaskComposerId(open ? id : null)
         }
-        onMoveToday={handleMoveTaskToToday}
+        onMoveToday={(target) =>
+          void handlePlanTaskForDate(
+            target,
+            todayDate,
+            "Đã đưa vào kế hoạch làm Hôm nay (vẫn giữ nguyên Deadline gốc)!"
+          )
+        }
+        onMoveTomorrow={(target) =>
+          void handlePlanTaskForDate(
+            target,
+            tomorrowStr,
+            "Đã chuyển kế hoạch làm sang Ngày mai (không đổi Deadline gốc)!"
+          )
+        }
         onRequestDelete={setDeleteConfirmTask}
         onTaskUpdated={handleTaskUpdated}
       />
@@ -570,11 +821,13 @@ export function MyWorkView({
         currentUserMotto={currentUserMotto}
         todayDate={todayDate}
         initialCheckin={initialCheckin}
+        todayPlanSummary={todayPlanSummary}
         liveCheckinStatus={liveCheckinStatus}
         celebrateNonce={celebrateNonce}
         projects={projects}
         todayBirthdays={todayBirthdays}
         pendingCourses={pendingCourses}
+        hideCreateButton={isMediaProduction}
         onOpenCreate={() => setCreateOpen(true)}
         onCheckinStatusChange={(st) => {
           setLiveCheckinStatus(st);
@@ -582,17 +835,30 @@ export function MyWorkView({
         }}
       />
 
-      {/* NHẬT KÝ HẢI TRÌNH DẠNG DỌC (THEO NGÀY + TASK LỚN / TASK NHỎ - ẢNH 2 & 3) */}
+      {/* NHẬT KÝ HẢI TRÌNH */}
+      {isMediaProduction ? (
+        <MyWorkMediaOrdersBoard
+          tasks={assignedToMe}
+          currentUserScope={currentUserScope}
+          todayDate={todayDate}
+          togglingTaskId={togglingTaskId}
+          onOpenTask={openTaskDrawer}
+          onSubmitForReview={(task) => void handleSubmitForReview(task)}
+          onToggleDone={(task) => void handleToggleTaskDone(task)}
+        />
+      ) : (
       <div className="bg-white rounded-2xl border-2 border-amber-200/80 p-4 sm:p-6 space-y-5">
-        {/* Thanh đầu trang Upcoming / Nhật Ký */}
+        {/* Thanh đầu trang Nhật Ký */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <h2 className="text-lg sm:text-xl font-extrabold text-slate-900">
               Nhật Ký Hải Trình
             </h2>
-            <span className="text-xs sm:text-sm font-bold text-slate-500">
-              Tháng {headerMonth} {headerYear}
-            </span>
+            {tab === "ASSIGNED" && (
+              <span className="text-xs sm:text-sm font-bold text-slate-500">
+                Tháng {headerMonth} {headerYear}
+              </span>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
@@ -607,7 +873,8 @@ export function MyWorkView({
                 }`}
               >
                 <Inbox className="w-3.5 h-3.5" />
-                Việc của tôi ({assignedToMe.filter((t) => !isCompletedTaskStatus(t.status)).length})
+                Việc của tôi (
+                {assignedToMe.filter((t) => !isCompletedTaskStatus(t.status)).length})
               </button>
               <button
                 type="button"
@@ -619,47 +886,50 @@ export function MyWorkView({
                 }`}
               >
                 <Send className="w-3.5 h-3.5" />
-                Đã nhờ ({requestedByMe.filter((t) => !isCompletedTaskStatus(t.status)).length})
+                Đã giao / Order (
+                {requestedByMe.filter((t) => !isCompletedTaskStatus(t.status)).length})
               </button>
             </div>
 
-            <div className="inline-flex items-center rounded-xl border border-slate-200 bg-white">
-              <button
-                type="button"
-                onClick={() => {
-                  setWindowStartStr((prev) => addDaysYmd(prev, -7));
-                  setSelectedDateStr((prev) => addDaysYmd(prev, -7));
-                  setInlineAddDayStr(null);
-                }}
-                className="p-1.5 text-slate-600 hover:bg-slate-50 cursor-pointer"
-                title="Tuần trước"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setWindowStartStr(currentWeekStartStr);
-                  setSelectedDateStr(todayDate);
-                  setInlineAddDayStr(null);
-                }}
-                className="px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 border-x border-slate-200 cursor-pointer"
-              >
-                Hôm nay
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setWindowStartStr((prev) => addDaysYmd(prev, 7));
-                  setSelectedDateStr((prev) => addDaysYmd(prev, 7));
-                  setInlineAddDayStr(null);
-                }}
-                className="p-1.5 text-slate-600 hover:bg-slate-50 cursor-pointer"
-                title="Tuần sau"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+            {tab === "ASSIGNED" && (
+              <div className="inline-flex items-center rounded-xl border border-slate-200 bg-white">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWindowStartStr((prev) => addDaysYmd(prev, -7));
+                    setSelectedDateStr((prev) => addDaysYmd(prev, -7));
+                    setInlineAddDayStr(null);
+                  }}
+                  className="p-1.5 text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  title="Tuần trước"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWindowStartStr(currentWeekStartStr);
+                    setSelectedDateStr(todayDate);
+                    setInlineAddDayStr(null);
+                  }}
+                  className="px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 border-x border-slate-200 cursor-pointer"
+                >
+                  Hôm nay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWindowStartStr((prev) => addDaysYmd(prev, 7));
+                    setSelectedDateStr((prev) => addDaysYmd(prev, 7));
+                    setInlineAddDayStr(null);
+                  }}
+                  className="p-1.5 text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  title="Tuần sau"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -671,7 +941,7 @@ export function MyWorkView({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm tên việc, mã task, kênh đăng, hoặc đầu việc nhỏ..."
+              placeholder="Tìm tên việc, mã task, người giao, kênh đăng, hoặc đầu việc nhỏ..."
               className="w-full rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-amber-400 focus:outline-none pl-9 pr-8 py-1.5 text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 transition"
             />
             {searchQuery && (
@@ -708,191 +978,238 @@ export function MyWorkView({
               }}
               className="rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 text-xs font-bold text-amber-800 inline-flex items-center gap-1 cursor-pointer"
             >
-              <span>Đang lọc ({filteredCurrentList.length})</span>
+              <span>
+                Đang lọc (
+                {tab === "ASSIGNED"
+                  ? filteredAssigned.length
+                  : filteredRequested.length}
+                )
+              </span>
               <X className="w-3 h-3" />
             </button>
           )}
         </div>
 
-        {/* Thanh ngang 7 ngày trong tuần (T2 → CN): chọn ngày & xem trạng thái KPI từng ngày */}
-        <MyWorkWeekStrip
-          upcomingDays={upcomingDays}
-          dayBuckets={dayBuckets}
-          kpiByDayMap={kpiByDayMap}
-          approvedLeaves={approvedLeaves}
-          todayDate={todayDate}
-          selectedDateStr={selectedDay?.dateStr ?? selectedDateStr}
-          onSelectDate={(dateStr) => {
-            setSelectedDateStr(dateStr);
-            setInlineAddDayStr(null);
-          }}
-        />
+        {tab === "REQUESTED" ? (
+          <MyWorkDelegatedTracker
+            tasks={filteredRequested}
+            todayDate={todayDate}
+            remindingTaskId={remindingTaskId}
+            onRemindTask={(t) => void handleRemindDelegatedTask(t)}
+            onOpenTask={(id, openChat) => openTaskDrawer(id, Boolean(openChat))}
+          />
+        ) : (
+          <>
+            {/* KHUNG NỔI: Việc mới nhận / Order sắp tới / Bài cần sửa / Việc tồn */}
+            <MyWorkActionTray
+              todayDate={todayDate}
+              currentUserId={currentUserId}
+              revisionTasks={revisionTasks}
+              overdueOrCarryoverTasks={overdueOrCarryoverTasks}
+              incomingTasks={incomingTasks}
+              busyTaskId={togglingTaskId}
+              bringingAll={bringingAllOverdue}
+              onPlanForToday={(t) => {
+                void handlePlanTaskForDate(
+                  t,
+                  todayDate,
+                  "Đã đưa vào kế hoạch làm Hôm nay (giữ nguyên Deadline gốc)!"
+                );
+                setWindowStartStr(currentWeekStartStr);
+                setSelectedDateStr(todayDate);
+              }}
+              onBringAllOverdueToToday={() => void handleBringAllOverdueToToday()}
+              onOpenTask={(id, openChat) => openTaskDrawer(id, Boolean(openChat))}
+            />
 
-        {/* Danh sách To-do CHỈ TRONG 1 NGÀY đang chọn + Thanh đồng bộ KPI ngày */}
-        {selectedDay && (() => {
-          const day = selectedDay;
-          const dayTasks = dayBuckets.get(day.dateStr) ?? [];
-          const dayKpi = kpiByDayMap.get(day.dateStr);
-          const selectedDayOff = isDailyKpiDayOff(day.dateStr, approvedLeaves);
-          const isAddingHere = inlineAddDayStr === day.dateStr;
+            {/* Thanh ngang 7 ngày trong tuần (T2 → CN) */}
+            <MyWorkWeekStrip
+              upcomingDays={upcomingDays}
+              dayBuckets={dayBuckets}
+              kpiByDayMap={kpiByDayMap}
+              approvedLeaves={approvedLeaves}
+              todayDate={todayDate}
+              selectedDateStr={selectedDay?.dateStr ?? selectedDateStr}
+              onSelectDate={(dateStr) => {
+                setSelectedDateStr(dateStr);
+                setInlineAddDayStr(null);
+              }}
+            />
 
-          return (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-sm sm:text-base font-extrabold ${
-                      day.dateStr === todayDate ? "text-rose-600" : "text-slate-900"
-                    }`}
-                  >
-                    {day.dayNum} Th{day.monthNum}
-                  </span>
-                  {day.relLabel && (
-                    <span className="rounded-full bg-rose-50 border border-rose-200 px-2 py-0.5 text-[11px] font-bold text-rose-700">
-                      {day.relLabel}
-                    </span>
-                  )}
-                  <span className="text-xs font-semibold text-slate-400">
-                    • {day.longDow}
-                  </span>
-                </div>
-                <span className="text-xs font-bold text-slate-500">
-                  {dayTasks.length} công việc
-                </span>
-              </div>
+            {/* Danh sách To-do trong 1 NGÀY đang chọn + Thanh KPI đo từ Task thật */}
+            {selectedDay &&
+              (() => {
+                const day = selectedDay;
+                const dayTasks = dayBuckets.get(day.dateStr) ?? [];
+                const dayKpi = kpiByDayMap.get(day.dateStr);
+                const selectedDayOff = isDailyKpiDayOff(day.dateStr, approvedLeaves);
+                const isAddingHere = inlineAddDayStr === day.dateStr;
 
-              {tab === "ASSIGNED" && dayKpi && (
-                <MyWorkDailyKpiPanel
-                  dayLabel={`${day.dayNum}/${day.monthNum} (${day.shortDow})`}
-                  dayOffReason={selectedDayOff.reason}
-                  projects={projects}
-                  targets={dailyKpiTargets}
-                  isDefaultFallback={dailyKpiIsDefault}
-                  kpiSummary={dayKpi}
-                  canCreateTasks={projects.length > 0}
-                  syncingMissing={syncingKpi}
-                  onSyncAllMissing={() =>
-                    handleSyncMissingKpiForDay(
-                      day.dateStr,
-                      day.dayNum,
-                      day.monthNum
-                    )
-                  }
-                  onQuickPrefillRow={(taskType, remainingQty, title, projId) => {
-                    setInlineAddDayStr(day.dateStr);
-                    setInlineTaskType(taskType);
-                    setInlineQuantity(remainingQty);
-                    setInlineTitle(title);
-                    if (projId) {
-                      setInlineProjectId(projId);
-                    } else if (!inlineProjectId && projects[0]) {
-                      setInlineProjectId(projects[0].id);
-                    }
-                  }}
-                  onTargetsSaved={(nextItems, isDefault, syncedTasks) => {
-                    setDailyKpiTargets(nextItems);
-                    setDailyKpiIsDefault(isDefault);
-                    if (nextItems[0]) {
-                      setInlineTaskType(nextItems[0].taskType);
-                    }
-                    if (syncedTasks.length > 0) {
-                      setTasks((prev) => {
-                        const existingIds = new Set(prev.map((t) => t.id));
-                        const uniqueNew = syncedTasks.filter(
-                          (t) => !existingIds.has(t.id)
-                        );
-                        return [...uniqueNew, ...prev];
-                      });
-                    }
-                  }}
-                />
-              )}
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-sm sm:text-base font-extrabold ${
+                            day.dateStr === todayDate
+                              ? "text-rose-600"
+                              : "text-slate-900"
+                          }`}
+                        >
+                          {day.dayNum} Th{day.monthNum}
+                        </span>
+                        {day.relLabel && (
+                          <span className="rounded-full bg-rose-50 border border-rose-200 px-2 py-0.5 text-[11px] font-bold text-rose-700">
+                            {day.relLabel}
+                          </span>
+                        )}
+                        <span className="text-xs font-semibold text-slate-400">
+                          • {day.longDow}
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500">
+                        {dayTasks.length} công việc
+                      </span>
+                    </div>
 
-              {dayTasks.length > 0 ? (
-                <div>{dayTasks.map((t) => renderTaskHierarchyRow(t))}</div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-5 text-center text-xs text-slate-500">
-                  {searchQuery.trim() !== "" || projectFilter !== "ALL"
-                    ? "Không có công việc khớp bộ lọc trong ngày này (chọn ngày khác trên thanh T2 → CN phía trên để xem)."
-                    : "Chưa có đầu việc nào trong ngày này."}
-                </div>
-              )}
+                    {dayKpi && (
+                      <MyWorkDailyKpiPanel
+                        dayLabel={`${day.dayNum}/${day.monthNum} (${day.shortDow})`}
+                        dayOffReason={selectedDayOff.reason}
+                        projects={projects}
+                        targets={dailyKpiTargets}
+                        isDefaultFallback={dailyKpiIsDefault}
+                        kpiSummary={dayKpi}
+                        canCreateTasks={projects.length > 0}
+                        onQuickPrefillRow={(taskType, remainingQty, title, projId) => {
+                          setInlineAddDayStr(day.dateStr);
+                          setInlineTaskType(taskType);
+                          setInlineQuantity(remainingQty);
+                          setInlineTitle(title);
+                          if (projId) {
+                            setInlineProjectId(projId);
+                          } else if (!inlineProjectId && projects[0]) {
+                            setInlineProjectId(projects[0].id);
+                          }
+                        }}
+                        onTargetsSaved={(nextItems, isDefault) => {
+                          setDailyKpiTargets(nextItems);
+                          setDailyKpiIsDefault(isDefault);
+                          if (nextItems[0]) {
+                            setInlineTaskType(nextItems[0].taskType);
+                          }
+                        }}
+                      />
+                    )}
 
-              {isAddingHere ? (
-                <MyWorkInlineCreateForm
-                  targetDateStr={day.dateStr}
-                  projects={projects}
-                  inlineTitle={inlineTitle}
-                  inlineProjectId={inlineProjectId}
-                  inlineTaskType={inlineTaskType}
-                  inlineQuantity={inlineQuantity}
-                  inlineTime={inlineTime}
-                  creatingInline={creatingInline}
-                  onChangeTitle={setInlineTitle}
-                  onChangeProjectId={setInlineProjectId}
-                  onChangeTaskType={setInlineTaskType}
-                  onChangeQuantity={setInlineQuantity}
-                  onChangeTime={setInlineTime}
-                  onCancel={() => {
-                    setInlineAddDayStr(null);
-                    setInlineTitle("");
-                    setInlineQuantity(1);
-                  }}
-                  onSubmit={handleInlineCreateTask}
-                />
-              ) : (
-                projects.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInlineAddDayStr(day.dateStr);
-                      setInlineTitle("");
-                      setInlineTaskType(
-                        dailyKpiTargets[0]?.taskType || "CONTENT_SOCIAL"
-                      );
-                      setInlineQuantity(1);
-                      if (!inlineProjectId && projects[0]) {
-                        setInlineProjectId(projects[0].id);
-                      }
-                    }}
-                    className="inline-flex items-center gap-1.5 py-1.5 text-xs font-semibold text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Thêm việc vào {day.shortDow} ({day.dayNum}/{day.monthNum})
-                  </button>
-                )
-              )}
-            </div>
-          );
-        })()}
+                    {dayTasks.length > 0 ? (
+                      <div>
+                        {dayTasks.map((t) =>
+                          renderTaskHierarchyRow(t, {
+                            allowMoveTomorrow: day.dateStr === todayDate,
+                          })
+                        )}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-5 text-center text-xs text-slate-500">
+                        {searchQuery.trim() !== "" || projectFilter !== "ALL"
+                          ? "Không có công việc khớp bộ lọc trong ngày này."
+                          : day.dateStr === todayDate
+                            ? "Chưa có việc nào được xếp vào Hôm nay — bạn có thể bấm 'Làm hôm nay' từ khung Việc mới nhận ở trên hoặc tạo việc mới bên dưới."
+                            : "Chưa có đầu việc nào trong ngày này."}
+                      </div>
+                    )}
 
-        <MyWorkExtraAccordions
-          attentionTasks={attentionTasks}
-          futureTasks={futureTasks}
-          completedTasks={completedTasks}
-          showBacklog={showBacklog}
-          showFuture={showFuture}
-          showCompleted={showCompleted}
-          onToggleBacklog={() => setShowBacklog((v) => !v)}
-          onToggleFuture={() => setShowFuture((v) => !v)}
-          onToggleCompleted={() => setShowCompleted((v) => !v)}
-          renderRow={renderTaskHierarchyRow}
-        />
+                    {isAddingHere ? (
+                      <MyWorkInlineCreateForm
+                        targetDateStr={day.dateStr}
+                        projects={projects}
+                        inlineTitle={inlineTitle}
+                        inlineProjectId={inlineProjectId}
+                        inlineTaskType={inlineTaskType}
+                        inlineQuantity={inlineQuantity}
+                        inlineTime={inlineTime}
+                        creatingInline={creatingInline}
+                        onChangeTitle={setInlineTitle}
+                        onChangeProjectId={setInlineProjectId}
+                        onChangeTaskType={setInlineTaskType}
+                        onChangeQuantity={setInlineQuantity}
+                        onChangeTime={setInlineTime}
+                        onCancel={() => {
+                          setInlineAddDayStr(null);
+                          setInlineTitle("");
+                          setInlineQuantity(1);
+                        }}
+                        onSubmit={handleInlineCreateTask}
+                      />
+                    ) : (
+                      projects.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInlineAddDayStr(day.dateStr);
+                            setInlineTitle("");
+                            setInlineTaskType(
+                              dailyKpiTargets[0]?.taskType || "CONTENT_SOCIAL"
+                            );
+                            setInlineQuantity(1);
+                            if (!inlineProjectId && projects[0]) {
+                              setInlineProjectId(projects[0].id);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 py-1.5 text-xs font-semibold text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Thêm việc cá nhân vào {day.shortDow} ({day.dayNum}/{day.monthNum})
+                        </button>
+                      )
+                    )}
+                  </div>
+                );
+              })()}
+
+            <MyWorkExtraAccordions
+              attentionTasks={attentionTasks}
+              futureTasks={futureTasks}
+              completedTasks={completedTasks}
+              showBacklog={showBacklog}
+              showFuture={showFuture}
+              showCompleted={showCompleted}
+              onToggleBacklog={() => setShowBacklog((v) => !v)}
+              onToggleFuture={() => setShowFuture((v) => !v)}
+              onToggleCompleted={() => setShowCompleted((v) => !v)}
+              renderRow={renderTaskHierarchyRow}
+            />
+          </>
+        )}
       </div>
+      )}
 
-      <CreateTaskModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        projects={projects}
-        users={users}
-        initialCapacity={capacity}
-        onCreated={(newTask) => setTasks((prev) => [newTask, ...prev])}
-      />
+      {!isMediaProduction && (
+        <CreateTaskModal
+          key={`my-work-create-${createOpen ? "open" : "closed"}`}
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          projects={projects}
+          users={users}
+          initialCapacity={capacity}
+          currentUserId={currentUserId}
+          defaultAssigneeId={currentUserId}
+          defaultOrderMode="TASK"
+          onCreated={(newTask) => setTasks((prev) => [newTask, ...prev])}
+        />
+      )}
 
       <TaskDrawer
         taskId={activeTaskId}
         currentUserRole={currentUserRole}
-        onClose={() => setActiveTaskId(null)}
+        currentUserScope={currentUserScope}
+        centeredModal={isMediaProduction}
+        initialTab={drawerInitialTab}
+        onClose={() => {
+          setActiveTaskId(null);
+          setDrawerInitialTab(undefined);
+        }}
         onUpdated={handleTaskUpdated}
         onDeleted={handleTaskDeleted}
         onDuplicated={(dup) => setTasks((prev) => [dup, ...prev])}

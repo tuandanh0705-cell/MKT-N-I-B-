@@ -158,45 +158,264 @@ export const DEFAULT_CONTENT_PILLARS: string[] = [
   "Minigame / Seeding",
 ];
 
-export const FB_POST_LAYOUTS: Record<
-  string,
-  { label: string; ratioHint: string; slots: number; aspectDesc: string }
-> = {
+export interface FbPostLayoutSpec {
+  group: string;
+  label: string;
+  ratioHint: string;
+  slots: number;
+  aspectDesc: string;
+  slotSpecs: Array<{ label: string; size: string }>;
+}
+
+export const FB_POST_LAYOUT_GROUPS: string[] = [
+  "Ảnh đơn",
+  "Text + Hình",
+  "2 Ảnh",
+  "3 Ảnh",
+  "4 Ảnh",
+  "5 Ảnh trở lên",
+  "Story, Reels & Share Link",
+  "Hồ sơ & Ảnh bìa",
+  "Quảng cáo Facebook Ads",
+];
+
+export const FB_POST_LAYOUTS: Record<string, FbPostLayoutSpec> = {
+  // 1. Ảnh đơn
   SINGLE_SQUARE: {
-    label: "1 Ảnh vuông (1:1)",
-    ratioHint: "1080 × 1080px",
+    group: "Ảnh đơn",
+    label: "1 Ảnh vuông (1200 × 1200)",
+    ratioHint: "1200 × 1200 px (1:1)",
     slots: 1,
     aspectDesc: "Chuẩn bài Feed Fanpage đa thiết bị",
+    slotSpecs: [{ label: "Ảnh vuông", size: "1200 × 1200" }],
+  },
+  SINGLE_LANDSCAPE: {
+    group: "Ảnh đơn",
+    label: "1 Ảnh ngang (1200 × 800)",
+    ratioHint: "1200 × 800 px (3:2)",
+    slots: 1,
+    aspectDesc: "Phù hợp ảnh sự kiện, không gian, panorama",
+    slotSpecs: [{ label: "Ảnh ngang", size: "1200 × 800" }],
   },
   SINGLE_PORTRAIT: {
-    label: "1 Ảnh dọc (4:5)",
-    ratioHint: "1080 × 1350px",
+    group: "Ảnh đơn",
+    label: "1 Ảnh dọc (960 × 1200)",
+    ratioHint: "960 × 1200 px (4:5)",
     slots: 1,
-    aspectDesc: "Chiếm diện tích lớn trên Mobile",
+    aspectDesc: "Chiếm diện tích hiển thị lớn trên Mobile",
+    slotSpecs: [{ label: "Ảnh dọc", size: "960 × 1200" }],
   },
-  REELS_VERTICAL: {
-    label: "Video / Reels (9:16)",
-    ratioHint: "1080 × 1920px",
+
+  // 2. Text + Hình
+  TEXT_IMAGE_1: {
+    group: "Text + Hình",
+    label: "Text + 1 Ảnh vuông (1440 × 1440)",
+    ratioHint: "Text trên + 1 ảnh 1440 × 1440 px",
     slots: 1,
-    aspectDesc: "Ưu tiên Hook 3s đầu + Sub rõ nét",
+    aspectDesc: "Bài chia sẻ kiến thức / storytelling kèm 1 ảnh lớn",
+    slotSpecs: [{ label: "Ảnh chính", size: "1440 × 1440" }],
+  },
+  TEXT_IMAGE_MULTI: {
+    group: "Text + Hình",
+    label: "Text + Nhiều ảnh (4 × 1440 × 1440)",
+    ratioHint: "Text trên + lưới 2×2 (1440 × 1440 px)",
+    slots: 4,
+    aspectDesc: "Bài viết dài kèm chùm ảnh minh họa đồng đều 2×2",
+    slotSpecs: [
+      { label: "Ảnh #1", size: "1440 × 1440" },
+      { label: "Ảnh #2", size: "1440 × 1440" },
+      { label: "Ảnh #3", size: "1440 × 1440" },
+      { label: "Ảnh #4", size: "1440 × 1440" },
+    ],
+  },
+
+  // 3. 2 Ảnh
+  ALBUM_2_HORIZONTAL: {
+    group: "2 Ảnh",
+    label: "2 Ảnh ngang xếp chồng (1200 × 600)",
+    ratioHint: "2 ảnh 1200 × 600 px (trên / dưới)",
+    slots: 2,
+    aspectDesc: "Xếp chồng trên - dưới, hợp bố cục Trước / Sau ngang",
+    slotSpecs: [
+      { label: "Ảnh trên", size: "1200 × 600" },
+      { label: "Ảnh dưới", size: "1200 × 600" },
+    ],
   },
   ALBUM_2: {
-    label: "Album 2 ảnh song song",
-    ratioHint: "2 ảnh 1:1 hoặc 4:5",
+    group: "2 Ảnh",
+    label: "2 Ảnh dọc song song (600 × 1200)",
+    ratioHint: "2 ảnh 600 × 1200 px (trái / phải)",
     slots: 2,
-    aspectDesc: "So sánh Trước/Sau hoặc 2 góc sản phẩm",
+    aspectDesc: "Song song trái - phải, so sánh 2 góc sản phẩm",
+    slotSpecs: [
+      { label: "Ảnh trái", size: "600 × 1200" },
+      { label: "Ảnh phải", size: "600 × 1200" },
+    ],
+  },
+
+  // 4. 3 Ảnh
+  ALBUM_3_HORIZONTAL: {
+    group: "3 Ảnh",
+    label: "3 Ảnh — Chính ngang (1920×960 + 2×1920)",
+    ratioHint: "1 chính ngang 1920×960 + 2 phụ 1920×1920",
+    slots: 3,
+    aspectDesc: "1 ảnh chính ngang trên cùng + 2 ảnh vuông bên dưới",
+    slotSpecs: [
+      { label: "Ảnh chính ngang", size: "1920 × 960" },
+      { label: "Ảnh phụ #2", size: "1920 × 1920" },
+      { label: "Ảnh phụ #3", size: "1920 × 1920" },
+    ],
+  },
+  ALBUM_3_VERTICAL: {
+    group: "3 Ảnh",
+    label: "3 Ảnh — Chính dọc (960×1920 + 2×1920)",
+    ratioHint: "1 chính dọc 960×1920 + 2 phụ 1920×1920",
+    slots: 3,
+    aspectDesc: "1 ảnh chính dọc bên trái + 2 ảnh vuông xếp bên phải",
+    slotSpecs: [
+      { label: "Ảnh chính dọc", size: "960 × 1920" },
+      { label: "Ảnh phụ #2", size: "1920 × 1920" },
+      { label: "Ảnh phụ #3", size: "1920 × 1920" },
+    ],
+  },
+
+  // 5. 4 Ảnh
+  ALBUM_4_SQUARE: {
+    group: "4 Ảnh",
+    label: "4 Ảnh vuông 2×2 (1920 × 1920)",
+    ratioHint: "4 ảnh vuông 1920 × 1920 px (lưới 2×2)",
+    slots: 4,
+    aspectDesc: "4 ô vuông đều nhau — tối ưu Showcase sản phẩm / Feedback",
+    slotSpecs: [
+      { label: "Ảnh vuông #1", size: "1920 × 1920" },
+      { label: "Ảnh vuông #2", size: "1920 × 1920" },
+      { label: "Ảnh vuông #3", size: "1920 × 1920" },
+      { label: "Ảnh vuông #4", size: "1920 × 1920" },
+    ],
   },
   ALBUM_4: {
-    label: "Album 4 ảnh (1 lớn + 3 nhỏ)",
-    ratioHint: "1 ảnh chính + 3 ảnh chi tiết",
+    group: "4 Ảnh",
+    label: "4 Ảnh — Chính ngang (1920×1280 + 3×1920)",
+    ratioHint: "1 chính ngang 1920×1280 + 3 phụ 1920×1920",
     slots: 4,
-    aspectDesc: "Tối ưu cho Feedback / Chùm ảnh sự kiện",
+    aspectDesc: "1 ảnh banner chính ngang trên + 3 ảnh vuông chi tiết dưới",
+    slotSpecs: [
+      { label: "Ảnh chính ngang", size: "1920 × 1280" },
+      { label: "Ảnh phụ #2", size: "1920 × 1920" },
+      { label: "Ảnh phụ #3", size: "1920 × 1920" },
+      { label: "Ảnh phụ #4", size: "1920 × 1920" },
+    ],
+  },
+  ALBUM_4_VERTICAL: {
+    group: "4 Ảnh",
+    label: "4 Ảnh — Chính dọc (1280×1920 + 3×1920)",
+    ratioHint: "1 chính dọc 1280×1920 + 3 phụ 1920×1920",
+    slots: 4,
+    aspectDesc: "1 ảnh chính dọc bên trái + 3 ảnh vuông xếp dọc bên phải",
+    slotSpecs: [
+      { label: "Ảnh chính dọc", size: "1280 × 1920" },
+      { label: "Ảnh phụ #2", size: "1920 × 1920" },
+      { label: "Ảnh phụ #3", size: "1920 × 1920" },
+      { label: "Ảnh phụ #4", size: "1920 × 1920" },
+    ],
+  },
+
+  // 6. 5 Ảnh trở lên
+  ALBUM_5_HORIZONTAL: {
+    group: "5 Ảnh trở lên",
+    label: "5+ Ảnh — 2 vuông ngang trên + 3 dưới",
+    ratioHint: "2 chính 1920×1920 trên + 3 phụ 1920×1920 dưới",
+    slots: 5,
+    aspectDesc: "Album nhiều ảnh: 2 ảnh lớn hàng trên + 3 ảnh phụ hàng dưới",
+    slotSpecs: [
+      { label: "Ảnh chính #1", size: "1920 × 1920" },
+      { label: "Ảnh chính #2", size: "1920 × 1920" },
+      { label: "Ảnh phụ #3", size: "1920 × 1920" },
+      { label: "Ảnh phụ #4", size: "1920 × 1920" },
+      { label: "Ảnh phụ #5 (+N)", size: "1920 × 1920" },
+    ],
+  },
+  ALBUM_5_VERTICAL: {
+    group: "5 Ảnh trở lên",
+    label: "5+ Ảnh — 2 vuông dọc trái + 3 phải (1920×1280)",
+    ratioHint: "2 chính 1920×1920 trái + 3 phụ 1920×1280 phải",
+    slots: 5,
+    aspectDesc: "2 ảnh vuông cột trái + 3 ảnh ngang cột phải",
+    slotSpecs: [
+      { label: "Ảnh chính #1", size: "1920 × 1920" },
+      { label: "Ảnh chính #2", size: "1920 × 1920" },
+      { label: "Ảnh phụ #3", size: "1920 × 1280" },
+      { label: "Ảnh phụ #4", size: "1920 × 1280" },
+      { label: "Ảnh phụ #5 (+N)", size: "1920 × 1280" },
+    ],
+  },
+
+  // 7. Story, Reels & Share Link
+  REELS_VERTICAL: {
+    group: "Story, Reels & Share Link",
+    label: "Story & Reels dọc (1080 × 1920)",
+    ratioHint: "1080 × 1920 px (9:16)",
+    slots: 1,
+    aspectDesc: "Chừa vùng an toàn trên/dưới cho thanh nút Story & Reels",
+    slotSpecs: [{ label: "Story / Reels 9:16", size: "1080 × 1920" }],
   },
   LINK_PREVIEW: {
-    label: "Bài gắn Link Preview (1.91:1)",
-    ratioHint: "1200 × 628px",
+    group: "Story, Reels & Share Link",
+    label: "Share Link (1200 × 628)",
+    ratioHint: "1200 × 628 px (1.91:1)",
     slots: 1,
-    aspectDesc: "Kéo traffic về Website / Landing Page",
+    aspectDesc: "Thumbnail chia sẻ Link Website / Landing Page",
+    slotSpecs: [{ label: "Ảnh Share Link", size: "1200 × 628" }],
+  },
+
+  // 8. Hồ sơ & Ảnh bìa
+  AVATAR: {
+    group: "Hồ sơ & Ảnh bìa",
+    label: "Ảnh đại diện / Avatar (1000 × 1000)",
+    ratioHint: "1000 × 1000 px (Hiển thị khung tròn)",
+    slots: 1,
+    aspectDesc: "Đặt logo / nội dung trọng tâm trong vòng tròn an toàn",
+    slotSpecs: [{ label: "Avatar tròn", size: "1000 × 1000" }],
+  },
+  COVER_FANPAGE: {
+    group: "Hồ sơ & Ảnh bìa",
+    label: "Ảnh bìa Fanpage (1920×1080 • Mobile 1920×710)",
+    ratioHint: "Desktop 1920 × 1080 • Mobile 1920 × 710 px",
+    slots: 1,
+    aspectDesc: "Giữ chữ & thông điệp chính trong vùng an toàn Mobile 1920×710",
+    slotSpecs: [
+      { label: "Cover Fanpage (Desktop / Mobile safe)", size: "1920 × 1080 (safe 1920 × 710)" },
+    ],
+  },
+  COVER_EVENT_GROUP: {
+    group: "Hồ sơ & Ảnh bìa",
+    label: "Ảnh bìa Group & Sự kiện (1920 × 1008)",
+    ratioHint: "1920 × 1008 px",
+    slots: 1,
+    aspectDesc: "Chuẩn ảnh bìa Facebook Group & Facebook Event",
+    slotSpecs: [{ label: "Cover Group / Sự kiện", size: "1920 × 1008" }],
+  },
+
+  // 9. Quảng cáo Facebook Ads
+  ADS_SLIDESHOW: {
+    group: "Quảng cáo Facebook Ads",
+    label: "Quảng cáo Slide Show / Carousel (1080 × 1080)",
+    ratioHint: "1080 × 1080 px (1:1 • Ads)",
+    slots: 3,
+    aspectDesc: "Quảng cáo trượt nhiều thẻ vuông 1080×1080 kèm nút CTA",
+    slotSpecs: [
+      { label: "Slide Ads #1", size: "1080 × 1080" },
+      { label: "Slide Ads #2", size: "1080 × 1080" },
+      { label: "Slide Ads #3", size: "1080 × 1080" },
+    ],
+  },
+  ADS_SHARE_LINK: {
+    group: "Quảng cáo Facebook Ads",
+    label: "Quảng cáo Share Link (1200 × 628)",
+    ratioHint: "1200 × 628 px (Ads CTA)",
+    slots: 1,
+    aspectDesc: "Quảng cáo kéo traffic Web / Form kèm nút Đăng ký / Tìm hiểu thêm",
+    slotSpecs: [{ label: "Banner Ads Share Link", size: "1200 × 628" }],
   },
 };
 
@@ -318,6 +537,28 @@ export const RESOURCE_CATEGORY_META: Record<
   },
 };
 
+export const APPROVAL_REQUIRED_TASK_TYPES = new Set<TaskType>([
+  "CONTENT_SOCIAL",
+  "CONTENT_ADS",
+  "CONTENT_WEB",
+  "MEDIA_IMAGE",
+  "MEDIA_VIDEO",
+]);
+
+/**
+ * Các đầu việc sản xuất Content, Thiết kế Ảnh, Quay/Dựng Video và Order Media
+ * bắt buộc gửi Leader duyệt trước khi nhân sự được đánh dấu Hoàn tất / Đã đăng.
+ */
+export function taskRequiresLeaderApproval(task: {
+  taskType: TaskType;
+  isMediaOrder?: boolean | null;
+}): boolean {
+  return (
+    Boolean(task.isMediaOrder) ||
+    APPROVAL_REQUIRED_TASK_TYPES.has(task.taskType)
+  );
+}
+
 export function isTaskOverdue(task: {
   status: string;
   dueAt: string | Date | null;
@@ -332,4 +573,19 @@ export function isTaskOverdue(task: {
   }
   const due = typeof task.dueAt === "string" ? new Date(task.dueAt) : task.dueAt;
   return due.getTime() < Date.now();
+}
+
+/**
+ * Nhân sự chuyên trách sản xuất Media (Design ảnh & Edit/Quay dựng video).
+ * Giao diện riêng tập trung 100% vào nhận & trả Order từ các thành viên khác ngay trong Nhật Ký Hải Trình,
+ * ẩn các mục quản trị dự án/content không liên quan (Hải đồ dự án, Order Media, Báo cáo dữ liệu Fanpage).
+ */
+export function isMediaProductionUser(
+  role?: string | null,
+  departmentScope?: string | null
+): boolean {
+  if (role === "LEADER") return false;
+  return (
+    departmentScope === "MEDIA_DESIGN" || departmentScope === "MEDIA_VIDEO"
+  );
 }

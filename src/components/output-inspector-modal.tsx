@@ -18,6 +18,7 @@ import { PlatformLogo } from "@/components/platform-logo";
 import { TaskStatusBadge } from "@/components/status-badge";
 import { FacebookPostPreview } from "@/components/facebook-post-preview";
 import { OutputInspectorQcPanel } from "@/components/output-inspector-qc-panel";
+import { VideoScriptBriefViewer } from "@/components/video-script-brief-viewer";
 import { useToast } from "@/components/toast-provider";
 import { ASSET_KIND_LABEL } from "@/lib/constants";
 import { formatVnDateTime } from "@/lib/dates";
@@ -31,12 +32,14 @@ import type {
   GeminiQcCheckResponse,
 } from "@/lib/gemini-shared";
 import type { UserRole } from "@/generated/prisma/client";
-import type { TaskItem } from "@/types/crm";
+import type { SimpleUser, TaskItem } from "@/types/crm";
 
 interface OutputInspectorModalProps {
   task: TaskItem | null;
   open: boolean;
+  currentUserId?: string;
   currentUserRole: UserRole;
+  users?: SimpleUser[];
   aiConfig?: GeminiConfigInfo;
   aiResult?: GeminiQcCheckResponse | null;
   aiLoading?: boolean;
@@ -95,7 +98,9 @@ function SafeAssetImage({
 export function OutputInspectorModal({
   task,
   open,
+  currentUserId,
   currentUserRole,
+  users,
   aiConfig,
   aiResult,
   aiLoading = false,
@@ -112,7 +117,9 @@ export function OutputInspectorModal({
     <OutputInspectorInner
       key={`${task.id}-${task.status}-${task.assets.length}-${(task.caption || "").length}`}
       task={task}
+      currentUserId={currentUserId}
       currentUserRole={currentUserRole}
+      users={users}
       aiConfig={aiConfig}
       aiResult={aiResult}
       aiLoading={aiLoading}
@@ -129,7 +136,9 @@ export function OutputInspectorModal({
 
 function OutputInspectorInner({
   task,
+  currentUserId,
   currentUserRole,
+  users,
   aiConfig,
   aiResult,
   aiLoading,
@@ -142,7 +151,9 @@ function OutputInspectorInner({
   onOpenTaskDrawer,
 }: {
   task: TaskItem;
+  currentUserId?: string;
   currentUserRole: UserRole;
+  users?: SimpleUser[];
   aiConfig?: GeminiConfigInfo;
   aiResult?: GeminiQcCheckResponse | null;
   aiLoading: boolean;
@@ -472,39 +483,52 @@ function OutputInspectorInner({
                       Đối chiếu Brief từng {analyzed.category === "VIDEO" ? "Video" : "Ảnh"} (
                       {analyzed.mediaBriefItems.length} mục)
                     </div>
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                      {analyzed.mediaBriefItems.map((item, idx) => (
-                        <div
-                          key={item.id}
-                          className="rounded-xl border border-amber-200/80 bg-white p-3 text-xs space-y-1"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-extrabold text-slate-900">
-                              {analyzed.category === "VIDEO" ? "Video" : "Ảnh"} {idx + 1}
-                            </span>
-                            <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900">
-                              Tỷ lệ: {item.ratio}
-                            </span>
+                    <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+                      {analyzed.mediaBriefItems.map((item, idx) =>
+                        analyzed.category === "VIDEO" ? (
+                          <VideoScriptBriefViewer
+                            key={item.id}
+                            item={item}
+                            index={idx}
+                            compact
+                          />
+                        ) : (
+                          <div
+                            key={item.id}
+                            className="rounded-xl border border-amber-200/80 bg-white p-3 text-xs space-y-1"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-extrabold text-slate-900">
+                                Ảnh {idx + 1}
+                              </span>
+                              <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900">
+                                Tỷ lệ: {item.ratio}
+                              </span>
+                            </div>
+                            {item.content && (
+                              <p className="text-slate-700 whitespace-pre-wrap">
+                                {item.content}
+                              </p>
+                            )}
+                            {item.note && (
+                              <p className="text-slate-500 italic">
+                                Ghi chú: {item.note}
+                              </p>
+                            )}
+                            {item.sampleUrl && (
+                              <a
+                                href={item.sampleUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-blue-600 font-semibold hover:underline"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                Mẫu tham khảo
+                              </a>
+                            )}
                           </div>
-                          {item.content && (
-                            <p className="text-slate-700 whitespace-pre-wrap">{item.content}</p>
-                          )}
-                          {item.note && (
-                            <p className="text-slate-500 italic">Ghi chú: {item.note}</p>
-                          )}
-                          {item.sampleUrl && (
-                            <a
-                              href={item.sampleUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-blue-600 font-semibold hover:underline"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              Mẫu tham khảo
-                            </a>
-                          )}
-                        </div>
-                      ))}
+                        )
+                      )}
                     </div>
                   </div>
                 )}
@@ -512,23 +536,26 @@ function OutputInspectorInner({
             )}
 
             {tab === "FB_PREVIEW" && (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <FacebookPostPreview
-                  pageName={task.publishChannel || task.project.name}
-                  pageColor={task.project.color}
-                  caption={task.caption || ""}
-                  layout={task.fbPostLayout || "SINGLE_SQUARE"}
-                  mediaUrl={analyzed.deliverableAssets[0]?.url || null}
-                  mediaUrls={analyzed.deliverableAssets.map((a) => a.url)}
-                  title={task.title}
-                />
-              </div>
+              <FacebookPostPreview
+                pageName={task.publishChannel || task.project.name}
+                pageColor={task.project.color}
+                platform={task.platform}
+                postFormat={task.postFormat}
+                description={task.description}
+                caption={task.caption || ""}
+                layout={task.fbPostLayout || "SINGLE_SQUARE"}
+                mediaUrl={analyzed.deliverableAssets[0]?.url || null}
+                mediaUrls={analyzed.deliverableAssets.map((a) => a.url)}
+                title={task.title}
+              />
             )}
           </div>
 
           <OutputInspectorQcPanel
             task={task}
+            currentUserId={currentUserId}
             currentUserRole={currentUserRole}
+            users={users}
             aiConfig={aiConfig}
             aiResult={aiResult}
             aiLoading={aiLoading}

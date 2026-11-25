@@ -12,11 +12,7 @@ import {
   getPostFormatMeta,
 } from "@/lib/content-plan";
 import { getVnDateString } from "@/lib/dates";
-import {
-  getPlatformChannelMeta,
-  getSuggestionsForPlatform,
-  normalizePlatformSelectValue,
-} from "@/lib/platform-meta";
+import { normalizePlatformSelectValue } from "@/lib/platform-meta";
 import type { GeminiQcCheckResponse } from "@/lib/gemini-shared";
 import type { ProjectChannelSuggestions, SimpleUser, TaskItem } from "@/types/crm";
 import type { UserRole } from "@/generated/prisma/client";
@@ -51,7 +47,6 @@ export function ContentCalendarRow({
   task: t,
   projectSlug,
   users,
-  channelSuggestions,
   todayStr,
   currentUserRole,
   rowBusy,
@@ -84,10 +79,6 @@ export function ContentCalendarRow({
     t.status !== "APPROVED_FINAL" &&
     t.status !== "PUBLISHED" &&
     t.status !== "DONE";
-
-  const chMeta = getPlatformChannelMeta(t.platform);
-  const chOptions = getSuggestionsForPlatform(t.platform, channelSuggestions);
-  const listId = `ch-opt-${t.id}`;
 
   return (
     <tr
@@ -197,8 +188,8 @@ export function ContentCalendarRow({
         </div>
       </td>
 
-      {/* 4. Nền tảng & Kênh/Page/Web */}
-      <td className="py-2.5 px-2 min-w-[135px]">
+      {/* 4. Nền tảng */}
+      <td className="py-2.5 px-2 min-w-[125px]">
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">
             <PlatformLogo platform={t.platform} size="xs" />
@@ -217,37 +208,13 @@ export function ContentCalendarRow({
               ))}
             </select>
           </div>
-          <input
-            key={`${t.id}-${t.publishChannel || ""}`}
-            type="text"
-            list={chOptions.length > 0 ? listId : undefined}
-            defaultValue={t.publishChannel || ""}
-            disabled={rowBusy}
-            placeholder={`+ ${chMeta.channelShortLabel}`}
-            onBlur={(e) => {
-              const next = e.target.value.trim();
-              const prev = (t.publishChannel || "").trim();
-              if (next !== prev) {
-                onPatchTaskInline(
-                  t.id,
-                  { publishChannel: next || null },
-                  `Đã cập nhật ${chMeta.channelShortLabel}.`
-                );
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                (e.target as HTMLInputElement).blur();
-              }
-            }}
-            className="w-full rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-700 placeholder:text-slate-400 focus:border-blue-400 focus:outline-none"
-          />
-          {chOptions.length > 0 && (
-            <datalist id={listId}>
-              {chOptions.map((opt) => (
-                <option key={opt} value={opt} />
-              ))}
-            </datalist>
+          {t.publishChannel && (
+            <div
+              title={t.publishChannel}
+              className="text-[11px] font-medium text-slate-500 truncate max-w-[140px]"
+            >
+              {t.publishChannel}
+            </div>
           )}
         </div>
       </td>

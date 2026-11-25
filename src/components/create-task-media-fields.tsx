@@ -1,14 +1,24 @@
 "use client";
 
-import { Camera, ChevronDown, ChevronUp, Film, Image as ImageIcon } from "lucide-react";
-import { FB_POST_LAYOUTS } from "@/lib/constants";
+import {
+  Camera,
+  ChevronDown,
+  ChevronUp,
+  Clapperboard,
+  Film,
+  Image as ImageIcon,
+  Scissors,
+} from "lucide-react";
+import { FB_POST_LAYOUTS, FB_POST_LAYOUT_GROUPS } from "@/lib/constants";
+import { getPresetDateTimeLocal } from "@/lib/dates";
 import { MediaBriefItemsEditor } from "@/components/media-brief-items-editor";
-import { PublishChannelInput } from "@/components/publish-channel-input";
 import { FacebookPostPreview } from "@/components/facebook-post-preview";
-import type { MediaBriefItem } from "@/lib/media-brief";
+import {
+  VIDEO_ORDER_KIND_META,
+  type MediaBriefItem,
+  type VideoOrderKind,
+} from "@/lib/media-brief";
 import type {
-  CapacityItem,
-  ProjectChannelSuggestions,
   SimpleProject,
   SimpleUser,
 } from "@/types/crm";
@@ -18,16 +28,20 @@ interface CreateTaskMediaHeaderProps {
   projects: SimpleProject[];
   activeProjectId: string;
   taskType: TaskType;
+  videoOrderKind: VideoOrderKind;
   onChangeProjectId: (id: string) => void;
   onSwitchMediaKind: (kind: "MEDIA_IMAGE" | "MEDIA_VIDEO") => void;
+  onSwitchVideoOrderKind: (kind: VideoOrderKind) => void;
 }
 
 export function CreateTaskMediaHeaderFields({
   projects,
   activeProjectId,
   taskType,
+  videoOrderKind,
   onChangeProjectId,
   onSwitchMediaKind,
+  onSwitchVideoOrderKind,
 }: CreateTaskMediaHeaderProps) {
   return (
     <div className="space-y-3">
@@ -64,14 +78,14 @@ export function CreateTaskMediaHeaderFields({
             role="radio"
             aria-checked={taskType === "MEDIA_IMAGE"}
             onClick={() => onSwitchMediaKind("MEDIA_IMAGE")}
-            className={`rounded-xl border-2 p-3 text-left transition cursor-pointer flex items-center gap-2.5 ${
+            className={`rounded-xl border-2 px-3 py-2.5 text-left transition cursor-pointer flex items-center gap-2.5 ${
               taskType === "MEDIA_IMAGE"
                 ? "border-blue-500 bg-blue-50/70 text-blue-900 shadow-xs"
                 : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
             }`}
           >
             <span
-              className={`w-8 h-8 rounded-lg inline-flex items-center justify-center shrink-0 ${
+              className={`w-7 h-7 rounded-lg inline-flex items-center justify-center shrink-0 ${
                 taskType === "MEDIA_IMAGE"
                   ? "bg-blue-600 text-white"
                   : "bg-slate-100 text-slate-500"
@@ -79,12 +93,7 @@ export function CreateTaskMediaHeaderFields({
             >
               <ImageIcon className="w-4 h-4" />
             </span>
-            <div className="min-w-0">
-              <div className="text-xs font-extrabold">Brief Ảnh</div>
-              <div className="text-[11px] opacity-75">
-                Chi tiết từng ảnh, tỷ lệ &amp; mẫu
-              </div>
-            </div>
+            <span className="text-xs font-extrabold">Brief Ảnh</span>
           </button>
 
           <button
@@ -92,14 +101,14 @@ export function CreateTaskMediaHeaderFields({
             role="radio"
             aria-checked={taskType === "MEDIA_VIDEO"}
             onClick={() => onSwitchMediaKind("MEDIA_VIDEO")}
-            className={`rounded-xl border-2 p-3 text-left transition cursor-pointer flex items-center gap-2.5 ${
+            className={`rounded-xl border-2 px-3 py-2.5 text-left transition cursor-pointer flex items-center gap-2.5 ${
               taskType === "MEDIA_VIDEO"
                 ? "border-violet-500 bg-violet-50/70 text-violet-900 shadow-xs"
                 : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
             }`}
           >
             <span
-              className={`w-8 h-8 rounded-lg inline-flex items-center justify-center shrink-0 ${
+              className={`w-7 h-7 rounded-lg inline-flex items-center justify-center shrink-0 ${
                 taskType === "MEDIA_VIDEO"
                   ? "bg-violet-600 text-white"
                   : "bg-slate-100 text-slate-500"
@@ -107,15 +116,74 @@ export function CreateTaskMediaHeaderFields({
             >
               <Film className="w-4 h-4" />
             </span>
-            <div className="min-w-0">
-              <div className="text-xs font-extrabold">Brief Video</div>
-              <div className="text-[11px] opacity-75">
-                Chi tiết từng video &amp; kịch bản
-              </div>
-            </div>
+            <span className="text-xs font-extrabold">Brief Video</span>
           </button>
         </div>
       </div>
+
+      {/* Khi chọn Brief Video: Phân loại gọn 2 lựa chọn (không chú thích dài) */}
+      {taskType === "MEDIA_VIDEO" && (
+        <div className="space-y-1.5">
+          <label className="block text-xs font-bold text-slate-700">
+            Phân loại Order Video *
+          </label>
+          <div
+            role="radiogroup"
+            aria-label="Phân loại Order Video"
+            className="grid grid-cols-2 gap-2.5"
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={videoOrderKind === "SHOOT_AND_EDIT"}
+              onClick={() => onSwitchVideoOrderKind("SHOOT_AND_EDIT")}
+              className={`rounded-xl border-2 px-3 py-2.5 text-left transition cursor-pointer flex items-center gap-2.5 ${
+                videoOrderKind === "SHOOT_AND_EDIT"
+                  ? "border-emerald-600 bg-emerald-50/70 text-emerald-950 shadow-xs"
+                  : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+              }`}
+            >
+              <span
+                className={`w-7 h-7 rounded-lg inline-flex items-center justify-center shrink-0 ${
+                  videoOrderKind === "SHOOT_AND_EDIT"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                <Clapperboard className="w-4 h-4" />
+              </span>
+              <span className="text-xs font-extrabold">
+                {VIDEO_ORDER_KIND_META.SHOOT_AND_EDIT.label}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              role="radio"
+              aria-checked={videoOrderKind === "EDIT_ONLY"}
+              onClick={() => onSwitchVideoOrderKind("EDIT_ONLY")}
+              className={`rounded-xl border-2 px-3 py-2.5 text-left transition cursor-pointer flex items-center gap-2.5 ${
+                videoOrderKind === "EDIT_ONLY"
+                  ? "border-violet-600 bg-violet-50/70 text-violet-950 shadow-xs"
+                  : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+              }`}
+            >
+              <span
+                className={`w-7 h-7 rounded-lg inline-flex items-center justify-center shrink-0 ${
+                  videoOrderKind === "EDIT_ONLY"
+                    ? "bg-violet-600 text-white"
+                    : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                <Scissors className="w-4 h-4" />
+              </span>
+              <span className="text-xs font-extrabold">
+                {VIDEO_ORDER_KIND_META.EDIT_ONLY.label}
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -124,78 +192,89 @@ interface CreateTaskMediaAssigneeRowProps {
   assigneeId: string;
   onChangeAssigneeId: (id: string) => void;
   users: SimpleUser[];
-  capacity: CapacityItem[];
   isVideoBrief: boolean;
-  publishChannel: string;
-  onChangePublishChannel: (val: string) => void;
-  channelSuggestions?: ProjectChannelSuggestions | null;
+  dueAt: string;
+  onChangeDueAt: (val: string) => void;
 }
 
 export function CreateTaskMediaAssigneeRow({
   assigneeId,
   onChangeAssigneeId,
   users,
-  capacity,
   isVideoBrief,
-  publishChannel,
-  onChangePublishChannel,
-  channelSuggestions,
+  dueAt,
+  onChangeDueAt,
 }: CreateTaskMediaAssigneeRowProps) {
+  const activeUsers = users.filter((u) => u.isActive !== false);
+  const mediaScopes = isVideoBrief
+    ? new Set(["MEDIA_VIDEO", "CONTENT_EDIT", "MEDIA_DESIGN", "CONTENT_DESIGN"])
+    : new Set(["MEDIA_DESIGN", "CONTENT_DESIGN", "MEDIA_VIDEO", "CONTENT_EDIT"]);
+  const mediaUsers = activeUsers.filter((u) => mediaScopes.has(u.departmentScope));
+  const otherUsers = activeUsers.filter((u) => !mediaScopes.has(u.departmentScope));
+
+  const renderUserOption = (u: SimpleUser) => (
+    <option key={u.id} value={u.id}>
+      {u.name}
+    </option>
+  );
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
       <div>
         <label className="block text-xs font-semibold text-slate-700 mb-1">
-          Giao cho
+          Giao cho Media *
         </label>
         <select
+          required
           value={assigneeId}
           onChange={(e) => onChangeAssigneeId(e.target.value)}
           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white focus:border-blue-500 focus:outline-none"
         >
-          <option value="">-- Chọn nhân sự --</option>
-          {users
-            .filter((u) => u.isActive !== false)
-            .map((u) => {
-              const cap = capacity.find((c) => c.userId === u.id);
-              const capText =
-                cap && cap.limit
-                  ? ` (${cap.used}/${cap.limit} ${cap.unit})`
-                  : cap
-                    ? ` (${cap.activeTasksCount} việc)`
-                    : "";
-              return (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                  {capText}
-                </option>
-              );
-            })}
+          <option value="">-- Chọn nhân sự Media nhận order --</option>
+          {mediaUsers.length > 0 && (
+            <optgroup label={isVideoBrief ? "🎬 Team Video / Dựng phim" : "🎨 Team Thiết kế / Media"}>
+              {mediaUsers.map(renderUserOption)}
+            </optgroup>
+          )}
+          {otherUsers.length > 0 && (
+            <optgroup label="👥 Thành viên khác">
+              {otherUsers.map(renderUserOption)}
+            </optgroup>
+          )}
         </select>
       </div>
 
       <div>
-        <label className="block text-xs font-semibold text-slate-700 mb-1">
-          {isVideoBrief ? "Fanpage / Kênh đăng bài" : "Fanpage đăng bài"}
-        </label>
-        <PublishChannelInput
-          platform="Fanpage"
-          value={publishChannel}
-          onChange={onChangePublishChannel}
-          showLabel={false}
-          suggestions={
-            isVideoBrief && channelSuggestions
-              ? {
-                  ...channelSuggestions,
-                  fanpages: Array.from(
-                    new Set([
-                      ...channelSuggestions.fanpages,
-                      ...channelSuggestions.tiktoks,
-                    ])
-                  ),
+        <div className="flex flex-wrap items-center justify-between gap-1.5 mb-1">
+          <label className="text-xs font-semibold text-slate-700">
+            Deadline hoàn thành
+          </label>
+          <div className="flex flex-wrap gap-1">
+            {[
+              { label: "Hôm nay 17:30", days: 0, h: 17, m: 30 },
+              { label: "Mai 15:00", days: 1, h: 15, m: 0 },
+              { label: "Sau 2 ngày", days: 2, h: 17, m: 30 },
+            ].map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() =>
+                  onChangeDueAt(
+                    getPresetDateTimeLocal(preset.days, preset.h, preset.m)
+                  )
                 }
-              : channelSuggestions
-          }
-          inputClassName="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                className="rounded-md bg-slate-100 hover:bg-blue-50 hover:text-blue-700 px-1.5 py-0.5 text-[10.5px] font-medium text-slate-600 cursor-pointer"
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <input
+          type="datetime-local"
+          value={dueAt}
+          onChange={(e) => onChangeDueAt(e.target.value)}
+          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
         />
       </div>
     </div>
@@ -206,6 +285,7 @@ interface CreateTaskMediaSpecsBlockProps {
   mediaBriefItems: MediaBriefItem[];
   onChangeMediaBriefItems: (items: MediaBriefItem[]) => void;
   isVideoBrief: boolean;
+  videoOrderKind: VideoOrderKind;
   briefLinkUrl: string;
   onChangeBriefLinkUrl: (v: string) => void;
   description: string;
@@ -216,6 +296,7 @@ export function CreateTaskMediaSpecsBlock({
   mediaBriefItems,
   onChangeMediaBriefItems,
   isVideoBrief,
+  videoOrderKind,
   briefLinkUrl,
   onChangeBriefLinkUrl,
   description,
@@ -227,6 +308,8 @@ export function CreateTaskMediaSpecsBlock({
         items={mediaBriefItems}
         onChange={onChangeMediaBriefItems}
         isVideo={isVideoBrief}
+        defaultVideoKind={videoOrderKind}
+        showItemVideoKindSwitcher={false}
         compact={false}
       />
 
@@ -239,7 +322,6 @@ export function CreateTaskMediaSpecsBlock({
             type="url"
             value={briefLinkUrl}
             onChange={(e) => onChangeBriefLinkUrl(e.target.value)}
-            placeholder="https://drive.google.com/... (nếu có)"
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
           />
         </div>
@@ -251,7 +333,6 @@ export function CreateTaskMediaSpecsBlock({
             type="text"
             value={description}
             onChange={(e) => onChangeDescription(e.target.value)}
-            placeholder="Yêu cầu chung cho cả bộ..."
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
           />
         </div>
@@ -397,10 +478,16 @@ export function CreateTaskAdvancedSection({
                 onChange={(e) => onChangeFbPostLayout(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs bg-white"
               >
-                {Object.entries(FB_POST_LAYOUTS).map(([k, m]) => (
-                  <option key={k} value={k}>
-                    {m.label}
-                  </option>
+                {FB_POST_LAYOUT_GROUPS.map((grp) => (
+                  <optgroup key={grp} label={grp}>
+                    {Object.entries(FB_POST_LAYOUTS)
+                      .filter(([, m]) => m.group === grp)
+                      .map(([k, m]) => (
+                        <option key={k} value={k}>
+                          {m.label}
+                        </option>
+                      ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
@@ -461,13 +548,18 @@ export function CreateTaskAdvancedSection({
           {(platform === "Fanpage" ||
             platform === "Facebook" ||
             platform === "Group" ||
+            platform === "Instagram" ||
+            platform === "TikTok" ||
+            platform === "Threads" ||
             caption.trim()) && (
             <FacebookPostPreview
               pageName={publishChannel.trim() || projectName || "Fanpage Meta Ecom"}
               pageColor={projectColor}
+              platform={platform}
               caption={caption}
               layout={fbPostLayout}
               onChangeLayout={onChangeFbPostLayout}
+              hideLayoutSelector
               mediaUrl={briefLinkUrl}
               mediaUrls={briefLinkUrl ? [briefLinkUrl] : []}
               title={title}

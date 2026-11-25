@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { ArrowRight, GraduationCap, Plus } from "lucide-react";
-import { CheckinWidget } from "@/components/checkin-widget";
+import {
+  CheckinWidget,
+  type TodayPlanCheckinSummary,
+} from "@/components/checkin-widget";
 import { PirateAvatar, getPirateCharacter } from "@/components/pirate-art";
 import { Pirate3DSoloStage } from "@/components/pirate-3d-stage";
 import { MotivationalQuoteWidget } from "@/components/motivational-quote-widget";
@@ -26,11 +29,13 @@ interface MyWorkTopWidgetsProps {
   currentUserMotto?: string | null;
   todayDate: string;
   initialCheckin: CheckinItem | null;
+  todayPlanSummary?: TodayPlanCheckinSummary;
   liveCheckinStatus: "ON_TRACK" | "AT_RISK" | "DONE_TODAY" | "NONE";
   celebrateNonce: number;
   projects: SimpleProject[];
   todayBirthdays: BirthdayMemberInfo[];
   pendingCourses: PendingMandatoryCourseSummary[];
+  hideCreateButton?: boolean;
   onOpenCreate: () => void;
   onCheckinStatusChange: (
     status: "ON_TRACK" | "AT_RISK" | "DONE_TODAY" | "NONE"
@@ -48,11 +53,13 @@ export function MyWorkTopWidgets({
   currentUserMotto,
   todayDate,
   initialCheckin,
+  todayPlanSummary,
   liveCheckinStatus,
   celebrateNonce,
   projects,
   todayBirthdays,
   pendingCourses,
+  hideCreateButton = false,
   onOpenCreate,
   onCheckinStatusChange,
 }: MyWorkTopWidgetsProps) {
@@ -85,7 +92,7 @@ export function MyWorkTopWidgets({
           </div>
         </div>
 
-        {projects.length > 0 && (
+        {!hideCreateButton && projects.length > 0 && (
           <button
             type="button"
             onClick={onOpenCreate}
@@ -110,6 +117,7 @@ export function MyWorkTopWidgets({
           <CheckinWidget
             todayDate={todayDate}
             initialCheckin={initialCheckin}
+            todayPlanSummary={todayPlanSummary}
             onStatusChange={onCheckinStatusChange}
           />
         </div>

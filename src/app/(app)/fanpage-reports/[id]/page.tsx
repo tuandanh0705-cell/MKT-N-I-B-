@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isMediaProductionUser } from "@/lib/constants";
 import { buildProjectVisibilityWhere } from "@/lib/permissions";
 import { FanpageDetailView } from "@/components/fanpage-detail-view";
 
@@ -11,6 +12,9 @@ export default async function FanpageDetailPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (isMediaProductionUser(user.role, user.departmentScope)) {
+    redirect("/my-work");
+  }
 
   const { id } = await params;
 

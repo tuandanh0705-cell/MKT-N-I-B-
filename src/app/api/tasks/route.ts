@@ -114,9 +114,13 @@ export async function POST(request: Request) {
         String(body.status)
       )
         ? (body.status as TaskStatus)
-        : isMediaOrder && user.role !== "LEADER"
-          ? "BRIEF_REVIEW"
-          : "IN_PROGRESS";
+        : "IN_PROGRESS";
+
+    const rawPlannedDate =
+      typeof body.plannedDate === "string" ? body.plannedDate.trim() : "";
+    const plannedDate = /^\d{4}-\d{2}-\d{2}$/.test(rawPlannedDate)
+      ? rawPlannedDate
+      : null;
 
     const assigneeId = body.assigneeId ? String(body.assigneeId) : null;
     const briefLinkUrl = body.briefLinkUrl ? String(body.briefLinkUrl).trim() : "";
@@ -177,6 +181,7 @@ export async function POST(request: Request) {
         proposedPublishAt,
         timelineNote: body.timelineNote ? String(body.timelineNote) : null,
         dueAt,
+        plannedDate,
         scheduledPublishAt,
         projectId,
         requesterId: user.id,
@@ -195,25 +200,7 @@ export async function POST(request: Request) {
             }
           : undefined,
       },
-      include: {
-        project: { select: { id: true, slug: true, name: true, color: true } },
-        assignee: {
-          select: {
-            id: true,
-            name: true,
-            title: true,
-            avatarColor: true,
-            pirateCharacter: true,
-            departmentScope: true,
-          },
-        },
-        requester: {
-          select: { id: true, name: true, title: true, avatarColor: true, pirateCharacter: true },
-        },
-        reviewer: { select: { id: true, name: true } },
-        assets: true,
-        _count: { select: { comments: true } },
-      },
+      include: TASK_CARD_INCLUDE,
     });
 
     await recordActivity({
@@ -225,19 +212,42 @@ export async function POST(request: Request) {
       summary: `${user.name} đã tạo đầu việc "${created.title}" (${created.code}) trong ${project.name}.`,
     });
 
-    // Thông báo cho người được giao việc
+    // Thông báo cho người được giao việc (mở thẳng tới thẻ việc trong Nhật Ký Hải Trình)
     if (assigneeId && assigneeId !== user.id) {
       await createNotification({
         userId: assigneeId,
         type: "TASK_ASSIGNED",
-        title: `${isMediaOrder ? "Order Media mới" : "Việc mới"}: ${created.code}`,
-        message: `${user.name} vừa giao đầu việc "${created.title}" (Dự án: ${project.name})${
+        title: `${isMediaOrder ? "📦 Order Media mới" : "📋 Việc mới được giao"}: ${created.code}`,
+        message: `${user.name} vừa giao "${created.title}" (Dự án: ${project.name})${
           timing.warningMessage ? ` • Lưu ý: ${timing.warningMessage}` : ""
         }.`,
-        linkUrl: `/projects/${project.slug}`,
+        linkUrl: `/my-work?taskId=${created.id}`,
         sendEmailNow: created.priority === "URGENT" || isMediaOrder,
-        actionLabel: "Xem chi tiết công việc",
+        actionLabel: "Mở việc & xếp lịch làm",
       });
+    }
+
+    // Nếu là Đơn ngoài team hoặc Order gấp do Member tạo -> thông báo Leader nắm tình hình ngay
+    if (
+      user.role !== "LEADER" &&
+      initialStatus === "IN_PROGRESS" &&
+      (isOutsideDepartment || timing.isRushOrder)
+    ) {
+      const leaders = await prisma.user.findMany({
+        where: { role: "LEADER", isActive: true },
+        select: { id: true },
+      });
+      for (const leader of leaders) {
+        if (leader.id === user.id || leader.id === assigneeId) continue;
+        await createNotification({
+          userId: leader.id,
+          type: "TASK_ASSIGNED",
+          title: `${isOutsideDepartment ? "📋 Đơn Ngoài Team mới" : "⚡ Order gấp mới"}: ${created.code}`,
+          message: `${user.name} tạo "${created.title}" (${project.name}) • Đã chuyển thẳng sang Đang làm.`,
+          linkUrl: `/projects/${project.slug}?taskId=${created.id}`,
+          actionLabel: "Xem chi tiết",
+        });
+      }
     }
 
     // Nếu là Brief hoặc Bài viết gửi thẳng lên chờ Leader duyệt -> báo ngay cho Leader

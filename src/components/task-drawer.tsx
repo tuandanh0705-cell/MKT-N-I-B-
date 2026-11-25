@@ -11,7 +11,10 @@ import {
   ExternalLink,
   History,
   Info,
+  Link2,
+  MessageSquare,
   Pencil,
+  Pin,
   RotateCcw,
   Send,
   ShieldAlert,
@@ -21,6 +24,7 @@ import {
 } from "lucide-react";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { MediaBriefItemsEditor } from "@/components/media-brief-items-editor";
+import { VideoScriptBriefViewer } from "@/components/video-script-brief-viewer";
 import { PirateAvatar } from "@/components/pirate-art";
 import { PlatformLogo } from "@/components/platform-logo";
 import {
@@ -31,10 +35,15 @@ import {
 import { TaskDrawerEditForm } from "@/components/task-drawer-edit-form";
 import { TaskDrawerQcTab } from "@/components/task-drawer-qc-tab";
 import { TaskDrawerSubtasksLog } from "@/components/task-drawer-subtasks-log";
+import { TaskFeedbackChat } from "@/components/task-feedback-chat";
 import { useToast } from "@/components/toast-provider";
 import { useGeminiQcRunner } from "@/hooks/use-gemini-qc";
-import { isTaskOverdue } from "@/lib/constants";
-import { formatVnDateTime } from "@/lib/dates";
+import {
+  isMediaProductionUser,
+  isTaskOverdue,
+  taskRequiresLeaderApproval,
+} from "@/lib/constants";
+import { formatVnDateTime, getVnDateString } from "@/lib/dates";
 import type { GeminiConfigInfo } from "@/lib/gemini-shared";
 import {
   createEmptyMediaBriefItem,
@@ -47,11 +56,14 @@ import { normalizeSubtasks } from "@/lib/subtasks";
 import type { SimpleUser, TaskItem } from "@/types/crm";
 import type { UserRole } from "@/generated/prisma/client";
 
-type DrawerTab = "OVERVIEW" | "OUTPUT_QC" | "SUBTASKS_LOG";
+export type DrawerTab = "OVERVIEW" | "CHAT" | "OUTPUT_QC" | "SUBTASKS_LOG";
 
 interface TaskDrawerProps {
   taskId: string | null;
   currentUserRole: UserRole;
+  currentUserScope?: string;
+  centeredModal?: boolean;
+  initialTab?: DrawerTab;
   onClose: () => void;
   onUpdated: (task: TaskItem) => void;
   onDeleted?: (taskId: string) => void;
@@ -60,12 +72,21 @@ interface TaskDrawerProps {
 
 export function TaskDrawer(props: TaskDrawerProps) {
   if (!props.taskId) return null;
-  return <TaskDrawerInner key={props.taskId} {...props} taskId={props.taskId} />;
+  return (
+    <TaskDrawerInner
+      key={`${props.taskId}-${props.initialTab ?? "OVERVIEW"}`}
+      {...props}
+      taskId={props.taskId}
+    />
+  );
 }
 
 function TaskDrawerInner({
   taskId,
   currentUserRole,
+  currentUserScope,
+  centeredModal = false,
+  initialTab,
   onClose,
   onUpdated,
   onDeleted,
@@ -83,7 +104,9 @@ function TaskDrawerInner({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<DrawerTab>("OVERVIEW");
+  const [activeTab, setActiveTab] = useState<DrawerTab>(
+    initialTab ?? "OVERVIEW"
+  );
   const [editMode, setEditMode] = useState(false);
 
   const [mediaBriefDraft, setMediaBriefDraft] = useState<MediaBriefItem[]>([]);
@@ -199,29 +222,6 @@ function TaskDrawerInner({
     }
   }
 
-  async function handleSendComment(content: string) {
-    if (!task) return;
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/tasks/${task.id}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTask((prev) =>
-          prev
-            ? { ...prev, comments: [...(prev.comments ?? []), data.comment] }
-            : prev
-        );
-        showToast("Đã gửi bình luận.");
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function handleSendUrgentReminder() {
     if (!task) return;
     setSaving(true);
@@ -305,14 +305,44 @@ function TaskDrawerInner({
   }
 
   const subtasksList = task ? normalizeSubtasks(task.subtasksJson) : [];
+  const commentCount = task
+    ? task.comments?.length ?? task._count?.comments ?? 0
+    : 0;
+  const isMediaProduction = isMediaProductionUser(
+    currentUserRole,
+    currentUserScope
+  );
+  const isMediaBriefTask = Boolean(
+    task &&
+      (task.isMediaOrder ||
+        task.taskType === "MEDIA_IMAGE" ||
+        task.taskType === "MEDIA_VIDEO")
+  );
+  const useCenteredPopup = Boolean(
+    centeredModal || isMediaProduction || isMediaBriefTask
+  );
+  const linkOnlyOutput =
+    isMediaProduction || (currentUserRole !== "LEADER" && isMediaBriefTask);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div
+      className={
+        useCenteredPopup
+          ? "fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5"
+          : "fixed inset-0 z-50 flex justify-end"
+      }
+    >
       <div
         className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative z-10 w-full max-w-2xl bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col">
+      <div
+        className={
+          useCenteredPopup
+            ? "relative z-10 w-full max-w-6xl h-[92vh] bg-white rounded-2xl shadow-2xl border-2 border-amber-200/80 flex flex-col overflow-hidden"
+            : "relative z-10 w-full max-w-2xl bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col"
+        }
+      >
         {/* Top Bar */}
         <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
           {task ? (
@@ -402,7 +432,7 @@ function TaskDrawerInner({
           </div>
         </div>
 
-        {/* 3-Tab Strip */}
+        {/* 4-Tab Strip */}
         {task && !loading && (
           <div className="px-5 py-2 border-b border-slate-200 bg-slate-50/70 flex items-center gap-1.5 overflow-x-auto">
             <button
@@ -420,6 +450,32 @@ function TaskDrawerInner({
 
             <button
               type="button"
+              onClick={() => setActiveTab("CHAT")}
+              className={`rounded-xl px-3 py-1.5 text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition ${
+                activeTab === "CHAT"
+                  ? "bg-[#0B2545] text-amber-300 shadow-xs"
+                  : commentCount > 0
+                    ? "bg-amber-100/80 text-amber-900 hover:bg-amber-200/80"
+                    : "text-slate-600 hover:bg-slate-200/70"
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              Chat &amp; Feedback
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                  activeTab === "CHAT"
+                    ? "bg-amber-400 text-[#0B2545]"
+                    : commentCount > 0
+                      ? "bg-amber-600 text-white"
+                      : "bg-slate-200 text-slate-600"
+                }`}
+              >
+                {commentCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActiveTab("OUTPUT_QC")}
               className={`rounded-xl px-3 py-1.5 text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition ${
                 activeTab === "OUTPUT_QC"
@@ -427,13 +483,22 @@ function TaskDrawerInner({
                   : "text-slate-600 hover:bg-slate-200/70"
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              Output &amp; AI Check ({task.assets.length})
-              {savedAiResult && (
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo-500 text-white px-1.5 py-0.5 text-[10px]">
-                  <Bot className="w-2.5 h-2.5" />
-                  {savedAiResult.result.score}đ
-                </span>
+              {linkOnlyOutput ? (
+                <>
+                  <Link2 className="w-3.5 h-3.5" />
+                  Link Output ({task.assets.length})
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Output &amp; AI Check ({task.assets.length})
+                  {savedAiResult && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo-500 text-white px-1.5 py-0.5 text-[10px]">
+                      <Bot className="w-2.5 h-2.5" />
+                      {savedAiResult.result.score}đ
+                    </span>
+                  )}
+                </>
               )}
             </button>
 
@@ -448,7 +513,7 @@ function TaskDrawerInner({
             >
               <History className="w-3.5 h-3.5" />
               Subtasks ({subtasksList.filter((s) => s.done).length}/
-              {subtasksList.length}) &amp; Trao đổi ({task.comments?.length ?? 0})
+              {subtasksList.length}) &amp; Lịch sử
             </button>
           </div>
         )}
@@ -476,16 +541,18 @@ function TaskDrawerInner({
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">
                       Quy trình duyệt (Sửa: {task.revisionCount}/{task.maxRevisions})
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowQcReference((prev) => !prev)}
-                      className="text-xs font-medium text-sky-300 hover:text-sky-200 inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      <ClipboardList className="w-3.5 h-3.5" />
-                      {showQcReference
-                        ? "Ẩn tiêu chuẩn QC"
-                        : `${qcCriteria.length} tiêu chuẩn QC`}
-                    </button>
+                    {!linkOnlyOutput && (
+                      <button
+                        type="button"
+                        onClick={() => setShowQcReference((prev) => !prev)}
+                        className="text-xs font-medium text-sky-300 hover:text-sky-200 inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <ClipboardList className="w-3.5 h-3.5" />
+                        {showQcReference
+                          ? "Ẩn tiêu chuẩn QC"
+                          : `${qcCriteria.length} tiêu chuẩn QC`}
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -574,19 +641,54 @@ function TaskDrawerInner({
                       </button>
                     )}
 
-                    {task.status !== "DONE" && task.status !== "PUBLISHED" && (
+                    {task.status !== "DONE" &&
+                      task.status !== "PUBLISHED" &&
+                      (currentUserRole === "LEADER" ||
+                        !taskRequiresLeaderApproval(task) ||
+                        task.status === "APPROVED_FINAL") && (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() =>
+                            runPatch(
+                              { action: "MARK_DONE" },
+                              "Đã hoàn tất đầu việc!"
+                            )
+                          }
+                          className="rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 px-3 py-1.5 text-xs font-medium cursor-pointer"
+                        >
+                          Hoàn tất (Done)
+                        </button>
+                      )}
+
+                    {!isMediaProduction &&
+                      task.status !== "DONE" &&
+                      task.status !== "PUBLISHED" &&
+                      task.plannedDate !== getVnDateString() && (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() =>
+                            runPatch(
+                              { plannedDate: getVnDateString() },
+                              "Đã đưa vào kế hoạch làm Hôm nay (vẫn giữ nguyên Deadline gốc)!"
+                            )
+                          }
+                          className="rounded-xl bg-indigo-500/25 hover:bg-indigo-500/40 border border-indigo-400/40 text-indigo-100 px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Pin className="w-3.5 h-3.5" />
+                          Làm hôm nay
+                        </button>
+                      )}
+
+                    {activeTab !== "CHAT" && (
                       <button
                         type="button"
-                        disabled={saving}
-                        onClick={() =>
-                          runPatch(
-                            { action: "MARK_DONE" },
-                            "Đã hoàn tất đầu việc!"
-                          )
-                        }
-                        className="rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 px-3 py-1.5 text-xs font-medium cursor-pointer"
+                        onClick={() => setActiveTab("CHAT")}
+                        className="rounded-xl bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-200 px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer ml-auto"
                       >
-                        Hoàn tất (Done)
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        Chat feedback ({commentCount})
                       </button>
                     )}
                   </div>
@@ -869,56 +971,63 @@ function TaskDrawerInner({
                               <strong>Sửa / Thêm</strong> để bổ sung tỷ lệ, nội dung và mẫu.
                             </div>
                           ) : (
-                            <div className="space-y-2">
-                              {briefItems.map((it, idx) => (
-                                <div
-                                  key={it.id}
-                                  className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-1.5 text-xs"
-                                >
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <span className="font-extrabold text-slate-900">
-                                      {isVideoMedia
-                                        ? `Video ${idx + 1}`
-                                        : `Ảnh ${idx + 1}`}
-                                    </span>
-                                    <span className="rounded-full bg-sky-50 border border-sky-200 text-sky-800 px-2 py-0.5 text-[11px] font-bold">
-                                      Tỷ lệ: {it.ratio}
-                                    </span>
-                                  </div>
-                                  {it.content && (
-                                    <p className="text-slate-700 whitespace-pre-line leading-relaxed">
-                                      {it.content}
-                                    </p>
-                                  )}
-                                  {it.sampleUrl && (
-                                    <div className="text-[11px]">
-                                      <span className="font-semibold text-slate-500">
-                                        Mẫu:{" "}
+                            <div className="space-y-2.5">
+                              {briefItems.map((it, idx) =>
+                                isVideoMedia ? (
+                                  <VideoScriptBriefViewer
+                                    key={it.id}
+                                    item={it}
+                                    index={idx}
+                                    compact={!useCenteredPopup}
+                                  />
+                                ) : (
+                                  <div
+                                    key={it.id}
+                                    className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-1.5 text-xs"
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <span className="font-extrabold text-slate-900">
+                                        Ảnh {idx + 1}
                                       </span>
-                                      {/^https?:\/\//i.test(it.sampleUrl) ? (
-                                        <a
-                                          href={it.sampleUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-blue-600 font-semibold hover:underline inline-flex items-center gap-1"
-                                        >
-                                          {it.sampleUrl}
-                                          <ExternalLink className="w-3 h-3" />
-                                        </a>
-                                      ) : (
-                                        <span className="text-slate-700">
-                                          {it.sampleUrl}
+                                      <span className="rounded-full bg-sky-50 border border-sky-200 text-sky-800 px-2 py-0.5 text-[11px] font-bold">
+                                        Tỷ lệ: {it.ratio}
+                                      </span>
+                                    </div>
+                                    {it.content && (
+                                      <p className="text-slate-700 whitespace-pre-line leading-relaxed">
+                                        {it.content}
+                                      </p>
+                                    )}
+                                    {it.sampleUrl && (
+                                      <div className="text-[11px]">
+                                        <span className="font-semibold text-slate-500">
+                                          Mẫu:{" "}
                                         </span>
-                                      )}
-                                    </div>
-                                  )}
-                                  {it.note && (
-                                    <div className="text-[11px] text-slate-500">
-                                      Ghi chú: {it.note}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
+                                        {/^https?:\/\//i.test(it.sampleUrl) ? (
+                                          <a
+                                            href={it.sampleUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-600 font-semibold hover:underline inline-flex items-center gap-1"
+                                          >
+                                            {it.sampleUrl}
+                                            <ExternalLink className="w-3 h-3" />
+                                          </a>
+                                        ) : (
+                                          <span className="text-slate-700">
+                                            {it.sampleUrl}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                    {it.note && (
+                                      <div className="text-[11px] text-slate-500">
+                                        Ghi chú: {it.note}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              )}
                             </div>
                           )}
                         </div>
@@ -938,11 +1047,40 @@ function TaskDrawerInner({
                 </div>
               )}
 
-              {/* TAB 2: OUTPUT & AI CHECK */}
+              {/* TAB 2: CHAT & FEEDBACK TRỰC TIẾP TRONG TASK */}
+              {activeTab === "CHAT" && (
+                <TaskFeedbackChat
+                  taskId={task.id}
+                  taskCode={task.code}
+                  initialComments={task.comments ?? []}
+                  users={users}
+                  currentUserRole={currentUserRole}
+                  maxHeightClass="max-h-[420px]"
+                  onCommentsChanged={(nextComments) => {
+                    const prevCount =
+                      task.comments?.length ?? task._count?.comments ?? 0;
+                    const updatedTask: TaskItem = {
+                      ...task,
+                      comments: nextComments,
+                      _count: {
+                        comments: nextComments.length,
+                        activityLogs: task._count?.activityLogs,
+                      },
+                    };
+                    setTask(updatedTask);
+                    if (nextComments.length !== prevCount) {
+                      onUpdated(updatedTask);
+                    }
+                  }}
+                />
+              )}
+
+              {/* TAB 3: OUTPUT & AI CHECK */}
               {activeTab === "OUTPUT_QC" && (
                 <TaskDrawerQcTab
                   task={task}
                   currentUserRole={currentUserRole}
+                  linkOnlyOutput={linkOnlyOutput}
                   saving={saving}
                   aiConfig={aiConfig}
                   aiResult={savedAiResult}
@@ -955,18 +1093,16 @@ function TaskDrawerInner({
                 />
               )}
 
-              {/* TAB 3: SUBTASKS, COMMENTS & LOGS */}
+              {/* TAB 4: SUBTASKS & LOGS */}
               {activeTab === "SUBTASKS_LOG" && (
                 <TaskDrawerSubtasksLog
                   task={task}
                   users={users}
-                  saving={saving}
                   onTaskUpdated={(updated) => {
                     setTask(updated);
                     syncDrafts(updated);
                     onUpdated(updated);
                   }}
-                  onSendComment={handleSendComment}
                 />
               )}
             </>

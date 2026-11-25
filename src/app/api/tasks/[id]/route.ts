@@ -7,6 +7,7 @@ import { evaluateOrderTiming } from "@/lib/dates";
 import { buildFieldDiffs, recordActivity } from "@/lib/activity";
 import { normalizeSubtasks } from "@/lib/subtasks";
 import { normalizeMediaBriefItems } from "@/lib/media-brief";
+import { taskRequiresLeaderApproval } from "@/lib/constants";
 import { TASK_DETAIL_INCLUDE } from "@/lib/task-queries";
 import type {
   ActivityAction,
@@ -178,11 +179,27 @@ export async function PATCH(
         await createNotification({
           userId: nextAssigneeId,
           type: "TASK_ASSIGNED",
-          title: `Được giao việc ${existing.code}`,
+          title: `📋 Được giao việc ${existing.code}`,
           message: `${user.name} đã chuyển giao "${existing.title}" (${existing.project.name}) cho bạn.`,
-          linkUrl: `/projects/${existing.project.slug}`,
+          linkUrl: `/my-work?taskId=${id}`,
           sendEmailNow: true,
+          actionLabel: "Mở việc & xếp lịch làm",
         });
+      }
+    }
+
+    if (body.plannedDate !== undefined) {
+      if (body.plannedDate === null || body.plannedDate === "") {
+        updateData.plannedDate = null;
+      } else {
+        const cleanedPlan = String(body.plannedDate).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanedPlan)) {
+          return NextResponse.json(
+            { error: "Định dạng ngày dự kiến làm không hợp lệ (YYYY-MM-DD)." },
+            { status: 400 }
+          );
+        }
+        updateData.plannedDate = cleanedPlan;
       }
     }
 
@@ -397,10 +414,14 @@ export async function PATCH(
         await createNotification({
           userId: rid,
           type: "APPROVED",
-          title: `Đã duyệt Final: ${existing.code}`,
-          message: `Leader đã duyệt Final "${existing.title}" (${existing.project.name}). Sẵn sàng lên lịch đăng!`,
-          linkUrl: `/projects/${existing.project.slug}`,
+          title: `⭐ Đã duyệt Final: ${existing.code}`,
+          message: `Leader đã duyệt Final "${existing.title}" (${existing.project.name}). Sẵn sàng lên lịch đăng / hoàn tất!`,
+          linkUrl:
+            rid === existing.assigneeId
+              ? `/my-work?taskId=${id}`
+              : `/projects/${existing.project.slug}?taskId=${id}`,
           sendEmailNow: true,
+          actionLabel: "Mở đầu việc đã duyệt",
         });
       }
     } else if (action === "REQUEST_REVISION") {
@@ -440,14 +461,43 @@ export async function PATCH(
         await createNotification({
           userId: rid,
           type: "REVISION_REQUESTED",
-          title: `Cần sửa (${nextRevCount}/${existing.maxRevisions}): ${existing.code}`,
+          title: `🔧 Cần sửa (${nextRevCount}/${existing.maxRevisions}): ${existing.code}`,
           message: `Leader phản hồi "${existing.title}": ${feedbackNote}`,
-          linkUrl: `/projects/${existing.project.slug}`,
+          linkUrl:
+            rid === existing.assigneeId
+              ? `/my-work?taskId=${id}&openChat=1`
+              : `/projects/${existing.project.slug}?taskId=${id}&openChat=1`,
           sendEmailNow: true,
           actionLabel: "Xem feedback & sửa ngay",
         });
       }
     } else if (action === "MARK_PUBLISHED" || action === "MARK_DONE") {
+      const effectiveType =
+        (updateData.taskType as TaskType | undefined) ?? existing.taskType;
+      const effectiveIsMedia =
+        (updateData.isMediaOrder as boolean | undefined) ?? existing.isMediaOrder;
+      const needsApproval = taskRequiresLeaderApproval({
+        taskType: effectiveType,
+        isMediaOrder: effectiveIsMedia,
+      });
+
+      if (
+        user.role !== "LEADER" &&
+        needsApproval &&
+        existing.status !== "APPROVED_FINAL" &&
+        existing.status !== "PUBLISHED"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              action === "MARK_PUBLISHED"
+                ? "Cần được Leader duyệt Final trước khi đánh dấu Đã đăng."
+                : "Bài Content / Ấn phẩm Ảnh & Video cần gửi Leader duyệt trước khi đánh dấu Hoàn tất. Hãy bấm 'Gửi Leader duyệt'.",
+          },
+          { status: 400 }
+        );
+      }
+
       const now = new Date();
       updateData.status = action === "MARK_PUBLISHED" ? "PUBLISHED" : "DONE";
       updateData.completedAt = now;
@@ -463,6 +513,28 @@ export async function PATCH(
         return NextResponse.json(
           { error: "Chỉ Leader mới được đổi sang trạng thái duyệt hoặc trả sửa." },
           { status: 403 }
+        );
+      }
+      const effectiveType =
+        (updateData.taskType as TaskType | undefined) ?? existing.taskType;
+      const effectiveIsMedia =
+        (updateData.isMediaOrder as boolean | undefined) ?? existing.isMediaOrder;
+      if (
+        (nextStatus === "DONE" || nextStatus === "PUBLISHED") &&
+        user.role !== "LEADER" &&
+        taskRequiresLeaderApproval({
+          taskType: effectiveType,
+          isMediaOrder: effectiveIsMedia,
+        }) &&
+        existing.status !== "APPROVED_FINAL" &&
+        existing.status !== "PUBLISHED"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Bài Content / Ấn phẩm Ảnh & Video cần gửi Leader duyệt trước khi chuyển sang Hoàn tất / Đã đăng.",
+          },
+          { status: 400 }
         );
       }
       updateData.status = nextStatus;

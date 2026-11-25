@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
     if (!email || !password) {
       return NextResponse.json(
-        { error: "Vui lòng nhập đầy đủ email và mật khẩu." },
+        { error: "Vui lòng nhập đầy đủ tài khoản và mật khẩu." },
         { status: 400 }
       );
     }

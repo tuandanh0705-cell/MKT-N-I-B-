@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isMediaProductionUser } from "@/lib/constants";
 import {
   buildProjectVisibilityWhere,
   buildTaskVisibilityWhere,
@@ -12,12 +13,16 @@ import { MediaOrdersPageClient } from "@/components/media-orders-page-client";
 export default async function MediaOrdersPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (isMediaProductionUser(user.role, user.departmentScope)) {
+    redirect("/my-work");
+  }
 
   const [tasks, projects, users, capacity] = await Promise.all([
     prisma.task.findMany({
       where: {
         AND: [
           buildTaskVisibilityWhere(user),
+          { dailyKpiKey: null },
           {
             OR: [
               { isMediaOrder: true },

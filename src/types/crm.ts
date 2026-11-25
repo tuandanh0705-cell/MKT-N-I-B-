@@ -76,8 +76,10 @@ export interface AssetLinkItem {
 export interface TaskCommentItem {
   id: string;
   content: string;
+  attachmentUrl?: string | null;
   qcFlagsJson?: unknown;
   createdAt: string | Date;
+  pending?: boolean;
   author: {
     id: string;
     name: string;
@@ -106,6 +108,7 @@ export interface TaskItem {
   maxRevisions: number;
   scheduledPublishAt: string | Date | null;
   dueAt: string | Date | null;
+  plannedDate?: string | null;
   submittedAt: string | Date | null;
   approvedAt: string | Date | null;
   completedAt: string | Date | null;
@@ -152,6 +155,7 @@ export interface TaskItem {
   requester: {
     id: string;
     name: string;
+    role?: UserRole;
     title: string;
     avatarColor: string;
     pirateCharacter?: string | null;
@@ -472,6 +476,7 @@ export interface ChatMessageItem {
   isMine: boolean;
   createdAt: string;
   sender: ChatParticipantUser | null;
+  pending?: boolean;
 }
 
 export interface ChatRoomSummary {

@@ -54,6 +54,7 @@ export interface OutputsSummaryCounts {
 
 interface OutputsFilterBarProps {
   isLeader: boolean;
+  isMediaProduction?: boolean;
   currentUserName: string;
   aiConfig: GeminiConfigInfo;
   projects: SimpleProject[];
@@ -88,6 +89,7 @@ interface OutputsFilterBarProps {
 
 export function OutputsFilterBar({
   isLeader,
+  isMediaProduction = false,
   currentUserName,
   aiConfig,
   projects,
@@ -170,6 +172,11 @@ export function OutputsFilterBar({
               </>
             )}
           </span>
+          {isMediaProduction && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">
+              {summaryCounts.total} task đã làm
+            </span>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -186,7 +193,7 @@ export function OutputsFilterBar({
               <Settings2 className="w-3.5 h-3.5 text-indigo-600" />
               Cài đặt AI &amp; Tiêu chuẩn ({aiConfig.activeStandardsCount ?? 0})
             </button>
-          ) : (
+          ) : !isMediaProduction ? (
             <span
               className={`rounded-xl border px-2.5 py-1.5 text-xs font-bold inline-flex items-center gap-1.5 ${
                 aiConfig.configured
@@ -197,7 +204,7 @@ export function OutputsFilterBar({
               <Bot className="w-3.5 h-3.5" />
               {aiConfig.configured ? "Gemini QC: Sẵn sàng" : "Gemini QC: Chưa bật"}
             </span>
-          )}
+          ) : null}
           <Link
             href="/reports"
             className="rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-800 px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1"
@@ -226,44 +233,47 @@ export function OutputsFilterBar({
         </div>
       </div>
 
-      {/* Row 2: Tab hàng đợi duyệt & trạng thái Output (Cần duyệt ngay đứng đầu) */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 pb-2.5">
-        {readinessTabs.map((tab) => {
-          const active = readinessFilter === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onSelectReadiness(tab.id)}
-              className={`rounded-xl px-3 py-1.5 text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer ${
-                active
-                  ? tab.highlight
-                    ? "bg-rose-600 text-white shadow-xs"
-                    : "bg-[#0B2545] text-amber-300 shadow-xs"
-                  : tab.highlight && (tab.count ?? 0) > 0
-                    ? "bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              <span>{tab.label}</span>
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+      {/* Row 2: Tab hàng đợi duyệt & trạng thái Output (ẩn với Design & Edit — chỉ hiện task đã làm) */}
+      {!isMediaProduction && (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 pb-2.5">
+          {readinessTabs.map((tab) => {
+            const active = readinessFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onSelectReadiness(tab.id)}
+                className={`rounded-xl px-3 py-1.5 text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer ${
                   active
-                    ? "bg-white/20 text-white"
+                    ? tab.highlight
+                      ? "bg-rose-600 text-white shadow-xs"
+                      : "bg-[#0B2545] text-amber-300 shadow-xs"
                     : tab.highlight && (tab.count ?? 0) > 0
-                      ? "bg-rose-600 text-white"
-                      : "bg-white text-slate-700"
+                      ? "bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 }`}
               >
-                {tab.count ?? 0}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+                <span>{tab.label}</span>
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                    active
+                      ? "bg-white/20 text-white"
+                      : tab.highlight && (tab.count ?? 0) > 0
+                        ? "bg-rose-600 text-white"
+                        : "bg-white text-slate-700"
+                  }`}
+                >
+                  {tab.count ?? 0}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Row 3: Dải thống kê mảnh (Compact KPI Strip ~1/2 chiều cao, bấm lọc nhanh) */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      {!isMediaProduction && (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <button
           type="button"
           onClick={() => {
@@ -346,6 +356,7 @@ export function OutputsFilterBar({
           </span>
         </button>
       </div>
+      )}
 
       {/* Row 4: Dải chọn nhân viên gọn nhẹ + Nút Chỉ xem ai đang có bài chờ check */}
       {isLeader && (
@@ -437,8 +448,9 @@ export function OutputsFilterBar({
         </div>
       )}
 
-      {/* Row 5: Category Pills + View Mode + Search & Dropdowns */}
-      <div className="pt-2.5 border-t border-slate-100 space-y-2.5">
+      {/* Row 5: Category Pills + View Mode + Search & Dropdowns (ẩn với Design & Edit) */}
+      {!isMediaProduction && (
+        <div className="pt-2.5 border-t border-slate-100 space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             {(
@@ -465,7 +477,7 @@ export function OutputsFilterBar({
             ))}
           </div>
 
-          <div className="inline-flex rounded-xl bg-slate-100 p-1">
+          <div className="inline-flex flex-wrap rounded-xl bg-slate-100 p-1 gap-0.5">
             <button
               type="button"
               onClick={() => onChangeViewMode("CARDS")}
@@ -553,6 +565,7 @@ export function OutputsFilterBar({
           </select>
         </div>
       </div>
+      )}
     </div>
   );
 }

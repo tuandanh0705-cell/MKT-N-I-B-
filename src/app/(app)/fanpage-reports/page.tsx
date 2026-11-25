@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isMediaProductionUser } from "@/lib/constants";
 import { buildProjectVisibilityWhere } from "@/lib/permissions";
 import { getVnMonthKey, getVnWeekBounds } from "@/lib/dates";
 import { FanpageReportsView } from "@/components/fanpage-reports-view";
@@ -12,6 +13,9 @@ export default async function FanpageReportsPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (isMediaProductionUser(user.role, user.departmentScope)) {
+    redirect("/my-work");
+  }
 
   const { bm } = await searchParams;
   const { weekStartStr, weekEndStr } = getVnWeekBounds();

@@ -16,6 +16,7 @@ import type { AssetKind, UserRole } from "@/generated/prisma/client";
 interface TaskDrawerQcTabProps {
   task: TaskItem;
   currentUserRole: UserRole;
+  linkOnlyOutput?: boolean;
   saving: boolean;
   aiConfig?: GeminiConfigInfo;
   aiResult: GeminiQcCheckResponse | null;
@@ -28,6 +29,7 @@ interface TaskDrawerQcTabProps {
 export function TaskDrawerQcTab({
   task,
   currentUserRole,
+  linkOnlyOutput = false,
   saving,
   aiConfig,
   aiResult,
@@ -76,26 +78,28 @@ export function TaskDrawerQcTab({
 
   return (
     <div className="space-y-4">
-      {/* Gemini AI Check QC */}
-      <GeminiQcPanel
-        currentUserRole={currentUserRole}
-        aiConfig={aiConfig}
-        aiResult={aiResult}
-        aiLoading={aiLoading}
-        aiError={aiError}
-        customFocus={customAiFocus}
-        onChangeCustomFocus={setCustomAiFocus}
-        onRunCheck={() => onRunAiCheck(customAiFocus)}
-        runButtonLabel={aiResult ? "AI Check lại" : "AI Check Output"}
-        onApplySuggestedCaption={(suggested) => {
-          setCaptionDraft(suggested);
-          setEditingCaption(true);
-          showToast("Đã nạp Caption gợi ý vào khung sửa — bấm Lưu Caption để cập nhật!");
-        }}
-      />
+      {!linkOnlyOutput && (
+        <>
+          {/* Gemini AI Check QC */}
+          <GeminiQcPanel
+            currentUserRole={currentUserRole}
+            aiConfig={aiConfig}
+            aiResult={aiResult}
+            aiLoading={aiLoading}
+            aiError={aiError}
+            customFocus={customAiFocus}
+            onChangeCustomFocus={setCustomAiFocus}
+            onRunCheck={() => onRunAiCheck(customAiFocus)}
+            runButtonLabel={aiResult ? "AI Check lại" : "AI Check Output"}
+            onApplySuggestedCaption={(suggested) => {
+              setCaptionDraft(suggested);
+              setEditingCaption(true);
+              showToast("Đã nạp Caption gợi ý vào khung sửa — bấm Lưu Caption để cập nhật!");
+            }}
+          />
 
-      {/* Caption & Facebook Preview */}
-      <div className="rounded-xl border border-slate-200 p-3.5">
+          {/* Caption & Facebook Preview */}
+          <div className="rounded-xl border border-slate-200 p-3.5">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Caption bài đăng
@@ -186,14 +190,18 @@ export function TaskDrawerQcTab({
             )}
           </div>
         )}
-      </div>
+          </div>
+        </>
+      )}
 
       {/* Link Google Drive / Canva / Bài đăng */}
       <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Link2 className="w-4 h-4 text-blue-600" />
           <h3 className="text-sm font-bold text-slate-900">
-            Link File (Google Drive / Canva / Bài đăng)
+            {linkOnlyOutput
+              ? "Link đính kèm Output (Google Drive / Canva / Video...)"
+              : "Link File (Google Drive / Canva / Bài đăng)"}
           </h3>
         </div>
 

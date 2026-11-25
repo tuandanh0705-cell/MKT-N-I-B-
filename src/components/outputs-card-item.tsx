@@ -23,6 +23,11 @@ import { TaskStatusBadge } from "@/components/status-badge";
 import { ASSET_KIND_LABEL } from "@/lib/constants";
 import { formatVnDateTime } from "@/lib/dates";
 import {
+  VIDEO_ORDER_KIND_META,
+  countFilledScriptRows,
+  getItemVideoOrderKind,
+} from "@/lib/media-brief";
+import {
   OUTPUT_CATEGORY_META,
   analyzeTaskOutputs,
   getAssetDomainLabel,
@@ -330,22 +335,46 @@ export function OutputsCardItem({
 
             {a.mediaBriefItems.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {a.mediaBriefItems.slice(0, 3).map((item, idx) => (
-                  <span
-                    key={item.id}
-                    className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700"
-                  >
-                    <strong className="text-amber-900">
-                      {a.category === "VIDEO" ? "Video" : "Ảnh"} {idx + 1}
-                    </strong>
-                    <span>({item.ratio})</span>
-                    {item.content && (
-                      <span className="truncate max-w-[140px] text-slate-500">
-                        — {item.content}
-                      </span>
-                    )}
-                  </span>
-                ))}
+                {a.mediaBriefItems.slice(0, 3).map((item, idx) => {
+                  const vidKind =
+                    a.category === "VIDEO" ? getItemVideoOrderKind(item) : null;
+                  const filledRows =
+                    a.category === "VIDEO" ? countFilledScriptRows(item) : 0;
+                  return (
+                    <span
+                      key={item.id}
+                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold ${
+                        vidKind
+                          ? VIDEO_ORDER_KIND_META[vidKind].badgeClass
+                          : "border-amber-200 bg-white text-slate-700"
+                      }`}
+                    >
+                      <strong className={vidKind ? "" : "text-amber-900"}>
+                        {a.category === "VIDEO" ? "Video" : "Ảnh"} {idx + 1}
+                      </strong>
+                      {vidKind ? (
+                        <span>
+                          {VIDEO_ORDER_KIND_META[vidKind].badgeEmoji}{" "}
+                          {VIDEO_ORDER_KIND_META[vidKind].shortLabel}
+                          {filledRows > 0
+                            ? ` (${filledRows} ${
+                                vidKind === "SHOOT_AND_EDIT" ? "cảnh" : "scene"
+                              })`
+                            : ""}
+                        </span>
+                      ) : (
+                        <>
+                          <span>({item.ratio})</span>
+                          {item.content && (
+                            <span className="truncate max-w-[140px] text-slate-500">
+                              — {item.content}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </span>
+                  );
+                })}
               </div>
             )}
 

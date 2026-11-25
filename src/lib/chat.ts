@@ -158,51 +158,67 @@ export async function joinPinnedChatRooms(userId: string) {
   }
 }
 
-export async function getUserChatRoomsWithMeta(
+async function getUnreadCountMapByRoom(
   userId: string
+): Promise<Map<string, number>> {
+  const rows = await prisma.$queryRaw<Array<{ roomId: string; cnt: bigint }>>`
+    SELECT m."roomId" AS "roomId", COUNT(*)::bigint AS cnt
+    FROM "ChatMessage" m
+    INNER JOIN "ChatParticipant" cp
+      ON cp."roomId" = m."roomId" AND cp."userId" = ${userId}
+    WHERE m."senderId" <> ${userId}
+      AND m."isDeleted" = false
+      AND m."createdAt" > cp."lastReadAt"
+    GROUP BY m."roomId"
+  `;
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    map.set(r.roomId, Number(r.cnt));
+  }
+  return map;
+}
+
+export async function getUserChatRoomsWithMeta(
+  userId: string,
+  options?: { skipEnsure?: boolean }
 ): Promise<ChatRoomSummary[]> {
-  await ensureDefaultChatRooms();
+  if (!options?.skipEnsure) {
+    await ensureDefaultChatRooms();
+  }
 
-  const rooms = await prisma.chatRoom.findMany({
-    where: {
-      participants: { some: { userId } },
-    },
-    orderBy: [{ isPinned: "desc" }, { lastMessageAt: "desc" }],
-    include: {
-      participants: {
-        include: {
-          user: { select: CHAT_USER_SELECT },
-        },
-        orderBy: { joinedAt: "asc" },
-      },
-      messages: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        include: {
-          sender: { select: CHAT_USER_SELECT },
-        },
-      },
-    },
-  });
-
-  const summaries: ChatRoomSummary[] = [];
-
-  for (const r of rooms) {
-    const myParticipant = r.participants.find((p) => p.userId === userId);
-    const lastReadAt = myParticipant?.lastReadAt ?? new Date(0);
-
-    const unreadCount = await prisma.chatMessage.count({
+  const [rooms, unreadMap] = await Promise.all([
+    prisma.chatRoom.findMany({
       where: {
-        roomId: r.id,
-        senderId: { not: userId },
-        isDeleted: false,
-        createdAt: { gt: lastReadAt },
+        participants: { some: { userId } },
       },
-    });
+      orderBy: [{ isPinned: "desc" }, { lastMessageAt: "desc" }],
+      include: {
+        participants: {
+          include: {
+            user: { select: CHAT_USER_SELECT },
+          },
+          orderBy: { joinedAt: "asc" },
+        },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: {
+            sender: { select: CHAT_USER_SELECT },
+          },
+        },
+      },
+    }),
+    getUnreadCountMapByRoom(userId),
+  ]);
 
+  if (rooms.length === 0 && options?.skipEnsure) {
+    await ensureDefaultChatRooms();
+    return getUserChatRoomsWithMeta(userId, { skipEnsure: false });
+  }
+
+  return rooms.map((r) => {
     const lastMsgRaw = r.messages[0] ?? null;
-
-    summaries.push({
+    return {
       id: r.id,
       type: r.type as ChatRoomType,
       name: r.name,
@@ -211,39 +227,26 @@ export async function getUserChatRoomsWithMeta(
       isPinned: r.isPinned,
       createdById: r.createdById,
       lastMessageAt: r.lastMessageAt.toISOString(),
-      unreadCount,
+      unreadCount: unreadMap.get(r.id) ?? 0,
       participants: r.participants.map((p) => ({
         userId: p.userId,
         isAdmin: p.isAdmin,
         user: p.user,
       })),
       lastMessage: lastMsgRaw ? serializeChatMessage(lastMsgRaw, userId) : null,
-    });
-  }
-
-  return summaries;
+    };
+  });
 }
 
 export async function getChatUnreadCountForUser(userId: string): Promise<number> {
-  const memberships = await prisma.chatParticipant.findMany({
-    where: { userId },
-    select: { roomId: true, lastReadAt: true },
-  });
-
-  if (memberships.length === 0) return 0;
-
-  let total = 0;
-  for (const m of memberships) {
-    const count = await prisma.chatMessage.count({
-      where: {
-        roomId: m.roomId,
-        senderId: { not: userId },
-        isDeleted: false,
-        createdAt: { gt: m.lastReadAt },
-      },
-    });
-    total += count;
-  }
-
-  return total;
+  const rows = await prisma.$queryRaw<Array<{ total: bigint }>>`
+    SELECT COUNT(*)::bigint AS total
+    FROM "ChatMessage" m
+    INNER JOIN "ChatParticipant" cp
+      ON cp."roomId" = m."roomId" AND cp."userId" = ${userId}
+    WHERE m."senderId" <> ${userId}
+      AND m."isDeleted" = false
+      AND m."createdAt" > cp."lastReadAt"
+  `;
+  return Number(rows[0]?.total ?? 0);
 }

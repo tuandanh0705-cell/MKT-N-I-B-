@@ -9,6 +9,7 @@ import {
 } from "@/components/ai-and-standards-modal";
 import { OutputInspectorModal } from "@/components/output-inspector-modal";
 import { OutputsCardItem } from "@/components/outputs-card-item";
+import { OutputsCompactCard } from "@/components/outputs-compact-card";
 import {
   OutputsFilterBar,
   type MemberStatSummary,
@@ -18,10 +19,14 @@ import {
 import { OutputsTableView } from "@/components/outputs-table-view";
 import { PirateAvatar } from "@/components/pirate-art";
 import { TaskStatusBadge } from "@/components/status-badge";
-import { TaskDrawer } from "@/components/task-drawer";
+import { TaskDrawer, type DrawerTab } from "@/components/task-drawer";
 import { useToast } from "@/components/toast-provider";
 import { useGeminiQcRunner } from "@/hooks/use-gemini-qc";
-import { ASSET_KIND_LABEL, TASK_STATUS_META } from "@/lib/constants";
+import {
+  ASSET_KIND_LABEL,
+  TASK_STATUS_META,
+  isMediaProductionUser,
+} from "@/lib/constants";
 import { downloadCsv } from "@/lib/csv";
 import {
   formatVnDateTime,
@@ -47,12 +52,14 @@ interface OutputsHubViewProps {
   currentUserId: string;
   currentUserName: string;
   currentUserRole: UserRole;
+  currentUserScope?: string;
   todayDateStr: string;
   initialAiConfig?: GeminiConfigInfo;
   initialMemberId?: string;
   initialCategory?: OutputCategoryFilter;
   initialProjectId?: string;
   initialReadiness?: OutputReadinessFilter;
+  initialTaskId?: string;
 }
 
 function GalleryCoverImage({
@@ -107,6 +114,7 @@ export function OutputsHubView({
   currentUserId,
   currentUserName,
   currentUserRole,
+  currentUserScope,
   todayDateStr,
   initialAiConfig = {
     configured: false,
@@ -118,9 +126,14 @@ export function OutputsHubView({
   initialCategory = "ALL",
   initialProjectId = "ALL",
   initialReadiness,
+  initialTaskId,
 }: OutputsHubViewProps) {
   const { showToast } = useToast();
   const isLeader = currentUserRole === "LEADER";
+  const isMediaProduction = isMediaProductionUser(
+    currentUserRole,
+    currentUserScope
+  );
 
   const [prevInitialTasks, setPrevInitialTasks] =
     useState<TaskItem[]>(initialTasks);
@@ -136,10 +149,10 @@ export function OutputsHubView({
   );
   const [onlyPendingMembers, setOnlyPendingMembers] = useState(false);
   const [categoryFilter, setCategoryFilter] =
-    useState<OutputCategoryFilter>(initialCategory);
+    useState<OutputCategoryFilter>(isMediaProduction ? "ALL" : initialCategory);
   const [readinessFilter, setReadinessFilter] =
     useState<OutputReadinessFilter>(
-      initialReadiness ?? (isLeader ? "NEEDS_REVIEW" : "ALL")
+      isMediaProduction ? "ALL" : (initialReadiness ?? (isLeader ? "NEEDS_REVIEW" : "ALL"))
     );
   const [projectFilter, setProjectFilter] = useState<string>(initialProjectId);
   const [periodFilter, setPeriodFilter] = useState<OutputsPeriodFilter>("ALL");
@@ -152,8 +165,24 @@ export function OutputsHubView({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [quickApprovingId, setQuickApprovingId] = useState<string | null>(null);
 
-  const [inspectTaskId, setInspectTaskId] = useState<string | null>(null);
+  const [prevInitialTaskId, setPrevInitialTaskId] = useState<
+    string | undefined
+  >(initialTaskId);
+  const [inspectTaskId, setInspectTaskId] = useState<string | null>(
+    initialTaskId && initialTasks.some((t) => t.id === initialTaskId)
+      ? initialTaskId
+      : null
+  );
+  if (prevInitialTaskId !== initialTaskId) {
+    setPrevInitialTaskId(initialTaskId);
+    if (initialTaskId && tasks.some((t) => t.id === initialTaskId)) {
+      setInspectTaskId(initialTaskId);
+    }
+  }
   const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
+  const [drawerInitialTab, setDrawerInitialTab] = useState<
+    DrawerTab | undefined
+  >(undefined);
 
   const [aiConfig, setAiConfig] = useState<GeminiConfigInfo>(initialAiConfig);
   const [aiModalTab, setAiModalTab] = useState<AiAndStandardsTab | null>(null);
@@ -553,6 +582,7 @@ export function OutputsHubView({
     <div className="space-y-5">
       <OutputsFilterBar
         isLeader={isLeader}
+        isMediaProduction={isMediaProduction}
         currentUserName={currentUserName}
         aiConfig={aiConfig}
         projects={projects}
@@ -589,31 +619,32 @@ export function OutputsHubView({
           <span className="text-slate-900 font-extrabold">
             {filteredTasks.length}
           </span>{" "}
-          đầu việc Output
+          {isMediaProduction ? "task đã hoàn thành" : "đầu việc Output"}
         </span>
-        {(categoryFilter !== "ALL" ||
-          readinessFilter !== "ALL" ||
-          projectFilter !== "ALL" ||
-          periodFilter !== "ALL" ||
-          searchQuery.trim() !== "" ||
-          onlyPendingMembers ||
-          (isLeader && selectedMemberId !== "ALL")) && (
-          <button
-            type="button"
-            onClick={() => {
-              setCategoryFilter("ALL");
-              setReadinessFilter("ALL");
-              setProjectFilter("ALL");
-              setPeriodFilter("ALL");
-              setSearchQuery("");
-              setOnlyPendingMembers(false);
-              if (isLeader) setSelectedMemberId("ALL");
-            }}
-            className="text-amber-700 hover:underline cursor-pointer"
-          >
-            Xem tất cả ({scopedBaseTasks.length})
-          </button>
-        )}
+        {!isMediaProduction &&
+          (categoryFilter !== "ALL" ||
+            readinessFilter !== "ALL" ||
+            projectFilter !== "ALL" ||
+            periodFilter !== "ALL" ||
+            searchQuery.trim() !== "" ||
+            onlyPendingMembers ||
+            (isLeader && selectedMemberId !== "ALL")) && (
+            <button
+              type="button"
+              onClick={() => {
+                setCategoryFilter("ALL");
+                setReadinessFilter("ALL");
+                setProjectFilter("ALL");
+                setPeriodFilter("ALL");
+                setSearchQuery("");
+                setOnlyPendingMembers(false);
+                if (isLeader) setSelectedMemberId("ALL");
+              }}
+              className="text-amber-700 hover:underline cursor-pointer"
+            >
+              Xem tất cả ({scopedBaseTasks.length})
+            </button>
+          )}
       </div>
 
       {/* Empty State */}
@@ -621,11 +652,17 @@ export function OutputsHubView({
         <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-10 text-center space-y-2.5">
           <FolderCheck className="w-10 h-10 text-slate-300 mx-auto" />
           <div className="text-sm font-bold text-slate-700">
-            {readinessFilter === "NEEDS_REVIEW"
-              ? "Tuyệt vời — Hiện không còn đầu việc nào chờ Leader duyệt!"
-              : "Không tìm thấy đầu việc Output nào khớp bộ lọc hiện tại."}
+            {isMediaProduction
+              ? "Bạn chưa có task nào hoàn thành."
+              : readinessFilter === "NEEDS_REVIEW"
+                ? "Tuyệt vời — Hiện không còn đầu việc nào chờ Leader duyệt!"
+                : "Không tìm thấy đầu việc Output nào khớp bộ lọc hiện tại."}
           </div>
-          {readinessFilter === "NEEDS_REVIEW" ? (
+          {isMediaProduction ? (
+            <p className="text-xs text-slate-500">
+              Khi các đơn order bạn thực hiện được duyệt hoặc đánh dấu hoàn tất, thành phẩm sẽ hiển thị tại đây.
+            </p>
+          ) : readinessFilter === "NEEDS_REVIEW" ? (
             <button
               type="button"
               onClick={() => setReadinessFilter("ALL")}
@@ -638,6 +675,23 @@ export function OutputsHubView({
               Hãy đổi bộ lọc loại Output, nhân viên hoặc chuyển chế độ xem sang Thẻ Chi Tiết.
             </p>
           )}
+        </div>
+      ) : isMediaProduction ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {filteredTasks.map((t) => (
+            <OutputsCompactCard
+              key={t.id}
+              task={t}
+              onInspect={() => {
+                setDrawerInitialTab("OUTPUT_QC");
+                setDrawerTaskId(t.id);
+              }}
+              onOpenDrawer={() => {
+                setDrawerInitialTab("OVERVIEW");
+                setDrawerTaskId(t.id);
+              }}
+            />
+          ))}
         </div>
       ) : viewMode === "CARDS" ? (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -777,7 +831,9 @@ export function OutputsHubView({
       <OutputInspectorModal
         task={inspectingTask}
         open={Boolean(inspectingTask)}
+        currentUserId={currentUserId}
         currentUserRole={currentUserRole}
+        users={users}
         aiConfig={aiConfig}
         aiResult={inspectingTask ? getAiResultForTask(inspectingTask) : null}
         aiLoading={Boolean(
@@ -819,7 +875,13 @@ export function OutputsHubView({
       <TaskDrawer
         taskId={drawerTaskId}
         currentUserRole={currentUserRole}
-        onClose={() => setDrawerTaskId(null)}
+        currentUserScope={currentUserScope}
+        centeredModal={isMediaProduction}
+        initialTab={drawerInitialTab}
+        onClose={() => {
+          setDrawerTaskId(null);
+          setDrawerInitialTab(undefined);
+        }}
         onUpdated={handleTaskUpdated}
         onDeleted={handleTaskDeleted}
         onDuplicated={(dup) => setTasks((prev) => [dup, ...prev])}

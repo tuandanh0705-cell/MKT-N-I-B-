@@ -319,6 +319,7 @@ model Task {
   maxRevisions         Int          @default(3)
   scheduledPublishAt   DateTime?
   dueAt                DateTime?
+  plannedDate          String?
   submittedAt          DateTime?
   approvedAt           DateTime?
   completedAt          DateTime?
@@ -372,6 +373,7 @@ model Task {
   @@index([projectId, status])
   @@index([deletedAt, projectId, status])
   @@index([assigneeId, dueAt])
+  @@index([assigneeId, plannedDate])
   @@index([status, dueAt])
 }
 
@@ -392,12 +394,13 @@ model AssetLink {
 }
 
 model TaskComment {
-  id          String   @id @default(cuid())
-  taskId      String
-  authorId    String
-  content     String
-  qcFlagsJson Json?
-  createdAt   DateTime @default(now())
+  id            String   @id @default(cuid())
+  taskId        String
+  authorId      String
+  content       String
+  attachmentUrl String?  @db.Text
+  qcFlagsJson   Json?
+  createdAt     DateTime @default(now())
 
   task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   author User @relation(fields: [authorId], references: [id], onDelete: Cascade)

@@ -23,6 +23,7 @@ export interface DailyKpiProgressRow {
   target: number;
   projectId?: string | null;
   plannedQty: number;
+  submittedQty: number;
   doneQty: number;
   remainingToPlan: number;
   remainingToDone: number;
@@ -34,6 +35,7 @@ export interface DailyKpiSummaryResult {
   breakdown: DailyKpiProgressRow[];
   totalTarget: number;
   totalPlanned: number;
+  totalSubmitted: number;
   totalDone: number;
   donePercent: number;
   plannedPercent: number;
@@ -268,10 +270,13 @@ function getTaskContributionCounts(task: {
   quantity?: number | null;
   status: string;
   subtasksJson?: unknown;
-}): { planned: number; done: number } {
+}): { planned: number; submitted: number; done: number } {
   const qty = Math.max(1, Number(task.quantity || 1));
   if (COMPLETED_DAILY_STATUSES.has(task.status)) {
-    return { planned: qty, done: qty };
+    return { planned: qty, submitted: 0, done: qty };
+  }
+  if (task.status === "WAITING_APPROVAL") {
+    return { planned: qty, submitted: qty, done: 0 };
   }
   const subtasks = normalizeSubtasks(task.subtasksJson);
   if (subtasks.length > 0 && qty > 1) {
@@ -280,9 +285,9 @@ function getTaskContributionCounts(task: {
       qty,
       Math.round((doneSubCount / subtasks.length) * qty)
     );
-    return { planned: qty, done: partialDone };
+    return { planned: qty, submitted: 0, done: partialDone };
   }
-  return { planned: qty, done: 0 };
+  return { planned: qty, submitted: 0, done: 0 };
 }
 
 export function computeDailyKpiProgress(
@@ -296,9 +301,12 @@ export function computeDailyKpiProgress(
     subtasksJson?: unknown;
   }>
 ): DailyKpiSummaryResult {
-  const tally = new Map<string, { planned: number; done: number }>();
+  const tally = new Map<
+    string,
+    { planned: number; submitted: number; done: number }
+  >();
   for (const item of targets) {
-    tally.set(item.id, { planned: 0, done: 0 });
+    tally.set(item.id, { planned: 0, submitted: 0, done: 0 });
   }
 
   let extraTasksCount = 0;
@@ -309,6 +317,7 @@ export function computeDailyKpiProgress(
     if (taggedItemId && tally.has(taggedItemId)) {
       const slot = tally.get(taggedItemId)!;
       slot.planned += counts.planned;
+      slot.submitted += counts.submitted;
       slot.done += counts.done;
       continue;
     }
@@ -322,6 +331,7 @@ export function computeDailyKpiProgress(
     if (sameTitleItem) {
       const slot = tally.get(sameTitleItem.id)!;
       slot.planned += counts.planned;
+      slot.submitted += counts.submitted;
       slot.done += counts.done;
       continue;
     }
@@ -337,6 +347,7 @@ export function computeDailyKpiProgress(
         }) ?? sameTypeCandidates[0];
       const slot = tally.get(unfilled.id)!;
       slot.planned += counts.planned;
+      slot.submitted += counts.submitted;
       slot.done += counts.done;
       continue;
     }
@@ -346,6 +357,7 @@ export function computeDailyKpiProgress(
 
   let totalTarget = 0;
   let totalPlanned = 0;
+  let totalSubmitted = 0;
   let totalDone = 0;
 
   const breakdown: DailyKpiProgressRow[] = targets.map((item) => {
@@ -353,10 +365,14 @@ export function computeDailyKpiProgress(
       label: "Công việc khác",
       unit: "việc",
     };
-    const counts = tally.get(item.id) ?? { planned: 0, done: 0 };
+    const counts = tally.get(item.id) ?? { planned: 0, submitted: 0, done: 0 };
     totalTarget += item.target;
     totalPlanned += Math.min(item.target, counts.planned);
     totalDone += Math.min(item.target, counts.done);
+    totalSubmitted += Math.min(
+      Math.max(0, item.target - counts.done),
+      counts.submitted
+    );
 
     return {
       id: item.id,
@@ -366,6 +382,7 @@ export function computeDailyKpiProgress(
       target: item.target,
       projectId: item.projectId ?? null,
       plannedQty: counts.planned,
+      submittedQty: counts.submitted,
       doneQty: counts.done,
       remainingToPlan: Math.max(0, item.target - counts.planned),
       remainingToDone: Math.max(0, item.target - counts.done),
@@ -385,6 +402,7 @@ export function computeDailyKpiProgress(
     breakdown,
     totalTarget,
     totalPlanned,
+    totalSubmitted,
     totalDone,
     donePercent,
     plannedPercent,

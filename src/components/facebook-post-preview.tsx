@@ -3,53 +3,53 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import {
-  Globe,
-  ThumbsUp,
-  MessageCircle,
-  Share2,
-  Smartphone,
-  Monitor,
-  CheckCircle2,
   AlertCircle,
-  MoreHorizontal,
-  Link2,
+  CheckCircle2,
   ImagePlus,
+  Link2,
+  Monitor,
+  Smartphone,
   X,
 } from "lucide-react";
-import { FB_POST_LAYOUTS } from "@/lib/constants";
+import {
+  FacebookMockupCard,
+  InstagramMockupCard,
+  ThreadsMockupCard,
+  TikTokMockupCard,
+  normalizePlatformToMockup,
+  resolvePreviewImages,
+  type InstagramVariant,
+  type SocialMockupData,
+  type SocialMockupPlatform,
+} from "@/components/social-mockup-cards";
+import { FB_POST_LAYOUTS, FB_POST_LAYOUT_GROUPS } from "@/lib/constants";
 
 interface FacebookPostPreviewProps {
   pageName: string;
   pageColor?: string;
   caption: string;
+  platform?: string;
+  postFormat?: string | null;
+  description?: string | null;
   layout?: string;
   onChangeLayout?: (nextLayout: string) => void;
+  hideLayoutSelector?: boolean;
   onDemoImagesChange?: (urls: string[]) => void;
   mediaUrl?: string | null;
   mediaUrls?: string[];
   title?: string;
 }
 
-function renderFormattedCaption(text: string) {
-  const parts = text.split(/(#[\w\u00C0-\u024F_]+|https?:\/\/\S+)/gi);
-  return parts.map((part, idx) => {
-    if (part.startsWith("#") || /^https?:\/\//i.test(part)) {
-      return (
-        <span key={idx} className="text-[#1877F2] font-medium">
-          {part}
-        </span>
-      );
-    }
-    return <span key={idx}>{part}</span>;
-  });
-}
-
-function looksLikeRenderableImage(url: string): boolean {
-  if (/^data:image\//i.test(url) || /^blob:/i.test(url)) return true;
-  if (/\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(url)) return true;
-  if (/drive\.google\.com\/uc\?/i.test(url)) return true;
-  return false;
-}
+const PREVIEW_PLATFORMS: Array<{
+  id: SocialMockupPlatform;
+  label: string;
+  icon: string;
+}> = [
+  { id: "FACEBOOK", label: "Facebook", icon: "f" },
+  { id: "INSTAGRAM", label: "Instagram", icon: "◎" },
+  { id: "TIKTOK", label: "TikTok", icon: "♪" },
+  { id: "THREADS", label: "Threads", icon: "@" },
+];
 
 function fileToSmallDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -60,7 +60,10 @@ function fileToSmallDataUrl(file: File): Promise<string> {
       img.onerror = () => reject(new Error("invalid image"));
       img.onload = () => {
         const maxDim = 960;
-        const scale = Math.min(1, maxDim / Math.max(img.width || 1, img.height || 1));
+        const scale = Math.min(
+          1,
+          maxDim / Math.max(img.width || 1, img.height || 1)
+        );
         const w = Math.max(1, Math.round(img.width * scale));
         const h = Math.max(1, Math.round(img.height * scale));
         const canvas = document.createElement("canvas");
@@ -80,86 +83,45 @@ function fileToSmallDataUrl(file: File): Promise<string> {
   });
 }
 
-function PreviewMediaTile({
-  src,
-  fallbackEmoji,
-  fallbackTitle,
-  fallbackSub,
-  className,
-  dark = false,
-  overlayCount = 0,
-}: {
-  src?: string | null;
-  fallbackEmoji: string;
-  fallbackTitle: string;
-  fallbackSub?: string;
-  className: string;
-  dark?: boolean;
-  overlayCount?: number;
-}) {
-  const [failed, setFailed] = useState(false);
-  const canRenderImg = Boolean(src && looksLikeRenderableImage(src) && !failed);
-
-  return (
-    <div
-      className={`relative overflow-hidden flex flex-col items-center justify-center text-center ${className}`}
-    >
-      {canRenderImg && src ? (
-        <Image
-          src={src}
-          alt={fallbackTitle}
-          fill
-          unoptimized
-          onError={() => setFailed(true)}
-          className="object-cover"
-        />
-      ) : (
-        <div className="p-3 flex flex-col items-center justify-center">
-          <span className="text-xl mb-1">{fallbackEmoji}</span>
-          <div
-            className={`text-xs font-bold ${
-              dark ? "text-white" : "text-slate-700"
-            }`}
-          >
-            {fallbackTitle}
-          </div>
-          {fallbackSub && (
-            <div
-              className={`text-[11px] line-clamp-1 mt-0.5 ${
-                dark ? "text-slate-300" : "text-slate-500"
-              }`}
-            >
-              {fallbackSub}
-            </div>
-          )}
-        </div>
-      )}
-
-      {overlayCount > 0 && (
-        <div className="absolute inset-0 bg-slate-950/60 flex items-center justify-center text-white text-xl font-black">
-          +{overlayCount}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function FacebookPostPreview({
   pageName,
-  pageColor = "#1877F2",
+  pageColor = "#3D2B1F",
   caption,
+  platform,
+  postFormat,
+  description,
   layout = "SINGLE_SQUARE",
   onChangeLayout,
+  hideLayoutSelector = false,
   onDemoImagesChange,
   mediaUrl,
   mediaUrls,
   title,
 }: FacebookPostPreviewProps) {
+  const [selectedPlatform, setSelectedPlatform] =
+    useState<SocialMockupPlatform>(() => normalizePlatformToMockup(platform));
+  const [igVariant, setIgVariant] = useState<InstagramVariant>(() =>
+    layout === "REELS_VERTICAL" ||
+    (postFormat || "").toLowerCase().includes("video") ||
+    (postFormat || "").toLowerCase().includes("reel")
+      ? "REELS"
+      : "FEED"
+  );
   const [device, setDevice] = useState<"MOBILE" | "DESKTOP">("MOBILE");
-  const [expanded, setExpanded] = useState(false);
+  const [internalLayout, setInternalLayout] = useState<string>(layout);
   const [demoImages, setDemoImages] = useState<string[]>([]);
   const [extraUrlInput, setExtraUrlInput] = useState("");
   const [showUrlAdd, setShowUrlAdd] = useState(false);
+
+  const effectiveLayout = onChangeLayout ? layout : internalLayout;
+
+  function handleChangeLayout(next: string) {
+    if (onChangeLayout) {
+      onChangeLayout(next);
+    } else {
+      setInternalLayout(next);
+    }
+  }
 
   const attachedUrls = useMemo(() => {
     const list: string[] = [];
@@ -171,13 +133,8 @@ export function FacebookPostPreview({
   }, [mediaUrl, mediaUrls]);
 
   const previewMedia = useMemo(() => {
-    const combined = [...demoImages];
-    for (const u of attachedUrls) {
-      if (looksLikeRenderableImage(u) && !combined.includes(u)) {
-        combined.push(u);
-      }
-    }
-    return combined;
+    const resolved = resolvePreviewImages([...demoImages, ...attachedUrls]);
+    return resolved;
   }, [demoImages, attachedUrls]);
 
   async function handleSelectDemoFiles(files: FileList | null) {
@@ -192,15 +149,22 @@ export function FacebookPostPreview({
       }
     }
     if (loaded.length > 0) {
+      const nextCount = demoImages.length + loaded.length;
       setDemoImages((prev) => {
         const next = [...prev, ...loaded];
         onDemoImagesChange?.(next);
         return next;
       });
-      if (loaded.length >= 4 && layout === "SINGLE_SQUARE" && onChangeLayout) {
-        onChangeLayout("ALBUM_4");
-      } else if (loaded.length === 2 && layout === "SINGLE_SQUARE" && onChangeLayout) {
-        onChangeLayout("ALBUM_2");
+      if (effectiveLayout === "SINGLE_SQUARE") {
+        if (nextCount >= 5) {
+          handleChangeLayout("ALBUM_5_HORIZONTAL");
+        } else if (nextCount === 4) {
+          handleChangeLayout("ALBUM_4");
+        } else if (nextCount === 3) {
+          handleChangeLayout("ALBUM_3_HORIZONTAL");
+        } else if (nextCount === 2) {
+          handleChangeLayout("ALBUM_2");
+        }
       }
     }
   }
@@ -218,54 +182,72 @@ export function FacebookPostPreview({
   }
 
   const safeCaption = caption.trim();
-  const foldLimit = device === "MOBILE" ? 135 : 260;
   const lines = safeCaption.split("\n");
-  const needsTruncate =
-    safeCaption.length > foldLimit || lines.length > (device === "MOBILE" ? 3 : 5);
-
-  let visibleCaption = safeCaption;
-  if (!expanded && needsTruncate) {
-    const byLines = lines.slice(0, device === "MOBILE" ? 3 : 5).join("\n");
-    visibleCaption =
-      byLines.length > foldLimit ? byLines.slice(0, foldLimit) : byLines;
-  }
-
   const firstHook = lines[0]?.trim() || "";
   const hasHashtag = /#[\w\u00C0-\u024F_]+/i.test(safeCaption);
   const hasCtaOrLink =
     /inbox|comment|bình luận|nhắn tin|link|đăng ký|mua|http/i.test(safeCaption);
 
-  const layoutMeta =
-    FB_POST_LAYOUTS[layout] || FB_POST_LAYOUTS.SINGLE_SQUARE;
+  const mockupData: SocialMockupData = {
+    pageName: pageName || "Meta Ecom",
+    pageColor,
+    title,
+    caption: safeCaption,
+    description,
+    layout: effectiveLayout,
+    respectExplicitLayout: true,
+    postFormat,
+    timeLabel: "Vừa xong",
+    mediaUrls: previewMedia,
+    isVideo:
+      effectiveLayout === "REELS_VERTICAL" ||
+      (postFormat || "").toLowerCase().includes("video") ||
+      (postFormat || "").toLowerCase().includes("reel"),
+    seedKey: `${pageName}-${title || "draft"}`,
+  };
+
+  const isVerticalMockup =
+    selectedPlatform === "TIKTOK" ||
+    (selectedPlatform === "INSTAGRAM" &&
+      (igVariant === "REELS" || igVariant === "STORY"));
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-100/80 p-3.5 space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#1877F2] text-white text-xs font-black">
-            f
-          </span>
-          <div>
-            <div className="text-xs font-bold text-slate-900">
-              Xem trước Bố cục Bài đăng Facebook
-            </div>
-            <div className="text-[11px] text-slate-500">
-              {layoutMeta.label} • {layoutMeta.ratioHint}
-            </div>
-          </div>
-        </div>
+    <div className="rounded-2xl border border-[#E6DDD2] bg-[#FAF6F1] p-3.5 space-y-3">
+      {/* Thanh chuyển 4 nền tảng chuẩn editorial */}
+      <div className="grid grid-cols-4 gap-1 rounded-xl bg-[#EFE8DF] p-1 border border-[#E6DDD2]">
+        {PREVIEW_PLATFORMS.map((pt) => {
+          const active = selectedPlatform === pt.id;
+          return (
+            <button
+              key={pt.id}
+              type="button"
+              onClick={() => setSelectedPlatform(pt.id)}
+              className={`rounded-lg py-1.5 px-2 text-[11px] font-bold inline-flex items-center justify-center gap-1 transition cursor-pointer ${
+                active
+                  ? "bg-white text-[#1E1611] shadow-xs"
+                  : "text-[#6D5A4B] hover:text-[#1E1611]"
+              }`}
+            >
+              <span className="font-black opacity-85">{pt.icon}</span>
+              <span className="truncate">{pt.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
+      {/* Thanh công cụ ảnh demo + tùy chọn kiểu hiển thị */}
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          <label className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-white hover:bg-blue-50 px-2 py-1 text-[11px] font-bold text-[#1877F2] cursor-pointer">
+          <label className="inline-flex items-center gap-1 rounded-lg border border-[#DECBB8] bg-white hover:bg-[#F5ECE2] px-2 py-1 text-[11px] font-bold text-[#8A4624] cursor-pointer">
             <ImagePlus className="w-3.5 h-3.5" />
-            Chọn ảnh demo ({previewMedia.length})
+            Ảnh demo ({previewMedia.length})
             <input
               type="file"
               multiple
               accept="image/*"
               className="hidden"
               onChange={(e) => {
-                handleSelectDemoFiles(e.target.files);
+                void handleSelectDemoFiles(e.target.files);
                 e.target.value = "";
               }}
             />
@@ -274,33 +256,67 @@ export function FacebookPostPreview({
           <button
             type="button"
             onClick={() => setShowUrlAdd((v) => !v)}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 cursor-pointer"
+            className="inline-flex items-center gap-1 rounded-lg border border-[#E4D8CA] bg-white hover:bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 cursor-pointer"
           >
             <Link2 className="w-3 h-3" />
             + URL ảnh
           </button>
 
-          {onChangeLayout && (
+          {selectedPlatform === "FACEBOOK" && !hideLayoutSelector && (
             <select
-              value={layout}
-              onChange={(e) => onChangeLayout(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700"
+              value={effectiveLayout}
+              onChange={(e) => handleChangeLayout(e.target.value)}
+              className="rounded-lg border border-[#E4D8CA] bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 max-w-[235px]"
+              title="Chọn bố cục & kích thước ảnh chuẩn Facebook"
             >
-              {Object.entries(FB_POST_LAYOUTS).map(([k, info]) => (
-                <option key={k} value={k}>
-                  {info.label}
-                </option>
+              {FB_POST_LAYOUT_GROUPS.map((grp) => (
+                <optgroup key={grp} label={grp}>
+                  {Object.entries(FB_POST_LAYOUTS)
+                    .filter(([, info]) => info.group === grp)
+                    .map(([k, info]) => (
+                      <option key={k} value={k}>
+                        {info.label}
+                      </option>
+                    ))}
+                </optgroup>
               ))}
             </select>
           )}
 
-          <div className="inline-flex rounded-lg bg-white border border-slate-200 p-0.5">
+          {selectedPlatform === "INSTAGRAM" && (
+            <div className="inline-flex rounded-lg bg-white border border-[#E4D8CA] p-0.5 text-[11px] font-bold">
+              {(
+                [
+                  ["FEED", "Feed"],
+                  ["REELS", "Reels"],
+                  ["STORY", "Story"],
+                ] as const
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setIgVariant(v)}
+                  className={`px-2 py-0.5 rounded cursor-pointer transition ${
+                    igVariant === v
+                      ? "bg-[#1E1611] text-[#FAF6F1]"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!isVerticalMockup && (
+          <div className="inline-flex rounded-lg bg-white border border-[#E4D8CA] p-0.5">
             <button
               type="button"
               onClick={() => setDevice("MOBILE")}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold cursor-pointer ${
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold cursor-pointer ${
                 device === "MOBILE"
-                  ? "bg-[#1877F2] text-white"
+                  ? "bg-[#1E1611] text-white"
                   : "text-slate-600"
               }`}
             >
@@ -310,9 +326,9 @@ export function FacebookPostPreview({
             <button
               type="button"
               onClick={() => setDevice("DESKTOP")}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold cursor-pointer ${
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold cursor-pointer ${
                 device === "DESKTOP"
-                  ? "bg-[#1877F2] text-white"
+                  ? "bg-[#1E1611] text-white"
                   : "text-slate-600"
               }`}
             >
@@ -320,7 +336,7 @@ export function FacebookPostPreview({
               PC
             </button>
           </div>
-        </div>
+        )}
       </div>
 
       {showUrlAdd && (
@@ -329,13 +345,13 @@ export function FacebookPostPreview({
             type="url"
             value={extraUrlInput}
             onChange={(e) => setExtraUrlInput(e.target.value)}
-            placeholder="Dán link ảnh trực tiếp (.png, .jpg, .webp) để xem thử vào khung..."
-            className="flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs"
+            placeholder="Dán link ảnh (.png, .jpg, .webp hoặc Google Drive) để xem thử..."
+            className="flex-1 rounded-lg border border-[#DECBB8] bg-white px-2.5 py-1.5 text-xs"
           />
           <button
             type="button"
             onClick={handleAddImageUrl}
-            className="rounded-lg bg-[#1877F2] text-white px-3 py-1.5 text-xs font-bold cursor-pointer"
+            className="rounded-lg bg-[#A65D37] hover:bg-[#8E4D2B] text-white px-3 py-1.5 text-xs font-bold cursor-pointer"
           >
             Thêm
           </button>
@@ -349,10 +365,10 @@ export function FacebookPostPreview({
               <Image
                 src={imgSrc}
                 alt={`Demo ${i + 1}`}
-                width={48}
-                height={48}
+                width={44}
+                height={44}
                 unoptimized
-                className="w-11 h-11 rounded-lg object-cover border border-slate-300"
+                className="w-11 h-11 rounded-lg object-cover border border-[#DECBB8]"
               />
               <button
                 type="button"
@@ -373,193 +389,47 @@ export function FacebookPostPreview({
         </div>
       )}
 
-      {/* Card Facebook Simulator */}
+      {/* Khung Demo Bài Đăng Đa Nền Tảng */}
       <div
-        className={`mx-auto bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all ${
-          device === "MOBILE" ? "max-w-[340px]" : "max-w-[500px]"
+        className={`mx-auto transition-all ${
+          isVerticalMockup
+            ? "max-w-[290px]"
+            : device === "MOBILE"
+              ? "max-w-[350px]"
+              : "max-w-[500px]"
         }`}
       >
-        <div className="px-3.5 pt-3 pb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-extrabold shrink-0"
-              style={{ backgroundColor: pageColor }}
-            >
-              {pageName.slice(0, 2).toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <div className="text-[13px] font-bold text-slate-900 truncate">
-                {pageName}
-              </div>
-              <div className="flex items-center gap-1 text-[11px] text-slate-500">
-                <span>Vừa xong</span>
-                <span>•</span>
-                <Globe className="w-3 h-3" />
-              </div>
-            </div>
-          </div>
-          <MoreHorizontal className="w-4 h-4 text-slate-400" />
-        </div>
-
-        <div className="px-3.5 pb-2.5 text-[13px] text-slate-900 whitespace-pre-wrap leading-relaxed break-words">
-          {safeCaption ? (
-            <>
-              {renderFormattedCaption(visibleCaption)}
-              {needsTruncate && !expanded && (
-                <>
-                  <span>... </span>
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(true)}
-                    className="text-slate-500 font-semibold hover:underline cursor-pointer"
-                  >
-                    Xem thêm
-                  </button>
-                </>
-              )}
-              {needsTruncate && expanded && (
-                <button
-                  type="button"
-                  onClick={() => setExpanded(false)}
-                  className="block mt-1 text-xs text-slate-500 font-semibold hover:underline cursor-pointer"
-                >
-                  Thu gọn
-                </button>
-              )}
-            </>
-          ) : (
-            <span className="text-slate-400 italic">
-              (Chưa nhập caption — nhập caption ở trên để xem điểm cắt &ldquo;Xem thêm...&rdquo;)
-            </span>
-          )}
-        </div>
-
-        {/* Media Visual Layout */}
-        {layout === "SINGLE_SQUARE" && (
-          <PreviewMediaTile
-            src={previewMedia[0]}
-            fallbackEmoji="🖼️"
-            fallbackTitle="Khung 1 Ảnh Vuông (1:1 • 1080×1080)"
-            fallbackSub={title || "Ảnh sản phẩm / Infographic"}
-            className="aspect-square bg-gradient-to-br from-sky-50 via-blue-50 to-amber-50 border-y border-slate-100"
+        {selectedPlatform === "FACEBOOK" && (
+          <FacebookMockupCard
+            data={mockupData}
+            compactCaption={device === "MOBILE"}
           />
         )}
-
-        {layout === "SINGLE_PORTRAIT" && (
-          <PreviewMediaTile
-            src={previewMedia[0]}
-            fallbackEmoji="📱"
-            fallbackTitle="Khung 1 Ảnh Dọc (4:5 • 1080×1350)"
-            fallbackSub={layoutMeta.aspectDesc}
-            className="aspect-[4/5] bg-gradient-to-br from-violet-50 via-pink-50 to-amber-50 border-y border-slate-100"
-          />
+        {selectedPlatform === "INSTAGRAM" && (
+          <InstagramMockupCard data={mockupData} variant={igVariant} />
         )}
-
-        {layout === "REELS_VERTICAL" && (
-          <div className="relative">
-            <PreviewMediaTile
-              src={previewMedia[0]}
-              fallbackEmoji="🎬"
-              fallbackTitle="Video / Reels Dọc (9:16)"
-              fallbackSub="Chừa vùng an toàn dưới cùng 25% cho caption & nút Reels"
-              className="aspect-[9/16] max-h-[340px] w-full bg-slate-900 border-y border-slate-100"
-              dark
-            />
-            {previewMedia[0] && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-black/75 to-transparent flex items-end p-3 text-[10px] text-white/90">
-                Vùng an toàn nút & caption Reels (25% dưới)
-              </div>
-            )}
-          </div>
+        {selectedPlatform === "TIKTOK" && <TikTokMockupCard data={mockupData} />}
+        {selectedPlatform === "THREADS" && (
+          <ThreadsMockupCard data={mockupData} />
         )}
-
-        {layout === "ALBUM_2" && (
-          <div className="grid grid-cols-2 gap-1 bg-white border-y border-slate-100">
-            {[0, 1].map((idx) => (
-              <PreviewMediaTile
-                key={idx}
-                src={previewMedia[idx]}
-                fallbackEmoji="🖼️"
-                fallbackTitle={`Ảnh #${idx + 1}`}
-                className="aspect-square bg-gradient-to-br from-sky-50 to-indigo-50"
-              />
-            ))}
-          </div>
-        )}
-
-        {layout === "ALBUM_4" && (
-          <div className="grid grid-cols-3 gap-1 bg-white border-y border-slate-100">
-            <PreviewMediaTile
-              src={previewMedia[0]}
-              fallbackEmoji="📸"
-              fallbackTitle="Ảnh Chính (Banner đầu Album)"
-              className="col-span-3 aspect-[16/9] bg-gradient-to-br from-amber-50 to-sky-50"
-            />
-            {[1, 2, 3].map((idx) => (
-              <PreviewMediaTile
-                key={idx}
-                src={previewMedia[idx]}
-                fallbackEmoji="🖼️"
-                fallbackTitle={`Ảnh #${idx + 1}`}
-                className="aspect-square bg-slate-100"
-                overlayCount={
-                  idx === 3 && previewMedia.length > 4
-                    ? previewMedia.length - 4
-                    : 0
-                }
-              />
-            ))}
-          </div>
-        )}
-
-        {layout === "LINK_PREVIEW" && (
-          <div className="border-y border-slate-200 bg-slate-50">
-            <PreviewMediaTile
-              src={previewMedia[0]}
-              fallbackEmoji="🔗"
-              fallbackTitle="Ảnh Link Thumbnail (1200×628)"
-              className="aspect-[1.91/1] bg-gradient-to-r from-blue-50 to-emerald-50"
-            />
-            <div className="px-3.5 py-2 border-t border-slate-200 bg-slate-100">
-              <div className="text-[10px] uppercase text-slate-500">
-                METAECOM.VN
-              </div>
-              <div className="text-xs font-bold text-slate-900 line-clamp-1">
-                {title || "Tiêu đề đường dẫn bài viết"}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {attachedUrls.length > 0 && (
-          <div className="px-3.5 py-1.5 bg-blue-50/70 border-b border-blue-100 text-[11px] text-blue-700 truncate">
-            📎 {attachedUrls.length} file đính kèm:{" "}
-            <a
-              href={attachedUrls[0]}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline font-semibold"
-            >
-              {attachedUrls[0]}
-            </a>
-          </div>
-        )}
-
-        <div className="px-3.5 py-2 flex items-center justify-around text-xs font-semibold text-slate-500">
-          <span className="inline-flex items-center gap-1.5">
-            <ThumbsUp className="w-3.5 h-3.5" /> Thích
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <MessageCircle className="w-3.5 h-3.5" /> Bình luận
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Share2 className="w-3.5 h-3.5" /> Chia sẻ
-          </span>
-        </div>
       </div>
 
+      {attachedUrls.length > 0 && (
+        <div className="rounded-xl px-3 py-1.5 bg-white/80 border border-[#E6DDD2] text-[11px] text-[#7D563A] truncate">
+          📎 {attachedUrls.length} file đính kèm:{" "}
+          <a
+            href={attachedUrls[0]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline font-semibold"
+          >
+            {attachedUrls[0]}
+          </a>
+        </div>
+      )}
+
       {/* Checklist tối ưu bài đăng */}
-      <div className="flex flex-wrap gap-2 text-[11px]">
+      <div className="flex flex-wrap gap-1.5 text-[11px]">
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-semibold border ${
             firstHook.length >= 10 && firstHook.length <= 125
@@ -580,7 +450,7 @@ export function FacebookPostPreview({
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-semibold border ${
             hasCtaOrLink
               ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-              : "bg-slate-100 text-slate-600 border-slate-200"
+              : "bg-white text-slate-600 border-slate-200"
           }`}
         >
           {hasCtaOrLink ? (
@@ -595,7 +465,7 @@ export function FacebookPostPreview({
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-semibold border ${
             hasHashtag
               ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-              : "bg-slate-100 text-slate-600 border-slate-200"
+              : "bg-white text-slate-600 border-slate-200"
           }`}
         >
           {hasHashtag ? (

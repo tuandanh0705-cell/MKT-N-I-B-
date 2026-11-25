@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isMediaProductionUser } from "@/lib/constants";
 import {
   buildProjectVisibilityWhere,
   buildTaskVisibilityWhere,
@@ -18,12 +19,25 @@ export default async function ProjectDetailPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ tab?: string; taskId?: string }>;
+  searchParams: Promise<{ tab?: string; taskId?: string; openChat?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [{ slug }, { tab, taskId }] = await Promise.all([params, searchParams]);
+  const [{ slug }, { tab, taskId, openChat }] = await Promise.all([
+    params,
+    searchParams,
+  ]);
+  if (isMediaProductionUser(user.role, user.departmentScope)) {
+    if (taskId) {
+      redirect(
+        `/my-work?taskId=${encodeURIComponent(taskId)}${
+          openChat === "1" ? "&openChat=1" : ""
+        }`
+      );
+    }
+    redirect("/my-work");
+  }
   const project = await prisma.project.findUnique({
     where: { slug },
     include: {
@@ -119,6 +133,7 @@ export default async function ProjectDetailPage({
       initialAiConfig={aiConfig}
       initialTab={tab}
       initialTaskId={taskId}
+      initialOpenChat={openChat === "1"}
     />
   );
 }

@@ -24,14 +24,18 @@ import {
   Sparkles,
   Trash2,
   TrendingUp,
+  UserCog,
 } from "lucide-react";
 import type { AuthUser } from "@/lib/auth";
 import type { NotificationItem, SimpleProject } from "@/types/crm";
+import { isMediaProductionUser } from "@/lib/constants";
 import { formatVnDateTime } from "@/lib/dates";
-import { ICON_PRESETS, TONE_OPTIONS } from "@/lib/tone";
+import {
+  AccountSettingsModal,
+  type AccountSettingsTab,
+} from "@/components/account-settings-modal";
 import { PushNotificationButton } from "@/components/push-notification-button";
 import { TrashBinDrawer } from "@/components/trash-bin-drawer";
-import { useToast } from "@/components/toast-provider";
 import {
   DenDenMushiIcon,
   PirateAvatar,
@@ -58,7 +62,13 @@ export function AppShell({
 }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { showToast } = useToast();
+
+  const [prevUserProp, setPrevUserProp] = useState<AuthUser>(user);
+  const [liveUser, setLiveUser] = useState<AuthUser>(user);
+  if (prevUserProp !== user) {
+    setPrevUserProp(user);
+    setLiveUser(user);
+  }
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
@@ -74,19 +84,9 @@ export function AppShell({
       ? chatUnreadOverride.value
       : initialChatUnreadCount;
 
-  // Modal đổi mật khẩu cá nhân
-  const [pwOpen, setPwOpen] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [pwSaving, setPwSaving] = useState(false);
-
-  // Modal Custom Giọng văn & Icon cá nhân + Ngày sinh + Thùng rác
-  const [prefOpen, setPrefOpen] = useState(false);
-  const [prefTone, setPrefTone] = useState(user.preferredTone || "PIRATE");
-  const [prefIcon, setPrefIcon] = useState(user.preferredIcon || "");
-  const [prefMotto, setPrefMotto] = useState(user.personalMotto || "");
-  const [prefBirthDate, setPrefBirthDate] = useState(user.birthDate || "");
-  const [prefSaving, setPrefSaving] = useState(false);
+  // Modal Cài đặt Tài khoản Cá nhân (Tên, Tài khoản, Mật khẩu, Cá nhân hóa) & Thùng rác
+  const [accountModalTab, setAccountModalTab] =
+    useState<AccountSettingsTab | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
 
   useEffect(() => {
@@ -129,9 +129,14 @@ export function AppShell({
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
   const pirateRank = getPirateRankLabel(
-    user.departmentScope,
-    user.name,
-    user.pirateCharacter
+    liveUser.departmentScope,
+    liveUser.name,
+    liveUser.pirateCharacter
+  );
+
+  const isMediaProduction = isMediaProductionUser(
+    user.role,
+    user.departmentScope
   );
 
   const navGroups = [
@@ -154,12 +159,16 @@ export function AppShell({
           icon: CheckSquare,
           badge: 0,
         },
-        {
-          href: "/media-orders",
-          label: "Order Media",
-          icon: Camera,
-          badge: 0,
-        },
+        ...(!isMediaProduction
+          ? [
+              {
+                href: "/media-orders",
+                label: "Order Media",
+                icon: Camera,
+                badge: 0,
+              },
+            ]
+          : []),
         {
           href: "/chat",
           label: "Chat Băng Mũ Rơm",
@@ -186,12 +195,16 @@ export function AppShell({
           icon: ScrollText,
           badge: 0,
         },
-        {
-          href: "/fanpage-reports",
-          label: "Báo Cáo Dữ Liệu Fanpage",
-          icon: TrendingUp,
-          badge: 0,
-        },
+        ...(!isMediaProduction
+          ? [
+              {
+                href: "/fanpage-reports",
+                label: "Báo Cáo Dữ Liệu Fanpage",
+                icon: TrendingUp,
+                badge: 0,
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -250,55 +263,6 @@ export function AppShell({
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.replace("/login");
-  }
-
-  async function handleChangePassword(e: React.FormEvent) {
-    e.preventDefault();
-    setPwSaving(true);
-    try {
-      const res = await fetch("/api/auth/password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || "Đổi mật khẩu thất bại.", "error");
-        return;
-      }
-      showToast("Đã đổi mật khẩu thành công.");
-      setCurrentPassword("");
-      setNewPassword("");
-      setPwOpen(false);
-    } finally {
-      setPwSaving(false);
-    }
-  }
-
-  async function handleSavePreferences(e: React.FormEvent) {
-    e.preventDefault();
-    setPrefSaving(true);
-    try {
-      const res = await fetch("/api/preferences", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          preferredTone: prefTone,
-          preferredIcon: prefIcon || null,
-          personalMotto: prefMotto || null,
-          birthDate: prefBirthDate || null,
-        }),
-      });
-      if (res.ok) {
-        showToast("Đã cập nhật giọng hệ thống & icon cá nhân!");
-        setPrefOpen(false);
-        router.refresh();
-      } else {
-        showToast("Không lưu được tùy chỉnh.", "error");
-      }
-    } finally {
-      setPrefSaving(false);
-    }
   }
 
   async function markAllRead() {
@@ -393,71 +357,87 @@ export function AppShell({
           ))}
         </nav>
 
-        <div>
-          <div className="px-3 mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300/70">
-              {user.role === "LEADER" ? "🗺️ Toàn bộ Hải Đồ" : "🗺️ Hải Đồ Của Bạn"}
-            </span>
-            <span className="text-[11px] text-sky-200/60">{projects.length}</span>
-          </div>
+        {!isMediaProduction && (
+          <div>
+            <div className="px-3 mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300/70">
+                {user.role === "LEADER" ? "🗺️ Toàn bộ Hải Đồ" : "🗺️ Hải Đồ Của Bạn"}
+              </span>
+              <span className="text-[11px] text-sky-200/60">{projects.length}</span>
+            </div>
 
-          <div className="space-y-1">
-            {projects.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-sky-200/60">
-                Chưa tham gia đảo nào
-              </div>
-            ) : (
-              projects.map((p) => {
-                const href = `/projects/${p.slug}`;
-                const active = pathname === href;
-                return (
-                  <Link
-                    key={p.id}
-                    href={href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition ${
-                      active
-                        ? "bg-sky-900/70 text-amber-200 font-bold border border-amber-300/30"
-                        : "text-sky-100/80 hover:bg-sky-900/40 hover:text-white"
-                    }`}
-                  >
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white/30"
-                      style={{ backgroundColor: p.color }}
-                    />
-                    <span className="truncate">{p.name}</span>
-                  </Link>
-                );
-              })
-            )}
+            <div className="space-y-1">
+              {projects.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-sky-200/60">
+                  Chưa tham gia đảo nào
+                </div>
+              ) : (
+                projects.map((p) => {
+                  const href = `/projects/${p.slug}`;
+                  const active = pathname === href;
+                  return (
+                    <Link
+                      key={p.id}
+                      href={href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition ${
+                        active
+                          ? "bg-sky-900/70 text-amber-200 font-bold border border-amber-300/30"
+                          : "text-sky-100/80 hover:bg-sky-900/40 hover:text-white"
+                      }`}
+                    >
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white/30"
+                        style={{ backgroundColor: p.color }}
+                      />
+                      <span className="truncate">{p.name}</span>
+                    </Link>
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* User Footer */}
       <div className="p-3 border-t border-sky-300/15 bg-[#081C36]">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
+          <button
+            type="button"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              setAccountModalTab("PROFILE");
+            }}
+            title="Cài đặt tài khoản cá nhân (Tên, Tài khoản, Mật khẩu)"
+            className="flex items-center gap-2.5 min-w-0 text-left rounded-xl p-1 -m-1 hover:bg-sky-900/50 transition cursor-pointer flex-1"
+          >
             <PirateAvatar
-              name={user.name}
-              color={user.avatarColor}
-              scope={user.departmentScope}
-              pirateCharacter={user.pirateCharacter}
+              name={liveUser.name}
+              color={liveUser.avatarColor}
+              scope={liveUser.departmentScope}
+              pirateCharacter={liveUser.pirateCharacter}
               size="lg"
             />
             <div className="min-w-0">
               <div className="text-sm font-bold text-white truncate">
-                {prefIcon || user.preferredIcon ? `${prefIcon || user.preferredIcon} ` : ""}
-                {user.name}
+                {liveUser.preferredIcon ? `${liveUser.preferredIcon} ` : ""}
+                {liveUser.name}
+              </div>
+              <div className="text-[10px] text-sky-200/70 truncate">
+                Tài khoản cá nhân
               </div>
             </div>
-          </div>
+          </button>
 
           <div className="flex items-center gap-0.5 shrink-0">
             <button
               type="button"
-              onClick={() => setPrefOpen(true)}
-              title="Custom Giọng & Icon"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setAccountModalTab("CUSTOMIZE");
+              }}
+              title="Cá nhân hóa (Nhân vật, Giọng văn, Icon)"
               className="p-2 rounded-lg text-sky-200/70 hover:text-amber-300 hover:bg-sky-900/60 transition cursor-pointer"
             >
               <Sparkles className="w-4 h-4" />
@@ -472,7 +452,10 @@ export function AppShell({
             </button>
             <button
               type="button"
-              onClick={() => setPwOpen(true)}
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setAccountModalTab("SECURITY");
+              }}
               title="Đổi mật khẩu"
               className="p-2 rounded-lg text-sky-200/70 hover:text-amber-300 hover:bg-sky-900/60 transition cursor-pointer"
             >
@@ -521,9 +504,14 @@ export function AppShell({
               <Menu className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold border bg-amber-50 text-slate-900 border-amber-200 shrink-0">
-                {pirateRank.emoji} {user.name}
-              </span>
+              <button
+                type="button"
+                onClick={() => setAccountModalTab("PROFILE")}
+                title="Mở cài đặt tài khoản cá nhân"
+                className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold border bg-amber-50 hover:bg-amber-100 text-slate-900 border-amber-200 shrink-0 transition cursor-pointer"
+              >
+                {liveUser.preferredIcon || pirateRank.emoji} {liveUser.name}
+              </button>
               <span className="hidden sm:inline text-xs font-bold text-slate-700 truncate">
                 {activePageTitle}
               </span>
@@ -534,12 +522,12 @@ export function AppShell({
             <PushNotificationButton compact />
             <button
               type="button"
-              onClick={() => setPrefOpen(true)}
-              className="hidden sm:inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-white hover:bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
-              title="Đổi giọng hệ thống & Icon cá nhân"
+              onClick={() => setAccountModalTab("PROFILE")}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-white hover:bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
+              title="Đổi Tên, Tài khoản, Mật khẩu & Cá nhân hóa"
             >
-              <span>{prefIcon || user.preferredIcon || "🏴‍☠️"}</span>
-              <span>Giọng / Icon</span>
+              <UserCog className="w-3.5 h-3.5 text-amber-600" />
+              <span className="hidden sm:inline">Tài khoản</span>
             </button>
             <button
               type="button"
@@ -631,203 +619,32 @@ export function AppShell({
         </main>
       </div>
 
-      {/* Modal Đổi mật khẩu */}
-      {pwOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
-            onClick={() => setPwOpen(false)}
-          />
-          <form
-            onSubmit={handleChangePassword}
-            className="relative z-10 w-full max-w-sm bg-white rounded-2xl border-2 border-amber-200 shadow-xl p-5 space-y-4"
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900">
-                Đổi mật mã lên tàu
-              </h3>
-              <button
-                type="button"
-                onClick={() => setPwOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Mật khẩu hiện tại
-              </label>
-              <input
-                type="password"
-                required
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full rounded-xl border border-amber-200 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Mật khẩu mới (tối thiểu 6 ký tự)
-              </label>
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full rounded-xl border border-amber-200 px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setPwOpen(false)}
-                className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-600 cursor-pointer"
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                disabled={pwSaving}
-                className="rounded-xl bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 text-xs font-bold cursor-pointer"
-              >
-                {pwSaving ? "Đang lưu..." : "Lưu mật khẩu"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Modal Custom Giọng & Icon */}
-      {prefOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
-            onClick={() => setPrefOpen(false)}
-          />
-          <form
-            onSubmit={handleSavePreferences}
-            className="relative z-10 w-full max-w-md bg-white rounded-2xl border-2 border-amber-200 shadow-2xl p-5 space-y-4"
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-500" />
-                Custom Giọng văn & Icon cá nhân
-              </h3>
-              <button
-                type="button"
-                onClick={() => setPrefOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700">
-                Chọn giọng điệu toàn hệ thống (cho riêng bạn)
-              </label>
-              <div className="grid grid-cols-1 gap-2">
-                {TONE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.mode}
-                    type="button"
-                    onClick={() => setPrefTone(opt.mode)}
-                    className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition cursor-pointer ${
-                      prefTone === opt.mode
-                        ? "border-amber-500 bg-amber-50/80 ring-2 ring-amber-200"
-                        : "border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <span className="text-xl leading-none">{opt.emoji}</span>
-                    <div>
-                      <div className="text-xs font-bold text-slate-900">
-                        {opt.label}
-                      </div>
-                      <div className="text-[11px] text-slate-500">{opt.desc}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Chọn Icon đại diện cạnh tên
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {ICON_PRESETS.map((ic) => (
-                  <button
-                    key={ic}
-                    type="button"
-                    onClick={() => setPrefIcon(ic)}
-                    className={`w-9 h-9 rounded-xl border text-lg flex items-center justify-center cursor-pointer ${
-                      prefIcon === ic
-                        ? "bg-amber-100 border-amber-500 ring-2 ring-amber-200"
-                        : "bg-slate-50 border-slate-200 hover:bg-amber-50"
-                    }`}
-                  >
-                    {ic}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Châm ngôn cá nhân (tùy chọn)
-              </label>
-              <input
-                type="text"
-                value={prefMotto}
-                onChange={(e) => setPrefMotto(e.target.value)}
-                placeholder="VD: Deadline chỉ là phù du, đi uống trà sữa mới là chân ái..."
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                🎂 Ngày sinh nhật (để Băng chúc mừng đúng ngày)
-              </label>
-              <input
-                type="date"
-                value={prefBirthDate}
-                onChange={(e) => setPrefBirthDate(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setPrefOpen(false)}
-                className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-600 cursor-pointer"
-              >
-                Đóng
-              </button>
-              <button
-                type="submit"
-                disabled={prefSaving}
-                className="rounded-xl bg-[#0B2545] hover:bg-slate-800 text-amber-300 px-4 py-2 text-xs font-bold cursor-pointer"
-              >
-                {prefSaving ? "Đang lưu..." : "Lưu tùy chỉnh"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      <AccountSettingsModal
+        open={accountModalTab !== null}
+        initialTab={accountModalTab ?? "PROFILE"}
+        user={liveUser}
+        onClose={() => setAccountModalTab(null)}
+        onProfileSaved={(updated) =>
+          setLiveUser((prev) => ({
+            ...prev,
+            ...updated,
+          }))
+        }
+      />
 
       <TrashBinDrawer
         open={trashOpen}
         onClose={() => setTrashOpen(false)}
-        userRole={user.role}
-        toneMode={prefTone || user.preferredTone}
+        userRole={liveUser.role}
+        toneMode={liveUser.preferredTone}
       />
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-[#FFFDF7] border-t border-amber-200 grid grid-cols-6 h-16 px-1 print:hidden">
+      <nav
+        className={`md:hidden fixed bottom-0 inset-x-0 z-30 bg-[#FFFDF7] border-t border-amber-200 ${
+          isMediaProduction ? "grid grid-cols-5" : "grid grid-cols-6"
+        } h-16 px-1 print:hidden`}
+      >
         <Link
           href={user.role === "LEADER" ? "/leader" : "/my-work"}
           className={`flex flex-col items-center justify-center gap-1 text-[10px] font-semibold ${
@@ -859,16 +676,18 @@ export function AppShell({
           )}
         </Link>
 
-        <button
-          type="button"
-          onClick={() => setMobileMenuOpen(true)}
-          className={`flex flex-col items-center justify-center gap-1 text-[10px] font-semibold ${
-            pathname.startsWith("/projects") ? "text-red-600" : "text-slate-500"
-          }`}
-        >
-          <MapIcon className="w-4 h-4" />
-          <span>Hải đồ ({projects.length})</span>
-        </button>
+        {!isMediaProduction && (
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            className={`flex flex-col items-center justify-center gap-1 text-[10px] font-semibold ${
+              pathname.startsWith("/projects") ? "text-red-600" : "text-slate-500"
+            }`}
+          >
+            <MapIcon className="w-4 h-4" />
+            <span>Hải đồ ({projects.length})</span>
+          </button>
+        )}
 
         <Link
           href="/outputs"

@@ -6,14 +6,13 @@ import {
   CheckCircle2,
   ExternalLink,
   Link2,
-  MessageSquare,
   Plus,
   RotateCcw,
 } from "lucide-react";
 import { GeminiQcPanel } from "@/components/gemini-qc-panel";
+import { TaskFeedbackChat } from "@/components/task-feedback-chat";
 import { useToast } from "@/components/toast-provider";
 import { ASSET_KIND_LABEL } from "@/lib/constants";
-import { formatVnDateTime } from "@/lib/dates";
 import { getAssetDomainLabel } from "@/lib/output-helpers";
 import { getQcCriteriaForTaskType } from "@/lib/qc-standards";
 import type {
@@ -21,11 +20,13 @@ import type {
   GeminiQcCheckResponse,
 } from "@/lib/gemini-shared";
 import type { AssetKind, UserRole } from "@/generated/prisma/client";
-import type { TaskItem } from "@/types/crm";
+import type { SimpleUser, TaskItem } from "@/types/crm";
 
 interface OutputInspectorQcPanelProps {
   task: TaskItem;
+  currentUserId?: string;
   currentUserRole: UserRole;
+  users?: SimpleUser[];
   aiConfig?: GeminiConfigInfo;
   aiResult?: GeminiQcCheckResponse | null;
   aiLoading: boolean;
@@ -38,7 +39,9 @@ interface OutputInspectorQcPanelProps {
 
 export function OutputInspectorQcPanel({
   task,
+  currentUserId,
   currentUserRole,
+  users = [],
   aiConfig,
   aiResult,
   aiLoading,
@@ -193,11 +196,12 @@ export function OutputInspectorQcPanel({
                     return;
                   }
                   if (data.comment) {
+                    const nextComments = [...(task.comments ?? []), data.comment];
                     onUpdated({
                       ...task,
-                      comments: [data.comment, ...(task.comments ?? [])],
+                      comments: nextComments,
                       _count: {
-                        comments: (task._count?.comments ?? 0) + 1,
+                        comments: nextComments.length,
                         activityLogs: task._count?.activityLogs,
                       },
                     });
@@ -318,31 +322,32 @@ export function OutputInspectorQcPanel({
         </form>
       </div>
 
-      {/* QC / Review History */}
-      {(task.comments?.length ?? 0) > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-700 flex items-center gap-1.5">
-            <MessageSquare className="w-3.5 h-3.5 text-amber-600" />
-            Phản hồi / Lịch sử Check QC ({task._count?.comments ?? task.comments?.length})
-          </h4>
-          <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-            {task.comments?.map((c) => (
-              <div
-                key={c.id}
-                className="rounded-xl border border-slate-200 bg-white p-2.5 text-xs space-y-1"
-              >
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-slate-800">{c.author.name}</span>
-                  <span className="text-slate-400">
-                    {formatVnDateTime(c.createdAt)}
-                  </span>
-                </div>
-                <p className="text-slate-700 whitespace-pre-wrap">{c.content}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Live Chat & Feedback trực tiếp ngay trong Output */}
+      <TaskFeedbackChat
+        taskId={task.id}
+        taskCode={task.code}
+        initialComments={task.comments ?? []}
+        users={users}
+        currentUserId={currentUserId}
+        currentUserRole={currentUserRole}
+        compact
+        maxHeightClass="max-h-60"
+        placeholder="Nhắn feedback trực tiếp về bài/ấn phẩm này (Enter gửi, Ctrl+V dán ảnh)..."
+        onCommentsChanged={(nextComments) => {
+          const prevCount =
+            task.comments?.length ?? task._count?.comments ?? 0;
+          if (nextComments.length !== prevCount) {
+            onUpdated({
+              ...task,
+              comments: nextComments,
+              _count: {
+                comments: nextComments.length,
+                activityLogs: task._count?.activityLogs,
+              },
+            });
+          }
+        }}
+      />
 
       {/* Quick Leader Check & Approve Panel */}
       {isLeader && (

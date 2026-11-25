@@ -305,11 +305,13 @@ export function ChatMessageStream({
                         {mine ? "Bạn" : msg.sender?.name || "Đồng đội"}
                       </span>
                     )}
-                    <span>• {formatChatTime(msg.createdAt)}</span>
+                    <span>
+                      • {msg.pending ? "Đang gửi..." : formatChatTime(msg.createdAt)}
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {mine && (
+                    {mine && !msg.pending && (
                       <button
                         type="button"
                         onClick={() => onRecallMessage(msg.id)}
@@ -321,7 +323,9 @@ export function ChatMessageStream({
                     )}
 
                     <div
-                      className={`rounded-2xl px-3.5 py-2 text-xs sm:text-sm leading-relaxed shadow-sm whitespace-pre-wrap break-words ${
+                      className={`rounded-2xl px-3.5 py-2 text-xs sm:text-sm leading-relaxed shadow-sm whitespace-pre-wrap break-words transition-opacity ${
+                        msg.pending ? "opacity-75" : ""
+                      } ${
                         msg.isAnonymous
                           ? mine
                             ? "bg-indigo-900 text-amber-50 border border-indigo-500 rounded-br-sm"

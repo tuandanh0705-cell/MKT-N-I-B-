@@ -65,6 +65,7 @@ interface ProjectWorkspaceProps {
   initialAiConfig?: GeminiConfigInfo;
   initialTab?: string;
   initialTaskId?: string;
+  initialOpenChat?: boolean;
 }
 
 const VALID_TABS: ProjectViewTab[] = [
@@ -93,6 +94,7 @@ export function ProjectWorkspace({
   },
   initialTab,
   initialTaskId,
+  initialOpenChat = false,
 }: ProjectWorkspaceProps) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -135,7 +137,14 @@ export function ProjectWorkspace({
     title?: string;
     taskType?: TaskType;
     orderMode?: "MEDIA" | "TASK";
+    videoKind?: "SHOOT_AND_EDIT" | "EDIT_ONLY";
   }>({});
+  const [prevDeepLinkKey, setPrevDeepLinkKey] = useState<string>(
+    `${initialTaskId ?? ""}:${initialOpenChat ? "1" : "0"}`
+  );
+  const [openChatInitially, setOpenChatInitially] = useState<boolean>(
+    Boolean(initialOpenChat && initialMatchedTask)
+  );
   const [activeTaskId, setActiveTaskId] = useState<string | null>(
     initialMatchedTask && !isContentTaskItem(initialMatchedTask)
       ? initialMatchedTask.id
@@ -151,6 +160,27 @@ export function ProjectWorkspace({
   );
   const [contentEditorPrefill, setContentEditorPrefill] =
     useState<ContentPostPrefill | null>(null);
+
+  const currentDeepLinkKey = `${initialTaskId ?? ""}:${initialOpenChat ? "1" : "0"}`;
+  if (prevDeepLinkKey !== currentDeepLinkKey) {
+    setPrevDeepLinkKey(currentDeepLinkKey);
+    if (initialTaskId) {
+      const target = tasks.find((t) => t.id === initialTaskId) || null;
+      if (target) {
+        setOpenChatInitially(Boolean(initialOpenChat));
+        if (isContentTaskItem(target)) {
+          setActiveTaskId(null);
+          setContentEditorTask(target);
+          setContentEditorPrefill(null);
+          setContentEditorOpen(true);
+        } else {
+          setContentEditorOpen(false);
+          setContentEditorTask(null);
+          setActiveTaskId(target.id);
+        }
+      }
+    }
+  }
 
   const mergedChannelSuggestions = useMemo<ProjectChannelSuggestions>(() => {
     const fromTasks = buildProjectChannelSuggestions({ tasks });
@@ -573,10 +603,11 @@ export function ProjectWorkspace({
           }
           onTaskUpdated={handleTaskUpdated}
           onTaskDeleted={handleTaskDeleted}
-          onOpenCreateModal={(kind) => {
+          onOpenCreateModal={(kind, videoKind) => {
             setMatrixDefaults({
               taskType: kind,
               orderMode: "MEDIA",
+              videoKind,
             });
             setCreateOpen(true);
           }}
@@ -681,7 +712,7 @@ export function ProjectWorkspace({
       )}
 
       <CreateTaskModal
-        key={`${project.id}-${matrixDefaults.pillar || ""}-${matrixDefaults.week || 0}-${matrixDefaults.title || ""}-${matrixDefaults.taskType || ""}-${matrixDefaults.orderMode || ""}`}
+        key={`${project.id}-${matrixDefaults.pillar || ""}-${matrixDefaults.week || 0}-${matrixDefaults.title || ""}-${matrixDefaults.taskType || ""}-${matrixDefaults.orderMode || ""}-${matrixDefaults.videoKind || ""}`}
         open={createOpen}
         onClose={() => {
           setCreateOpen(false);
@@ -691,12 +722,17 @@ export function ProjectWorkspace({
         users={users}
         initialCapacity={capacity}
         channelSuggestions={mergedChannelSuggestions}
+        currentUserId={currentUserId}
+        defaultAssigneeId={
+          matrixDefaults.orderMode === "MEDIA" ? undefined : currentUserId
+        }
         defaultProjectId={project.id}
         defaultContentPillar={matrixDefaults.pillar}
         defaultCampaignWeek={matrixDefaults.week}
         defaultTitle={matrixDefaults.title}
         defaultTaskType={matrixDefaults.taskType}
         defaultOrderMode={matrixDefaults.orderMode}
+        defaultVideoKind={matrixDefaults.videoKind}
         onCreated={(newTask) => {
           if (newTask.project.id === project.id) {
             setTasks((prev) => [newTask, ...prev]);
@@ -710,6 +746,7 @@ export function ProjectWorkspace({
           setContentEditorOpen(false);
           setContentEditorTask(null);
           setContentEditorPrefill(null);
+          setOpenChatInitially(false);
         }}
         project={project}
         users={users}
@@ -718,6 +755,7 @@ export function ProjectWorkspace({
         currentUserRole={currentUserRole}
         task={contentEditorTask}
         prefill={contentEditorPrefill}
+        initialRightTab={openChatInitially ? "CHAT" : undefined}
         aiConfig={aiConfig}
         onOpenAiSettings={
           currentUserRole === "LEADER"
@@ -766,7 +804,11 @@ export function ProjectWorkspace({
       <TaskDrawer
         taskId={activeTaskId}
         currentUserRole={currentUserRole}
-        onClose={() => setActiveTaskId(null)}
+        initialTab={openChatInitially ? "CHAT" : undefined}
+        onClose={() => {
+          setActiveTaskId(null);
+          setOpenChatInitially(false);
+        }}
         onUpdated={handleTaskUpdated}
         onDeleted={handleTaskDeleted}
         onDuplicated={(dup) => {

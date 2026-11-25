@@ -9,6 +9,7 @@ import {
   Eye,
   Hash,
   Link2,
+  MessageSquare,
   RotateCcw,
   Save,
   Send,
@@ -19,6 +20,7 @@ import { FacebookPostPreview } from "@/components/facebook-post-preview";
 import { GeminiQcPanel } from "@/components/gemini-qc-panel";
 import { PlatformLogo } from "@/components/platform-logo";
 import { PublishChannelInput } from "@/components/publish-channel-input";
+import { TaskFeedbackChat } from "@/components/task-feedback-chat";
 import {
   CONTENT_PLATFORM_OPTIONS,
   CONTENT_ROUTE_OPTIONS,
@@ -28,7 +30,7 @@ import {
   normalizeProjectOverview,
 } from "@/lib/content-plan";
 import { normalizePlatformSelectValue } from "@/lib/platform-meta";
-import { FB_POST_LAYOUTS } from "@/lib/constants";
+import { FB_POST_LAYOUTS, FB_POST_LAYOUT_GROUPS } from "@/lib/constants";
 import { getVnDateString } from "@/lib/dates";
 import { useToast } from "@/components/toast-provider";
 import {
@@ -53,6 +55,8 @@ export interface ContentPostPrefill {
   publishDate?: string;
 }
 
+export type ContentEditorRightTab = "PREVIEW" | "AI_QC" | "CHAT";
+
 interface ContentPostEditorModalProps {
   open: boolean;
   onClose: () => void;
@@ -63,6 +67,7 @@ interface ContentPostEditorModalProps {
   currentUserRole: UserRole;
   task?: TaskItem | null;
   prefill?: ContentPostPrefill | null;
+  initialRightTab?: ContentEditorRightTab;
   aiConfig?: GeminiConfigInfo;
   onOpenAiSettings?: () => void;
   onOpenStandardsModal?: () => void;
@@ -74,7 +79,7 @@ export function ContentPostEditorModal(props: ContentPostEditorModalProps) {
   if (!props.open) return null;
   const key = `${props.task?.id || "new"}-${props.prefill?.matrixIdeaId || ""}-${
     props.prefill?.publishDate || ""
-  }-${props.prefill?.title || ""}`;
+  }-${props.prefill?.title || ""}-${props.initialRightTab || ""}`;
   return <ContentPostEditorInner key={key} {...props} />;
 }
 
@@ -87,6 +92,7 @@ function ContentPostEditorInner({
   currentUserRole,
   task,
   prefill,
+  initialRightTab,
   aiConfig,
   onOpenAiSettings,
   onOpenStandardsModal,
@@ -142,8 +148,17 @@ function ContentPostEditorInner({
   const [showRevisionInput, setShowRevisionInput] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Google Gemini AI Check QC ngay khi soạn thảo (mở ở tab cột phải)
-  const [rightTab, setRightTab] = useState<"PREVIEW" | "AI_QC">("PREVIEW");
+  // Tab cột phải: Preview Facebook | AI Check QC (Gemini) | Chat & Feedback bài viết
+  const [rightTab, setRightTab] = useState<ContentEditorRightTab>(
+    initialRightTab === "CHAT" && task?.id
+      ? "CHAT"
+      : initialRightTab === "AI_QC"
+        ? "AI_QC"
+        : "PREVIEW"
+  );
+  const [commentCount, setCommentCount] = useState<number>(
+    task?.comments?.length ?? task?._count?.comments ?? 0
+  );
   const [editorDemoImages, setEditorDemoImages] = useState<string[]>([]);
   const [customAiFocus, setCustomAiFocus] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -521,27 +536,29 @@ function ContentPostEditorInner({
               </div>
             </div>
 
-            <div className="rounded-xl border border-sky-200/80 bg-sky-50/40 p-3">
-              <PublishChannelInput
-                platform={platform}
-                value={publishChannel}
-                onChange={setPublishChannel}
-                suggestions={channelSuggestions}
-                compact
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Nội dung / Ý tưởng chính của bài viết *
-              </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="VD: Khái niệm về set up live không lo về giá là gì?"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+              <div className="sm:col-span-5">
+                <PublishChannelInput
+                  platform={platform}
+                  value={publishChannel}
+                  onChange={setPublishChannel}
+                  suggestions={channelSuggestions}
+                  compact
+                  inputClassName="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <div className="sm:col-span-7">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Idea *
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="VD: Khái niệm về set up live không lo về giá là gì?"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
             </div>
 
             {/* Khung Soạn Bài Viết Trực Tiếp */}
@@ -710,36 +727,40 @@ function ContentPostEditorInner({
             </div>
           </div>
 
-          {/* Cột Phải: Tab Preview Facebook | AI Check QC (Gemini) */}
+          {/* Cột Phải: Tab Preview Facebook | AI Check QC (Gemini) | Chat & Feedback */}
           <div className="lg:col-span-5 space-y-3">
-            {/* Thanh chuyển 2 Tab song song với khung viết */}
-            <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 gap-1 border border-slate-200">
+            {/* Thanh chuyển Tab song song với khung viết */}
+            <div
+              className={`grid rounded-xl bg-slate-100 p-1 gap-1 border border-slate-200 ${
+                task?.id ? "grid-cols-3" : "grid-cols-2"
+              }`}
+            >
               <button
                 type="button"
                 onClick={() => setRightTab("PREVIEW")}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-extrabold transition cursor-pointer ${
+                className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-extrabold transition cursor-pointer ${
                   rightTab === "PREVIEW"
                     ? "bg-white text-slate-900 shadow-xs"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <Eye className="w-3.5 h-3.5 text-blue-600" />
-                Preview Facebook
+                <Eye className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="truncate">Preview</span>
               </button>
               <button
                 type="button"
                 onClick={() => setRightTab("AI_QC")}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-extrabold transition cursor-pointer ${
+                className={`inline-flex items-center justify-center gap-1 rounded-lg px-2.5 py-2 text-xs font-extrabold transition cursor-pointer ${
                   rightTab === "AI_QC"
                     ? "bg-white text-indigo-900 shadow-xs"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <Bot className="w-3.5 h-3.5 text-indigo-600" />
-                AI Check QC
+                <Bot className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span className="truncate">AI Check</span>
                 {aiResult && (
                   <span
-                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-black shrink-0 ${
                       aiResult.result.score >= 80
                         ? "bg-emerald-100 text-emerald-800"
                         : aiResult.result.score >= 60
@@ -751,9 +772,36 @@ function ContentPostEditorInner({
                   </span>
                 )}
               </button>
+              {task?.id && (
+                <button
+                  type="button"
+                  onClick={() => setRightTab("CHAT")}
+                  className={`inline-flex items-center justify-center gap-1 rounded-lg px-2.5 py-2 text-xs font-extrabold transition cursor-pointer ${
+                    rightTab === "CHAT"
+                      ? "bg-[#0B2545] text-amber-300 shadow-xs"
+                      : commentCount > 0
+                        ? "bg-amber-100/90 text-amber-900 hover:bg-amber-200/80"
+                        : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Chat</span>
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-black shrink-0 ${
+                      rightTab === "CHAT"
+                        ? "bg-amber-400 text-[#0B2545]"
+                        : commentCount > 0
+                          ? "bg-amber-600 text-white"
+                          : "bg-slate-200 text-slate-600"
+                    }`}
+                  >
+                    {commentCount}
+                  </span>
+                </button>
+              )}
             </div>
 
-            {overview.toneAndVoice && (
+            {overview.toneAndVoice && rightTab !== "CHAT" && (
               <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs space-y-1">
                 <div className="font-bold text-amber-900">
                   🧭 Nhắc nhanh Tone & Voice của {project.name}:
@@ -766,10 +814,20 @@ function ContentPostEditorInner({
 
             {task?.status === "REVISION_NEEDED" &&
               task.comments &&
-              task.comments.length > 0 && (
-                <div className="rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs space-y-1">
-                  <div className="font-bold text-rose-800">
-                    🔧 Leader yêu cầu sửa:
+              task.comments.length > 0 &&
+              rightTab !== "CHAT" && (
+                <div className="rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-bold text-rose-800">
+                      🔧 Leader yêu cầu sửa:
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRightTab("CHAT")}
+                      className="text-[11px] font-extrabold text-rose-700 hover:text-rose-900 underline cursor-pointer"
+                    >
+                      Trả lời / Trao đổi ngay →
+                    </button>
                   </div>
                   <p className="text-rose-700 whitespace-pre-line">
                     {task.comments[task.comments.length - 1]?.content}
@@ -781,17 +839,23 @@ function ContentPostEditorInner({
             <div className={rightTab === "PREVIEW" ? "space-y-2" : "hidden"}>
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="font-bold text-slate-700">
-                  Bố cục hiển thị Facebook
+                  Demo bài đăng đa nền tảng
                 </span>
                 <select
                   value={fbLayout}
                   onChange={(e) => setFbLayout(e.target.value)}
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs"
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs max-w-[260px]"
                 >
-                  {Object.entries(FB_POST_LAYOUTS).map(([k, m]) => (
-                    <option key={k} value={k}>
-                      {m.label}
-                    </option>
+                  {FB_POST_LAYOUT_GROUPS.map((grp) => (
+                    <optgroup key={grp} label={grp}>
+                      {Object.entries(FB_POST_LAYOUTS)
+                        .filter(([, m]) => m.group === grp)
+                        .map(([k, m]) => (
+                          <option key={k} value={k}>
+                            {m.label}
+                          </option>
+                        ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>
@@ -799,9 +863,12 @@ function ContentPostEditorInner({
               <FacebookPostPreview
                 pageName={publishChannel.trim() || project.name}
                 pageColor={project.color}
+                platform={platform}
+                postFormat={format}
                 caption={caption}
                 layout={fbLayout}
                 onChangeLayout={setFbLayout}
+                hideLayoutSelector
                 onDemoImagesChange={setEditorDemoImages}
                 mediaUrl={previewMediaUrls[0] || null}
                 mediaUrls={previewMediaUrls}
@@ -834,6 +901,21 @@ function ContentPostEditorInner({
                   setCaption(suggested);
                   showToast("Đã áp dụng Caption gợi ý vào khung soạn!");
                 }}
+              />
+            )}
+
+            {rightTab === "CHAT" && task?.id && (
+              <TaskFeedbackChat
+                taskId={task.id}
+                taskCode={task.code}
+                initialComments={task.comments ?? []}
+                users={users}
+                currentUserId={currentUserId}
+                currentUserRole={currentUserRole}
+                compact
+                maxHeightClass="max-h-[420px]"
+                placeholder="Trao đổi & feedback ngay trên bài viết này (Enter gửi, Ctrl+V dán ảnh)..."
+                onCommentsChanged={(next) => setCommentCount(next.length)}
               />
             )}
           </div>

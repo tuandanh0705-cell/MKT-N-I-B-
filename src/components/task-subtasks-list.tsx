@@ -16,6 +16,7 @@ import {
   normalizeSubtasks,
   type TaskSubtaskItem,
 } from "@/lib/subtasks";
+import { taskRequiresLeaderApproval } from "@/lib/constants";
 import { useToast } from "@/components/toast-provider";
 import type { SimpleUser, TaskItem } from "@/types/crm";
 
@@ -92,20 +93,12 @@ export function TaskSubtasksList({
     const allCompleted = next.length > 0 && next.every((st) => st.done);
     if (allCompleted && task.status === "IN_PROGRESS") {
       const requiresLeaderQc =
-        !task.dailyKpiKey &&
-        currentUserRole !== "LEADER" &&
-        [
-          "CONTENT_SOCIAL",
-          "CONTENT_ADS",
-          "CONTENT_WEB",
-          "MEDIA_IMAGE",
-          "MEDIA_VIDEO",
-        ].includes(task.taskType);
+        currentUserRole !== "LEADER" && taskRequiresLeaderApproval(task);
 
       if (requiresLeaderQc) {
         await saveSubtasks(
           next,
-          "Đã xong toàn bộ checklist nhỏ — bấm Gửi duyệt để Leader QC hoặc tự đánh dấu xong!"
+          "Đã xong toàn bộ checklist nhỏ — hãy bấm 'Gửi duyệt' để Leader kiểm tra thành phẩm!"
         );
         return;
       }

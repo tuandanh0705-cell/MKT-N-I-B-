@@ -769,11 +769,14 @@ export function LeaderDashboard({
       </div>
 
       <CreateTaskModal
+        key={`leader-create-${createOpen ? "open" : "closed"}`}
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         projects={projects}
         users={users}
         initialCapacity={capacity}
+        currentUserId={currentUserId}
+        defaultOrderMode="TASK"
         onCreated={(newTask) => setTasks((prev) => [newTask, ...prev])}
       />
 

@@ -30,7 +30,8 @@ export async function PATCH(request: Request) {
   try {
     const body = await request.json();
     const resetToDefault = body.resetToDefault === true;
-    const syncTodayNow = body.syncTodayNow !== false;
+    // Mặc định KHÔNG tự sinh task giả (chỉ đo KPI từ task thật & order được giao)
+    const syncTodayNow = body.syncTodayNow === true;
     const normalized = resetToDefault ? null : normalizeDailyKpiList(body.items);
 
     const videoTarget = normalized?.find((i) => i.taskType === "MEDIA_VIDEO")?.target;

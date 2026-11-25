@@ -1,40 +1,51 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isMediaProductionUser } from "@/lib/constants";
 import { buildProjectVisibilityWhere } from "@/lib/permissions";
 import { getAnonymizedTeamCapacity } from "@/lib/capacity";
 import { getVnDateString } from "@/lib/dates";
 import { computeBirthdayInfo, ensureDailyBirthdayCelebrations } from "@/lib/birthdays";
 import { resolveEffectiveDailyKpi } from "@/lib/daily-kpi";
-import { ensureTodayDailyKpiSynced } from "@/lib/daily-kpi-sync";
 import { getUserPendingMandatoryCourses } from "@/lib/knowledge-data";
 import { TASK_CARD_INCLUDE } from "@/lib/task-queries";
 import { MyWorkView } from "@/components/my-work-view";
 
-export default async function MyWorkPage() {
+export default async function MyWorkPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ taskId?: string; openChat?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  const resolvedParams = await searchParams;
   const todayDate = getVnDateString();
   const approvedLeaves = await prisma.leaveRequest.findMany({
     where: { userId: user.id, status: "APPROVED" },
     select: { startDate: true, endDate: true, leaveType: true },
   });
 
-  await Promise.all([
-    ensureDailyBirthdayCelebrations().catch(() => {}),
-    ensureTodayDailyKpiSynced(user, todayDate, approvedLeaves).catch((err) => {
-      console.error("Auto-sync today daily KPI error:", err);
-    }),
-  ]);
+  await ensureDailyBirthdayCelebrations().catch(() => {});
+
+  const isMediaProduction = isMediaProductionUser(
+    user.role,
+    user.departmentScope
+  );
 
   const [tasks, projects, users, capacity, initialCheckin, pendingCourses] =
     await Promise.all([
     prisma.task.findMany({
-      where: {
-        deletedAt: null,
-        OR: [{ assigneeId: user.id }, { requesterId: user.id }],
-      },
+      where: isMediaProduction
+        ? {
+            deletedAt: null,
+            dailyKpiKey: null,
+            assigneeId: user.id,
+          }
+        : {
+            deletedAt: null,
+            OR: [{ assigneeId: user.id }, { requesterId: user.id }],
+          },
       orderBy: [{ dueAt: "asc" }, { scheduledPublishAt: "asc" }, { createdAt: "desc" }],
       include: TASK_CARD_INCLUDE,
     }),
@@ -100,6 +111,8 @@ export default async function MyWorkPage() {
       initialDailyKpi={dailyKpi.items}
       initialDailyKpiIsDefault={dailyKpi.isDefaultFallback}
       approvedLeaves={approvedLeaves}
+      initialTaskId={resolvedParams.taskId}
+      initialOpenChat={resolvedParams.openChat === "1"}
     />
   );
 }
