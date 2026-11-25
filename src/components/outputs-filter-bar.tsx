@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   Bot,
+  ChevronDown,
+  ChevronUp,
   Crown,
   Download,
   Filter,
@@ -118,6 +121,16 @@ export function OutputsFilterBar({
   onExportCsv,
   onOpenAiAndStandards,
 }: OutputsFilterBarProps) {
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  const activeAdvancedFilterCount = [
+    selectedMemberId !== "ALL",
+    categoryFilter !== "ALL",
+    projectFilter !== "ALL",
+    periodFilter !== "ALL",
+    onlyPendingMembers,
+  ].filter(Boolean).length;
+
   const visibleUsers = onlyPendingMembers
     ? users.filter((u) => {
         const st = memberStats.map.get(u.id);
@@ -145,9 +158,9 @@ export function OutputsFilterBar({
   ];
 
   return (
-    <div className="bg-white rounded-2xl border-2 border-amber-200/80 p-4 sm:p-5 space-y-3.5 shadow-sm">
+    <div className="bg-white rounded-2xl border-2 border-amber-200/80 p-3.5 sm:p-5 space-y-3 shadow-sm">
       {/* Row 1: Title + Gộp nút Leader */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           <FolderCheck className="w-5 h-5 text-amber-600 shrink-0" />
           <h1 className="text-lg sm:text-xl font-extrabold text-slate-900">
@@ -233,9 +246,9 @@ export function OutputsFilterBar({
         </div>
       </div>
 
-      {/* Row 2: Tab hàng đợi duyệt & trạng thái Output (ẩn với Design & Edit — chỉ hiện task đã làm) */}
+      {/* Row 2: Tab hàng đợi duyệt & trạng thái Output (cuộn ngang 1 dòng trên Mobile) */}
       {!isMediaProduction && (
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 pb-2.5">
+        <div className="flex sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-slate-100 pb-2.5">
           {readinessTabs.map((tab) => {
             const active = readinessFilter === tab.id;
             return (
@@ -243,7 +256,7 @@ export function OutputsFilterBar({
                 key={tab.id}
                 type="button"
                 onClick={() => onSelectReadiness(tab.id)}
-                className={`rounded-xl px-3 py-1.5 text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer ${
+                className={`rounded-xl px-2.5 sm:px-3 py-1.5 text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap transition cursor-pointer ${
                   active
                     ? tab.highlight
                       ? "bg-rose-600 text-white shadow-xs"
@@ -270,6 +283,56 @@ export function OutputsFilterBar({
           })}
         </div>
       )}
+
+      {/* Nút mở/thu gọn bộ lọc nâng cao trên Mobile để danh sách bài xuất hiện ngay */}
+      {!isMediaProduction && (
+        <div className="sm:hidden flex items-center gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onChangeSearchQuery(e.target.value)}
+              placeholder="Tìm bài, mã task, link..."
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-amber-400 focus:outline-none pl-8 pr-7 py-1.5 text-xs text-slate-800"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => onChangeSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters((v) => !v)}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1 shrink-0 cursor-pointer ${
+              showMobileFilters || activeAdvancedFilterCount > 0
+                ? "border-amber-400 bg-amber-50 text-amber-950"
+                : "border-slate-200 bg-white text-slate-700"
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>Bộ lọc</span>
+            {activeAdvancedFilterCount > 0 && (
+              <span className="rounded-full bg-amber-500 text-white px-1.5 text-[10px] font-black">
+                {activeAdvancedFilterCount}
+              </span>
+            )}
+            {showMobileFilters ? (
+              <ChevronUp className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5" />
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Khối thống kê + lọc nhân viên + lọc loại (thu gọn được trên mobile, luôn hiện trên sm+) */}
+      <div className={showMobileFilters ? "space-y-3" : "hidden sm:block space-y-3.5"}>
 
       {/* Row 3: Dải thống kê mảnh (Compact KPI Strip ~1/2 chiều cao, bấm lọc nhanh) */}
       {!isMediaProduction && (
@@ -518,13 +581,13 @@ export function OutputsFilterBar({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[220px]">
+          <div className="hidden sm:block relative flex-1 min-w-[220px]">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => onChangeSearchQuery(e.target.value)}
-              placeholder="Tìm caption, tiêu đề, mã task, kênh đăng, link file..."
+              placeholder="Tìm bài viết, mã task, kênh đăng, link file..."
               className="w-full rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-amber-400 focus:outline-none pl-9 pr-8 py-1.5 text-xs text-slate-800"
             />
             {searchQuery && (
@@ -541,7 +604,7 @@ export function OutputsFilterBar({
           <select
             value={projectFilter}
             onChange={(e) => onChangeProjectFilter(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
+            className="flex-1 sm:flex-initial rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
           >
             <option value="ALL">Tất cả dự án ({projects.length})</option>
             {projects.map((p) => (
@@ -556,7 +619,7 @@ export function OutputsFilterBar({
             onChange={(e) =>
               onChangePeriodFilter(e.target.value as OutputsPeriodFilter)
             }
-            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
+            className="flex-1 sm:flex-initial rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
           >
             <option value="ALL">Tất cả thời gian</option>
             <option value="WEEK">Tuần này</option>
@@ -566,6 +629,7 @@ export function OutputsFilterBar({
         </div>
       </div>
       )}
+      </div>
     </div>
   );
 }

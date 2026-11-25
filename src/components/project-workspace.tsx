@@ -537,12 +537,12 @@ export function ProjectWorkspace({
           </form>
         )}
 
-        <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex flex-wrap rounded-xl bg-slate-100 p-1 gap-1">
+        <div className="mt-4 pt-3.5 border-t border-slate-100">
+          <div className="flex sm:inline-flex items-center overflow-x-auto no-scrollbar rounded-xl bg-slate-100 p-1 gap-1">
             <button
               type="button"
               onClick={() => setViewMode("OVERVIEW")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold shrink-0 whitespace-nowrap cursor-pointer ${
                 viewMode === "OVERVIEW"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600"
@@ -554,7 +554,7 @@ export function ProjectWorkspace({
             <button
               type="button"
               onClick={() => setViewMode("MATRIX")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold shrink-0 whitespace-nowrap cursor-pointer ${
                 viewMode === "MATRIX"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600"
@@ -566,7 +566,7 @@ export function ProjectWorkspace({
             <button
               type="button"
               onClick={() => setViewMode("CONTENT_CALENDAR")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold shrink-0 whitespace-nowrap cursor-pointer ${
                 viewMode === "CONTENT_CALENDAR"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600"
@@ -578,7 +578,7 @@ export function ProjectWorkspace({
             <button
               type="button"
               onClick={() => setViewMode("CALENDAR")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold shrink-0 whitespace-nowrap cursor-pointer ${
                 viewMode === "CALENDAR"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600"
@@ -590,7 +590,7 @@ export function ProjectWorkspace({
             <button
               type="button"
               onClick={() => setViewMode("MEDIA_BRIEF")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold shrink-0 whitespace-nowrap cursor-pointer ${
                 viewMode === "MEDIA_BRIEF"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-600"

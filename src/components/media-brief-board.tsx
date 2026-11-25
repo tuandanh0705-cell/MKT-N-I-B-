@@ -343,32 +343,32 @@ export function MediaBriefBoard({
   return (
     <div className="space-y-4">
       {/* Thanh Chọn 1 trong 2: Brief Ảnh / Brief Video + Hành động */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Segmented control bắt buộc chọn 1 trong 2 */}
-          <div className="flex flex-wrap items-center gap-3">
+      <div className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-4 space-y-3 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
+          {/* Segmented control chọn loại Brief */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
-              Brief Media (Chọn 1 trong 2):
+              Brief Media:
             </span>
             <div
               role="radiogroup"
               aria-label="Chọn loại Brief Media"
-              className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1 gap-1"
+              className="flex flex-wrap sm:inline-flex w-full sm:w-auto rounded-xl border border-slate-200 bg-slate-100 p-1 gap-1"
             >
               <button
                 type="button"
                 role="radio"
                 aria-checked={briefKind === "MEDIA_IMAGE"}
                 onClick={() => setBriefKind("MEDIA_IMAGE")}
-                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs sm:text-sm font-extrabold transition cursor-pointer ${
+                className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-extrabold transition cursor-pointer whitespace-nowrap ${
                   briefKind === "MEDIA_IMAGE"
                     ? "bg-white text-blue-700 shadow-sm ring-1 ring-blue-200"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <ImageIcon className="w-4 h-4 text-blue-600" />
+                <ImageIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 shrink-0" />
                 <span>Brief Ảnh</span>
-                <span className="rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[11px] font-bold">
+                <span className="rounded-full bg-blue-50 text-blue-700 px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-[11px] font-bold">
                   {imageCount}
                 </span>
               </button>
@@ -378,15 +378,15 @@ export function MediaBriefBoard({
                 role="radio"
                 aria-checked={briefKind === "MEDIA_VIDEO"}
                 onClick={() => setBriefKind("MEDIA_VIDEO")}
-                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs sm:text-sm font-extrabold transition cursor-pointer ${
+                className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-extrabold transition cursor-pointer whitespace-nowrap ${
                   briefKind === "MEDIA_VIDEO"
                     ? "bg-white text-violet-700 shadow-sm ring-1 ring-violet-200"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <Film className="w-4 h-4 text-violet-600" />
+                <Film className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-violet-600 shrink-0" />
                 <span>Brief Video</span>
-                <span className="rounded-full bg-violet-50 text-violet-700 px-2 py-0.5 text-[11px] font-bold">
+                <span className="rounded-full bg-violet-50 text-violet-700 px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-[11px] font-bold">
                   {videoCount}
                 </span>
               </button>
@@ -396,14 +396,14 @@ export function MediaBriefBoard({
                 role="radio"
                 aria-checked={briefKind === "OUTSIDE_TEAM"}
                 onClick={() => setBriefKind("OUTSIDE_TEAM")}
-                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs sm:text-sm font-extrabold transition cursor-pointer ${
+                className={`w-full sm:w-auto inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-extrabold transition cursor-pointer whitespace-nowrap ${
                   briefKind === "OUTSIDE_TEAM"
                     ? "bg-white text-amber-800 shadow-sm ring-1 ring-amber-300"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 <span>📋 Đơn Ngoài Team</span>
-                <span className="rounded-full bg-amber-50 text-amber-800 px-2 py-0.5 text-[11px] font-bold">
+                <span className="rounded-full bg-amber-50 text-amber-800 px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-[11px] font-bold">
                   {outsideCount}
                 </span>
               </button>

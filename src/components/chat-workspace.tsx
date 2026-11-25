@@ -668,17 +668,21 @@ export function ChatWorkspace({
   }, [rooms, filterTab, searchQuery, getRoomDisplayTitle]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-amber-100 border-2 border-amber-300 flex items-center justify-center shrink-0">
-            <DenDenMushiIcon className="w-7 h-7" />
+    <div className="space-y-2 sm:space-y-3">
+      <div
+        className={`${
+          mobileShowChat ? "hidden md:flex" : "flex"
+        } items-center justify-between gap-2`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-100 border-2 border-amber-300 flex items-center justify-center shrink-0">
+            <DenDenMushiIcon className="w-6 h-6 sm:w-7 sm:h-7" />
           </div>
-          <div>
-            <h1 className="text-lg sm:text-xl font-black text-slate-900">
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-xl font-black text-slate-900 truncate">
               💬 Ốc Sên Chat Nội Bộ
             </h1>
-            <p className="text-xs text-slate-500">
+            <p className="hidden sm:block text-xs text-slate-500">
               Nhắn riêng 1-1, lập nhóm dự án hoặc bật{" "}
               <strong className="text-indigo-700">🕵️ Chế độ Ẩn danh</strong> góp ý bảo mật
             </p>
@@ -688,14 +692,21 @@ export function ChatWorkspace({
         <button
           type="button"
           onClick={() => setCreateGroupOpen(true)}
-          className="rounded-2xl bg-gradient-to-r from-red-500 to-amber-500 hover:from-red-600 hover:to-amber-600 text-white px-4 py-2 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 shadow-sm transition hover:-translate-y-0.5 cursor-pointer"
+          className="rounded-2xl bg-gradient-to-r from-red-500 to-amber-500 hover:from-red-600 hover:to-amber-600 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 shadow-sm transition hover:-translate-y-0.5 cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4" />
-          Tạo nhóm chat
+          <span>Tạo nhóm</span>
+          <span className="hidden sm:inline">chat</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl border-2 border-amber-200/80 shadow-sm overflow-hidden grid grid-cols-1 md:grid-cols-12 h-[calc(100vh-195px)] min-h-[520px]">
+      <div
+        className={`bg-white rounded-2xl border-2 border-amber-200/80 shadow-sm overflow-hidden grid grid-cols-1 md:grid-cols-12 md:h-[calc(100vh-195px)] md:min-h-[520px] ${
+          mobileShowChat
+            ? "h-[calc(100dvh-184px)]"
+            : "h-[calc(100dvh-232px)]"
+        }`}
+      >
         <ChatRoomsSidebar
           teammates={teammates}
           filteredRooms={filteredRooms}
@@ -767,27 +778,30 @@ export function ChatWorkspace({
                   onSelectSticker={handleSendSticker}
                 />
 
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex items-center justify-between gap-1.5 mb-2">
+                  <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar min-w-0">
                     {activeRoom.allowAnonymous && (
                       <button
                         type="button"
                         onClick={() => setAnonymousMode((v) => !v)}
-                        className={`rounded-full px-3 py-1 text-[11px] font-bold inline-flex items-center gap-1.5 border transition cursor-pointer ${
+                        className={`rounded-full px-2 sm:px-3 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
                           anonymousMode
                             ? "bg-indigo-900 text-amber-300 border-indigo-700 shadow-sm"
                             : "bg-white text-slate-700 border-amber-200 hover:border-indigo-400"
                         }`}
+                        title="Bật/tắt chế độ gửi ẩn danh"
                       >
                         {anonymousMode ? (
                           <>
                             <EyeOff className="w-3.5 h-3.5" />
-                            🕵️ Đang bật Ẩn danh
+                            <span className="sm:hidden">Ẩn danh</span>
+                            <span className="hidden sm:inline">🕵️ Đang bật Ẩn danh</span>
                           </>
                         ) : (
                           <>
                             <Eye className="w-3.5 h-3.5 text-slate-500" />
-                            Gửi Ẩn danh
+                            <span className="sm:hidden">Ẩn danh</span>
+                            <span className="hidden sm:inline">Gửi Ẩn danh</span>
                           </>
                         )}
                       </button>
@@ -797,19 +811,24 @@ export function ChatWorkspace({
                       <select
                         value={anonymousAlias}
                         onChange={(e) => setAnonymousAlias(e.target.value)}
-                        className="rounded-full border border-indigo-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-indigo-900 focus:outline-none"
+                        className="rounded-full border border-indigo-300 bg-white px-2 py-1 text-[11px] font-semibold text-indigo-900 focus:outline-none shrink-0 max-w-[130px] sm:max-w-none"
                       >
                         {STEALTH_ALIASES.map((alias) => (
                           <option key={alias} value={alias}>
-                            Biệt danh: {alias}
+                            {alias}
                           </option>
                         ))}
                       </select>
                     )}
 
-                    <label className="rounded-full px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer">
-                      <ImagePlus className="w-3 h-3 text-emerald-600" />
-                      {uploadingImage ? "Đang nén..." : "Gửi Ảnh"}
+                    <label
+                      title="Gửi ảnh từ máy"
+                      className="rounded-full p-1.5 sm:px-2.5 sm:py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer shrink-0"
+                    >
+                      <ImagePlus className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="hidden sm:inline">
+                        {uploadingImage ? "Đang nén..." : "Gửi Ảnh"}
+                      </span>
                       <input
                         type="file"
                         accept="image/*"
@@ -830,27 +849,29 @@ export function ChatWorkspace({
                         );
                         chatInputRef.current?.focus();
                       }}
-                      className="rounded-full px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer"
+                      title="Nhắc tên đồng đội (@)"
+                      className="rounded-full p-1.5 sm:px-2.5 sm:py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer shrink-0"
                     >
-                      <AtSign className="w-3 h-3 text-violet-600" />
-                      @Tag tên
+                      <AtSign className="w-3.5 h-3.5 text-violet-600" />
+                      <span className="hidden sm:inline">@Tag tên</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setShowLinkInput((v) => !v)}
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border cursor-pointer ${
+                      title="Đính kèm link"
+                      className={`rounded-full p-1.5 sm:px-2.5 sm:py-1 text-[11px] font-semibold inline-flex items-center gap-1 border cursor-pointer shrink-0 ${
                         showLinkInput
                           ? "bg-sky-50 border-sky-300 text-sky-700"
                           : "bg-white border-amber-200 text-slate-600 hover:bg-amber-50"
                       }`}
                     >
-                      <Link2 className="w-3 h-3" />
-                      Gắn Link
+                      <Link2 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Gắn Link</span>
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <div className="hidden xl:flex items-center gap-0.5 mr-1">
                       {QUICK_EMOJIS.map((em) => (
                         <button
@@ -875,7 +896,7 @@ export function ChatWorkspace({
                           setPickerOpen(true);
                         }
                       }}
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer ${
+                      className={`rounded-full px-2 sm:px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
                         pickerOpen && pickerTab === "EMOJI"
                           ? "bg-amber-100 border-amber-400 text-amber-950"
                           : "bg-white border-amber-200 text-slate-700 hover:bg-amber-50"
@@ -883,7 +904,7 @@ export function ChatWorkspace({
                       title="Mở kho biểu tượng cảm xúc đầy đủ"
                     >
                       <Smile className="w-3.5 h-3.5 text-amber-500" />
-                      Emoji
+                      <span className="hidden sm:inline">Emoji</span>
                     </button>
 
                     <button
@@ -896,7 +917,7 @@ export function ChatWorkspace({
                           setPickerOpen(true);
                         }
                       }}
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer ${
+                      className={`rounded-full px-2 sm:px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
                         pickerOpen && pickerTab === "STICKER"
                           ? "bg-[#0B2545] border-[#0B2545] text-amber-300"
                           : "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100"
@@ -904,7 +925,7 @@ export function ChatWorkspace({
                       title="Mở kho Sticker & tự thêm Sticker"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      Sticker
+                      <span>Sticker</span>
                     </button>
                   </div>
                 </div>
@@ -1005,10 +1026,10 @@ export function ChatWorkspace({
                     }}
                     placeholder={
                       anonymousMode && activeRoom.allowAnonymous
-                        ? "Nhập tin nhắn ẩn danh... (có thể @tag tên hoặc Ctrl+V dán ảnh)"
-                        : `Nhắn tới ${getRoomDisplayTitle(activeRoom)}... (gõ @ để tag tên, Ctrl+V dán ảnh)`
+                        ? "Nhập tin nhắn ẩn danh..."
+                        : `Nhắn tới ${getRoomDisplayTitle(activeRoom)}...`
                     }
-                    className={`flex-1 resize-none rounded-2xl border px-3.5 py-2.5 text-xs sm:text-sm bg-white focus:outline-none ${
+                    className={`flex-1 min-h-[40px] max-h-28 resize-none rounded-2xl border px-3.5 py-2.5 text-xs sm:text-sm leading-snug bg-white focus:outline-none ${
                       anonymousMode && activeRoom.allowAnonymous
                         ? "border-indigo-300 focus:border-indigo-500"
                         : "border-amber-200 focus:border-sky-400"

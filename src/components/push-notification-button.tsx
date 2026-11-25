@@ -169,7 +169,9 @@ export function PushNotificationButton({ compact = false }: { compact?: boolean 
             <Smartphone className="w-3.5 h-3.5" />
           )}
           {compact ? (
-            <span>{subscribed ? "Đã bật Push" : "Bật Push ĐT"}</span>
+            <span className="hidden sm:inline">
+              {subscribed ? "Đã bật Push" : "Bật Push ĐT"}
+            </span>
           ) : (
             <span>
               {subscribed
@@ -213,8 +215,8 @@ export function PushNotificationButton({ compact = false }: { compact?: boolean 
                 </p>
                 <p>
                   • <strong>iPhone (iOS 16.4+ Safari):</strong> Bấm biểu tượng{" "}
-                  <strong>Chia sẻ (⬆️)</strong> $\rightarrow${" "}
-                  <strong>Thêm vào Màn hình chính</strong> $\rightarrow$ Mở app từ màn hình chính rồi bấm <em>Bật thông báo ngay</em>.
+                  <strong>Chia sẻ (⬆️)</strong> →{" "}
+                  <strong>Thêm vào Màn hình chính</strong> → Mở app từ màn hình chính rồi bấm <em>Bật thông báo ngay</em>.
                 </p>
               </div>
 

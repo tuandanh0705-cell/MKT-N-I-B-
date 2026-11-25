@@ -104,25 +104,25 @@ export function MotivationalQuoteWidget({
         compact ? "p-3.5" : "p-4 sm:p-5"
       } shadow-sm`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0 flex-1">
-          <div className="w-9 h-9 rounded-xl bg-[#0B2545] text-amber-300 flex items-center justify-center shrink-0 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#0B2545] text-amber-300 flex items-center justify-center shrink-0 shadow-sm">
             <Sparkles className="w-4 h-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-800">
                 ⚡ Góc Quotes Động Lực Hôm Nay
               </span>
               {current?.isPinned && (
-                <span className="rounded-full bg-amber-200/80 text-amber-900 px-2 py-0.5 text-[10px] font-bold">
+                <span className="rounded-full bg-amber-200/80 text-amber-900 px-2 py-0.5 text-[10px] font-bold whitespace-nowrap shrink-0">
                   📌 Đang ghim
                 </span>
               )}
             </div>
             {current ? (
               <div className="mt-1 space-y-0.5">
-                <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
+                <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug break-words">
                   &ldquo;{current.content}&rdquo;
                 </p>
                 <div className="text-[11px] text-slate-600 font-medium">
@@ -138,7 +138,7 @@ export function MotivationalQuoteWidget({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center justify-end gap-1.5 shrink-0 pt-2 sm:pt-0 border-t border-amber-200/60 sm:border-t-0">
           {current && (
             <>
               <button

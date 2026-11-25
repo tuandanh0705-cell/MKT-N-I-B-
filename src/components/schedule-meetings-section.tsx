@@ -298,7 +298,7 @@ export function ScheduleMeetingsSection({
               type="text"
               value={meetLocation}
               onChange={(e) => setMeetLocation(e.target.value)}
-              placeholder="VD: Phòng họp tầng 2 hoặc https://meet.google.com/..."
+              placeholder="VD: Phòng họp tầng 2 hoặc link Google Meet..."
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs"
             />
           </div>
@@ -317,11 +317,11 @@ export function ScheduleMeetingsSection({
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <label className="font-bold text-slate-700">
-                Mời thành viên tham gia ({selectedParticipantIds.length} đã chọn) *
+                Mời thành viên ({selectedParticipantIds.length} đã chọn) *
               </label>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() =>
@@ -331,14 +331,14 @@ export function ScheduleMeetingsSection({
                         .map((m) => m.id)
                     )
                   }
-                  className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+                  className="text-[11px] font-bold text-blue-600 hover:underline whitespace-nowrap cursor-pointer"
                 >
                   Chọn cả băng
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedParticipantIds([])}
-                  className="text-[11px] font-semibold text-slate-500 hover:underline cursor-pointer"
+                  className="text-[11px] font-semibold text-slate-500 hover:underline whitespace-nowrap cursor-pointer"
                 >
                   Bỏ chọn
                 </button>
@@ -398,7 +398,7 @@ export function ScheduleMeetingsSection({
           <div className="space-y-3 max-h-[650px] overflow-y-auto">
             {meetings.length === 0 ? (
               <p className="text-xs text-slate-400 italic py-10 text-center">
-                Chưa có buổi họp nào được đặt. Hãy dùng biểu mẫu bên trái để set lịch họp với nhau!
+                Chưa có buổi họp nào được đặt. Hãy điền biểu mẫu tạo lịch họp để gửi lời mời cho cả team!
               </p>
             ) : (
               meetings.map((m) => {

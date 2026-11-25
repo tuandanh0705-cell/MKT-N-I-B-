@@ -55,7 +55,7 @@ export function ChatRoomsSidebar({
         <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800/80 mb-2">
           Nhắn riêng 1-1 nhanh
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
           {teammates.map((member) => (
             <button
               key={member.id}

@@ -401,8 +401,10 @@ function ChatEmojiStickerPickerPanel({
   return (
     <div
       ref={panelRef}
-      className={`absolute bottom-full mb-2 z-50 w-[min(92vw,384px)] rounded-2xl border-2 border-amber-200 bg-white shadow-2xl overflow-hidden flex flex-col ${
-        align === "right" ? "right-0" : "left-0"
+      className={`absolute bottom-full mb-2 z-50 left-1.5 right-1.5 w-auto sm:w-[384px] rounded-2xl border-2 border-amber-200 bg-white shadow-2xl overflow-hidden flex flex-col ${
+        align === "right"
+          ? "sm:left-auto sm:right-0"
+          : "sm:left-0 sm:right-auto"
       }`}
     >
       {/* Header chọn Tab Emoji / Sticker */}
@@ -484,7 +486,7 @@ function ChatEmojiStickerPickerPanel({
 
           {/* Thanh danh mục Emoji */}
           {!emojiSearch.trim() && (
-            <div className="px-2 pb-1.5 border-b border-slate-100 flex items-center gap-0.5 overflow-x-auto">
+            <div className="px-2 pb-1.5 border-b border-slate-100 flex items-center gap-0.5 overflow-x-auto no-scrollbar">
               <button
                 type="button"
                 onClick={() => setEmojiCategory("recent")}
@@ -528,7 +530,7 @@ function ChatEmojiStickerPickerPanel({
           </div>
 
           {/* Lưới Emoji */}
-          <div className="h-60 overflow-y-auto px-2 pb-2.5">
+          <div className="h-52 sm:h-60 overflow-y-auto px-2 pb-2.5">
             {filteredEmojis.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center text-xs text-slate-400 px-4">
                 {emojiCategory === "recent" && !emojiSearch.trim()
@@ -536,7 +538,7 @@ function ChatEmojiStickerPickerPanel({
                   : `Không tìm thấy emoji khớp "${emojiSearch}".`}
               </div>
             ) : (
-              <div className="grid grid-cols-8 gap-0.5">
+              <div className="grid grid-cols-7 sm:grid-cols-8 gap-0.5">
                 {filteredEmojis.map((em) => (
                   <button
                     key={em}
@@ -580,7 +582,7 @@ function ChatEmojiStickerPickerPanel({
           </div>
 
           {/* Bộ lọc bộ sticker */}
-          <div className="px-2.5 pb-1.5 border-b border-slate-100 flex items-center gap-1 overflow-x-auto text-[11px]">
+          <div className="px-2.5 pb-1.5 border-b border-slate-100 flex items-center gap-1 overflow-x-auto no-scrollbar text-[11px]">
             <button
               type="button"
               onClick={() => setStickerPack("ALL")}
@@ -634,7 +636,7 @@ function ChatEmojiStickerPickerPanel({
           </div>
 
           {/* Lưới Sticker */}
-          <div className="h-64 overflow-y-auto p-2.5">
+          <div className="h-56 sm:h-64 overflow-y-auto p-2.5">
             {loadingStickers && customStickers.length === 0 && stickerPack === "CUSTOM" ? (
               <div className="h-full flex items-center justify-center text-xs text-slate-400">
                 Đang tải sticker tự thêm...
@@ -658,7 +660,7 @@ function ChatEmojiStickerPickerPanel({
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {displayedStickers.map((sticker) => {
                   const canDelete =
                     !sticker.isBuiltIn &&

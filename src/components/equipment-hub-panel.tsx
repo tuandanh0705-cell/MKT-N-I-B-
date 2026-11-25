@@ -315,7 +315,7 @@ export function EquipmentHubPanel({
                       <div className="text-[10px] font-mono text-slate-400 font-bold">
                         {eq.code}
                       </div>
-                      <div className="text-sm font-bold text-slate-900 truncate">
+                      <div className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug">
                         {eq.name}
                       </div>
                     </div>
@@ -430,7 +430,88 @@ export function EquipmentHubPanel({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Giao diện Mobile dạng thẻ theo từng máy — không cần kéo ngang 900px */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {equipment.map((eq) => {
+            const cat =
+              EQUIPMENT_CATEGORY_META[eq.category] ||
+              EQUIPMENT_CATEGORY_META.OTHER;
+            const weekStartMs = weekDays[0]?.startMs ?? 0;
+            const weekEndMs = weekDays[6]?.endMs ?? 0;
+            const eqWeekBookings = bookings
+              .filter((b) => {
+                if (b.equipmentId !== eq.id || b.status === "CANCELLED") {
+                  return false;
+                }
+                const bStart = new Date(b.startAt).getTime();
+                const bEnd = new Date(b.endAt).getTime();
+                return bStart <= weekEndMs && bEnd >= weekStartMs;
+              })
+              .sort(
+                (a, b) =>
+                  new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+              );
+
+            return (
+              <div key={eq.id} className="p-3.5 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-900">
+                      <span>{cat.emoji}</span>
+                      <span className="leading-snug">{eq.name}</span>
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                      {eq.code} •{" "}
+                      {eq.status === "MAINTENANCE" ? "Bảo trì" : "Sẵn sàng"}
+                    </div>
+                  </div>
+                  {eq.status !== "MAINTENANCE" && (
+                    <button
+                      type="button"
+                      onClick={() => quickPickEquipmentDay(eq.id, todayStr)}
+                      className="rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1 text-[11px] font-bold shrink-0 cursor-pointer"
+                    >
+                      + Đặt máy
+                    </button>
+                  )}
+                </div>
+
+                {eqWeekBookings.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-400">
+                    Trống cả tuần này — sẵn sàng đặt mượn.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {eqWeekBookings.map((b) => (
+                      <div
+                        key={b.id}
+                        className={`rounded-xl border px-3 py-2 text-xs flex items-center justify-between gap-2 ${
+                          b.status === "RETURNED"
+                            ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                            : "bg-sky-50 border-sky-200 text-sky-950"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold truncate">
+                            {b.user.name}
+                            {b.project ? ` • ${b.project.name}` : ""}
+                          </div>
+                          <div className="text-[11px] opacity-80 truncate">
+                            {formatVnDateTime(b.startAt)} →{" "}
+                            {formatTimeShort(b.endAt)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Giao diện Desktop dạng bảng Gantt 7 ngày */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full border-collapse text-xs min-w-[900px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">

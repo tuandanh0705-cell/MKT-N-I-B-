@@ -493,46 +493,49 @@ export function AppShell({
         </div>
       )}
 
-      <div className="flex-1 min-w-0 flex flex-col pb-20 md:pb-6">
-        <header className="sticky top-0 z-30 bg-[#FFFDF7]/90 backdrop-blur border-b border-amber-200/70 px-4 sm:px-6 h-14 flex items-center justify-between gap-3 print:hidden">
-          <div className="flex items-center gap-3 min-w-0">
+      <div className="flex-1 min-w-0 flex flex-col pb-24 md:pb-6">
+        <header className="sticky top-0 z-30 bg-[#FFFDF7]/95 backdrop-blur border-b border-amber-200/70 px-3 sm:px-6 h-14 flex items-center justify-between gap-2 sm:gap-3 print:hidden">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 -ml-2 rounded-lg text-slate-700 hover:bg-amber-100/60"
+              aria-label="Mở menu điều hướng"
+              className="md:hidden p-2 -ml-1.5 rounded-xl text-slate-700 hover:bg-amber-100/60 shrink-0 cursor-pointer"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <button
                 type="button"
                 onClick={() => setAccountModalTab("PROFILE")}
                 title="Mở cài đặt tài khoản cá nhân"
-                className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold border bg-amber-50 hover:bg-amber-100 text-slate-900 border-amber-200 shrink-0 transition cursor-pointer"
+                className="inline-flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-0.5 text-[11px] font-bold border bg-amber-50 hover:bg-amber-100 text-slate-900 border-amber-200 shrink-0 max-w-[110px] sm:max-w-none truncate transition cursor-pointer"
               >
-                {liveUser.preferredIcon || pirateRank.emoji} {liveUser.name}
+                <span className="shrink-0">{liveUser.preferredIcon || pirateRank.emoji}</span>
+                <span className="truncate">{liveUser.name}</span>
               </button>
-              <span className="hidden sm:inline text-xs font-bold text-slate-700 truncate">
+              <span className="text-xs font-bold text-slate-700 truncate">
                 {activePageTitle}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 relative">
+          <div className="flex items-center gap-1.5 sm:gap-2 relative shrink-0">
             <PushNotificationButton compact />
             <button
               type="button"
               onClick={() => setAccountModalTab("PROFILE")}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-white hover:bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-white hover:bg-amber-50 p-2 sm:px-2.5 sm:py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
               title="Đổi Tên, Tài khoản, Mật khẩu & Cá nhân hóa"
+              aria-label="Cài đặt tài khoản cá nhân"
             >
-              <UserCog className="w-3.5 h-3.5 text-amber-600" />
+              <UserCog className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-600" />
               <span className="hidden sm:inline">Tài khoản</span>
             </button>
             <button
               type="button"
               onClick={() => setBellOpen((prev) => !prev)}
-              className="relative px-2.5 py-1.5 rounded-2xl border border-amber-200 bg-white hover:bg-amber-50 transition cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+              className="relative px-2 sm:px-2.5 py-1.5 rounded-2xl border border-amber-200 bg-white hover:bg-amber-50 transition cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
               aria-label="Ốc sên truyền tin"
               title="Den Den Mushi — Thông báo"
             >
@@ -553,7 +556,7 @@ export function AppShell({
                   className="fixed inset-0 z-30"
                   onClick={() => setBellOpen(false)}
                 />
-                <div className="absolute right-0 top-12 w-80 sm:w-96 bg-white rounded-2xl border-2 border-amber-200 shadow-xl z-40 overflow-hidden">
+                <div className="fixed left-3 right-3 top-15 sm:left-auto sm:right-0 sm:top-12 sm:absolute sm:w-96 bg-white rounded-2xl border-2 border-amber-200 shadow-xl z-40 overflow-hidden">
                   <div className="px-4 py-3 border-b border-amber-100 bg-amber-50/50 flex items-center justify-between">
                     <span className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
                       <DenDenMushiIcon className="w-4 h-4" />
@@ -614,7 +617,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6 max-w-[1440px] w-full mx-auto">
+        <main className="flex-1 p-3 sm:p-6 max-w-[1440px] w-full mx-auto">
           {children}
         </main>
       </div>
@@ -641,15 +644,15 @@ export function AppShell({
 
       {/* Mobile Bottom Navigation */}
       <nav
-        className={`md:hidden fixed bottom-0 inset-x-0 z-30 bg-[#FFFDF7] border-t border-amber-200 ${
+        className={`md:hidden fixed bottom-0 inset-x-0 z-30 bg-[#FFFDF7]/95 backdrop-blur border-t border-amber-200 shadow-[0_-2px_10px_rgba(15,23,42,0.06)] ${
           isMediaProduction ? "grid grid-cols-5" : "grid grid-cols-6"
-        } h-16 px-1 print:hidden`}
+        } min-h-16 pt-1.5 pb-safe px-1 print:hidden`}
       >
         <Link
           href={user.role === "LEADER" ? "/leader" : "/my-work"}
-          className={`flex flex-col items-center justify-center gap-1 text-[10px] font-semibold ${
+          className={`flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold rounded-xl py-1 transition ${
             pathname === "/leader" || pathname === "/my-work"
-              ? "text-red-600"
+              ? "text-red-600 bg-amber-100/70 font-bold"
               : "text-slate-500"
           }`}
         >
@@ -658,19 +661,23 @@ export function AppShell({
           ) : (
             <CheckSquare className="w-4 h-4" />
           )}
-          <span>{user.role === "LEADER" ? "Boong tàu" : "Hải trình"}</span>
+          <span className="truncate max-w-full px-0.5">
+            {user.role === "LEADER" ? "Boong tàu" : "Hải trình"}
+          </span>
         </Link>
 
         <Link
           href="/chat"
-          className={`relative flex flex-col items-center justify-center gap-1 text-[10px] font-semibold ${
-            pathname === "/chat" ? "text-red-600" : "text-slate-500"
+          className={`relative flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold rounded-xl py-1 transition ${
+            pathname === "/chat"
+              ? "text-red-600 bg-amber-100/70 font-bold"
+              : "text-slate-500"
           }`}
         >
           <MessageCircle className="w-4 h-4" />
-          <span>Chat</span>
+          <span className="truncate max-w-full px-0.5">Chat</span>
           {chatUnread > 0 && (
-            <span className="absolute top-1 right-2 rounded-full bg-rose-600 text-white text-[9px] font-bold px-1.5">
+            <span className="absolute top-0.5 right-1.5 rounded-full bg-rose-600 text-white text-[9px] font-bold px-1.5 leading-tight">
               {chatUnread}
             </span>
           )}
@@ -680,25 +687,33 @@ export function AppShell({
           <button
             type="button"
             onClick={() => setMobileMenuOpen(true)}
-            className={`flex flex-col items-center justify-center gap-1 text-[10px] font-semibold ${
-              pathname.startsWith("/projects") ? "text-red-600" : "text-slate-500"
+            className={`flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold rounded-xl py-1 transition cursor-pointer ${
+              pathname.startsWith("/projects")
+                ? "text-red-600 bg-amber-100/70 font-bold"
+                : "text-slate-500"
             }`}
           >
             <MapIcon className="w-4 h-4" />
-            <span>Hải đồ ({projects.length})</span>
+            <span className="truncate max-w-full px-0.5">
+              Hải đồ ({projects.length})
+            </span>
           </button>
         )}
 
         <Link
           href="/outputs"
-          className={`relative flex flex-col items-center justify-center gap-1 text-[10px] font-semibold ${
-            pathname === "/outputs" ? "text-red-600" : "text-slate-500"
+          className={`relative flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold rounded-xl py-1 transition ${
+            pathname === "/outputs"
+              ? "text-red-600 bg-amber-100/70 font-bold"
+              : "text-slate-500"
           }`}
         >
           <FolderCheck className="w-4 h-4" />
-          <span>{user.role === "LEADER" ? "Duyệt QC" : "Output"}</span>
+          <span className="truncate max-w-full px-0.5">
+            {user.role === "LEADER" ? "Duyệt QC" : "Output"}
+          </span>
           {user.role === "LEADER" && pendingReviewsCount > 0 && (
-            <span className="absolute top-1 right-2 rounded-full bg-rose-600 text-white text-[9px] font-bold px-1.5">
+            <span className="absolute top-0.5 right-1.5 rounded-full bg-rose-600 text-white text-[9px] font-bold px-1.5 leading-tight">
               {pendingReviewsCount}
             </span>
           )}
@@ -706,22 +721,26 @@ export function AppShell({
 
         <Link
           href="/reports"
-          className={`flex flex-col items-center justify-center gap-1 text-[10px] font-semibold ${
-            pathname === "/reports" ? "text-red-600" : "text-slate-500"
+          className={`flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold rounded-xl py-1 transition ${
+            pathname === "/reports"
+              ? "text-red-600 bg-amber-100/70 font-bold"
+              : "text-slate-500"
           }`}
         >
           <ScrollText className="w-4 h-4" />
-          <span>Tổng kết</span>
+          <span className="truncate max-w-full px-0.5">Báo cáo</span>
         </Link>
 
         <Link
           href="/budgets"
-          className={`flex flex-col items-center justify-center gap-1 text-[10px] font-semibold ${
-            pathname === "/budgets" ? "text-red-600" : "text-slate-500"
+          className={`flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold rounded-xl py-1 transition ${
+            pathname === "/budgets"
+              ? "text-red-600 bg-amber-100/70 font-bold"
+              : "text-slate-500"
           }`}
         >
           <Coins className="w-4 h-4" />
-          <span>Ngân sách</span>
+          <span className="truncate max-w-full px-0.5">Ngân sách</span>
         </Link>
       </nav>
     </div>

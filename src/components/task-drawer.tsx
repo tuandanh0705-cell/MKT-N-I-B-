@@ -328,7 +328,7 @@ function TaskDrawerInner({
     <div
       className={
         useCenteredPopup
-          ? "fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5"
+          ? "fixed inset-0 z-50 flex items-center justify-center p-1.5 sm:p-5"
           : "fixed inset-0 z-50 flex justify-end"
       }
     >
@@ -339,12 +339,12 @@ function TaskDrawerInner({
       <div
         className={
           useCenteredPopup
-            ? "relative z-10 w-full max-w-6xl h-[92vh] bg-white rounded-2xl shadow-2xl border-2 border-amber-200/80 flex flex-col overflow-hidden"
+            ? "relative z-10 w-full max-w-6xl h-[95dvh] sm:h-[92vh] bg-white rounded-2xl shadow-2xl border-2 border-amber-200/80 flex flex-col overflow-hidden"
             : "relative z-10 w-full max-w-2xl bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col"
         }
       >
         {/* Top Bar */}
-        <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
+        <div className="px-3.5 sm:px-5 py-2.5 sm:py-3 border-b border-slate-200 flex items-center justify-between gap-2">
           {task ? (
             <div className="flex items-center gap-2 flex-wrap min-w-0">
               <span className="font-mono text-xs font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
@@ -434,7 +434,7 @@ function TaskDrawerInner({
 
         {/* 4-Tab Strip */}
         {task && !loading && (
-          <div className="px-5 py-2 border-b border-slate-200 bg-slate-50/70 flex items-center gap-1.5 overflow-x-auto">
+          <div className="px-3 sm:px-5 py-2 border-b border-slate-200 bg-slate-50/70 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             <button
               type="button"
               onClick={() => setActiveTab("OVERVIEW")}
@@ -519,7 +519,7 @@ function TaskDrawerInner({
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4">
           {loading && (
             <div className="py-12 text-center text-sm text-slate-500">
               Đang tải thông tin công việc...
