@@ -5,6 +5,7 @@ import {
   buildProjectVisibilityWhere,
   canAccessProject,
 } from "@/lib/permissions";
+import { isMediaProductionUser } from "@/lib/constants";
 import type { ResourceCategory, ResourceScope } from "@/generated/prisma/client";
 
 async function ensureStarterResources(userId: string) {
@@ -75,10 +76,23 @@ export async function GET(request: Request) {
 
   await ensureStarterResources(user.id);
 
+  const canSeeAllProjectResources =
+    user.role === "LEADER" ||
+    isMediaProductionUser(user.role, user.departmentScope);
+
   const visibleProjects = await prisma.project.findMany({
-    where: buildProjectVisibilityWhere(user),
+    where: canSeeAllProjectResources
+      ? { isActive: true }
+      : buildProjectVisibilityWhere(user),
     orderBy: { createdAt: "asc" },
-    select: { id: true, slug: true, name: true, color: true },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      color: true,
+      masterResourceUrl: true,
+      masterResourceNote: true,
+    },
   });
   const visibleProjectIds = visibleProjects.map((p) => p.id);
 
@@ -142,7 +156,9 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-      const allowed = await canAccessProject(user, projectId);
+      const allowed =
+        isMediaProductionUser(user.role, user.departmentScope) ||
+        (await canAccessProject(user, projectId));
       if (!allowed) {
         return NextResponse.json(
           { error: "Bạn không có quyền thêm tài nguyên vào dự án này." },
@@ -196,7 +212,9 @@ export async function PATCH(request: Request) {
     }
 
     if (existing.projectId) {
-      const allowed = await canAccessProject(user, existing.projectId);
+      const allowed =
+        isMediaProductionUser(user.role, user.departmentScope) ||
+        (await canAccessProject(user, existing.projectId));
       if (!allowed) {
         return NextResponse.json({ error: "Không có quyền sửa." }, { status: 403 });
       }

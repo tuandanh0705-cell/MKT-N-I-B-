@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { buildProjectVisibilityWhere } from "@/lib/permissions";
+import { isMediaProductionUser } from "@/lib/constants";
 import { getVnDateString } from "@/lib/dates";
 import { ResourcesHubView } from "@/components/resources-hub-view";
 
@@ -15,10 +16,23 @@ export default async function ResourcesPage({
 
   const { projectId, tab } = await searchParams;
 
+  const canSeeAllProjectResources =
+    user.role === "LEADER" ||
+    isMediaProductionUser(user.role, user.departmentScope);
+
   const projects = await prisma.project.findMany({
-    where: buildProjectVisibilityWhere(user),
+    where: canSeeAllProjectResources
+      ? { isActive: true }
+      : buildProjectVisibilityWhere(user),
     orderBy: { createdAt: "asc" },
-    select: { id: true, slug: true, name: true, color: true },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      color: true,
+      masterResourceUrl: true,
+      masterResourceNote: true,
+    },
   });
 
   const visibleProjectIds = projects.map((p) => p.id);

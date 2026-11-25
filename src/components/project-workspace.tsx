@@ -13,6 +13,8 @@ import {
   Camera,
   TableProperties,
   PenLine,
+  Link2,
+  ExternalLink,
 } from "lucide-react";
 import { CreateTaskModal } from "@/components/create-task-modal";
 import {
@@ -368,6 +370,19 @@ export function ProjectWorkspace({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {project.masterResourceUrl && (
+              <a
+                href={project.masterResourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={project.masterResourceNote || project.masterResourceUrl}
+                className="rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 px-3 py-2 text-xs font-semibold inline-flex items-center gap-1.5"
+              >
+                <Link2 className="w-4 h-4" />
+                Link Tổng Dự Án
+                <ExternalLink className="w-3.5 h-3.5 opacity-75" />
+              </a>
+            )}
             <Link
               href={`/resources?projectId=${project.id}`}
               className="rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 px-3 py-2 text-xs font-semibold inline-flex items-center gap-1.5"

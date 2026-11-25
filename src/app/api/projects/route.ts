@@ -2,6 +2,39 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { buildProjectVisibilityWhere, canAccessProject } from "@/lib/permissions";
+import { isMediaProductionUser } from "@/lib/constants";
+
+function normalizeMasterLinkUrl(
+  raw: unknown
+): { ok: true; url: string | null } | { ok: false; error: string } {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return { ok: true, url: null };
+
+  const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed);
+  const candidate = hasScheme ? trimmed : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return {
+        ok: false,
+        error: "Link tổng dự án chỉ hỗ trợ đường dẫn http:// hoặc https://.",
+      };
+    }
+    if (!parsed.hostname || !parsed.hostname.includes(".")) {
+      return {
+        ok: false,
+        error: "Link tổng dự án chưa đúng định dạng (VD: https://drive.google.com/...).",
+      };
+    }
+    return { ok: true, url: parsed.toString() };
+  } catch {
+    return {
+      ok: false,
+      error: "Link tổng dự án chưa đúng định dạng (VD: https://drive.google.com/...).",
+    };
+  }
+}
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -68,6 +101,13 @@ export async function POST(request: Request) {
       : `${baseSlug || "du-an"}-${Date.now().toString(36).slice(-4)}`;
 
     const memberIds: string[] = Array.isArray(body.memberIds) ? body.memberIds : [];
+    const parsedMasterUrl = normalizeMasterLinkUrl(body.masterResourceUrl);
+    if (!parsedMasterUrl.ok) {
+      return NextResponse.json({ error: parsedMasterUrl.error }, { status: 400 });
+    }
+    const masterResourceNote = parsedMasterUrl.url && body.masterResourceNote
+      ? String(body.masterResourceNote).trim().slice(0, 160) || null
+      : null;
 
     const created = await prisma.project.create({
       data: {
@@ -75,6 +115,8 @@ export async function POST(request: Request) {
         name,
         description: body.description ? String(body.description) : null,
         channelSummary: body.channelSummary ? String(body.channelSummary) : null,
+        masterResourceUrl: parsedMasterUrl.url,
+        masterResourceNote,
         weeklySocialTarget: Number(body.weeklySocialTarget || 0),
         weeklyAdsTarget: Number(body.weeklyAdsTarget || 0),
         weeklyVideoTarget: Number(body.weeklyVideoTarget || 0),
@@ -132,7 +174,20 @@ export async function PATCH(request: Request) {
     }
 
     if (!editingCoreFields) {
-      const allowed = await canAccessProject(user, id);
+      const editingOnlyMasterLink =
+        (body.masterResourceUrl !== undefined ||
+          body.masterResourceNote !== undefined) &&
+        body.campaignStartAt === undefined &&
+        body.campaignEndAt === undefined &&
+        body.campaignWeeks === undefined &&
+        body.contentPillarsJson === undefined &&
+        body.overviewJson === undefined &&
+        body.contentMatrixJson === undefined;
+
+      const allowed =
+        (editingOnlyMasterLink &&
+          isMediaProductionUser(user.role, user.departmentScope)) ||
+        (await canAccessProject(user, id));
       if (!allowed) {
         return NextResponse.json(
           { error: "Bạn không có quyền chỉnh sửa kế hoạch dự án này." },
@@ -150,6 +205,20 @@ export async function PATCH(request: Request) {
     }
     if (body.channelSummary !== undefined) {
       data.channelSummary = body.channelSummary ? String(body.channelSummary) : null;
+    }
+    if (body.masterResourceUrl !== undefined) {
+      const parsedMasterUrl = normalizeMasterLinkUrl(body.masterResourceUrl);
+      if (!parsedMasterUrl.ok) {
+        return NextResponse.json({ error: parsedMasterUrl.error }, { status: 400 });
+      }
+      data.masterResourceUrl = parsedMasterUrl.url;
+      if (!parsedMasterUrl.url && body.masterResourceNote === undefined) {
+        data.masterResourceNote = null;
+      }
+    }
+    if (body.masterResourceNote !== undefined) {
+      const note = String(body.masterResourceNote ?? "").trim();
+      data.masterResourceNote = note ? note.slice(0, 160) : null;
     }
     if (body.weeklySocialTarget !== undefined) {
       data.weeklySocialTarget = Math.max(0, Number(body.weeklySocialTarget));

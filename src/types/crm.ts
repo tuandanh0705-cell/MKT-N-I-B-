@@ -49,6 +49,8 @@ export interface SimpleProject {
   name: string;
   description?: string | null;
   channelSummary?: string | null;
+  masterResourceUrl?: string | null;
+  masterResourceNote?: string | null;
   weeklySocialTarget?: number;
   weeklyAdsTarget?: number;
   weeklyVideoTarget?: number;

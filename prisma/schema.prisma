@@ -258,6 +258,8 @@ model Project {
   name               String
   description        String?
   channelSummary     String?
+  masterResourceUrl  String?
+  masterResourceNote String?
   weeklySocialTarget Int      @default(0)
   weeklyAdsTarget    Int      @default(0)
   weeklyVideoTarget  Int      @default(0)

@@ -13,6 +13,8 @@ import {
   X,
   FolderKanban,
   Camera,
+  Link2,
+  Unlink,
 } from "lucide-react";
 import type { AuthUser } from "@/lib/auth";
 import { RESOURCE_CATEGORY_META } from "@/lib/constants";
@@ -162,11 +164,12 @@ export function ResourcesHubView({
   );
   const [resources, setResources] =
     useState<WorkspaceResourceItem[]>(initialResources);
+  const [projectList, setProjectList] = useState<SimpleProject[]>(projects);
   const [sectionFilter, setSectionFilter] = useState(initialProjectFilter);
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
 
-  // Form thêm / sửa
+  // Form thêm / sửa tài nguyên chi tiết
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<WorkspaceResourceItem | null>(null);
   const [scope, setScope] = useState<ResourceScope>("PROJECT");
@@ -177,6 +180,13 @@ export function ResourcesHubView({
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Modal gắn / sửa Link tổng dự án
+  const [masterLinkProject, setMasterLinkProject] =
+    useState<SimpleProject | null>(null);
+  const [masterLinkUrl, setMasterLinkUrl] = useState("");
+  const [masterLinkNote, setMasterLinkNote] = useState("");
+  const [savingMasterLink, setSavingMasterLink] = useState(false);
 
   const [deleteTarget, setDeleteTarget] =
     useState<WorkspaceResourceItem | null>(null);
@@ -203,15 +213,70 @@ export function ResourcesHubView({
   const visibleProjectsList = useMemo(() => {
     if (sectionFilter === "GLOBAL") return [];
     if (sectionFilter !== "ALL" && sectionFilter !== "PROJECTS_ONLY") {
-      return projects.filter((p) => p.id === sectionFilter);
+      return projectList.filter((p) => p.id === sectionFilter);
     }
-    return projects;
-  }, [projects, sectionFilter]);
+    return projectList;
+  }, [projectList, sectionFilter]);
+
+  function openMasterLinkModal(proj: SimpleProject) {
+    setMasterLinkProject(proj);
+    setMasterLinkUrl(proj.masterResourceUrl || "");
+    setMasterLinkNote(proj.masterResourceNote || "");
+  }
+
+  async function submitMasterLink(nextUrl: string, nextNote: string) {
+    if (!masterLinkProject) return;
+    setSavingMasterLink(true);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: masterLinkProject.id,
+          masterResourceUrl: nextUrl.trim(),
+          masterResourceNote: nextUrl.trim() ? nextNote.trim() : "",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Không lưu được Link tổng dự án.", "error");
+        return;
+      }
+      setProjectList((prev) =>
+        prev.map((p) =>
+          p.id === masterLinkProject.id
+            ? {
+                ...p,
+                masterResourceUrl: data.project?.masterResourceUrl ?? null,
+                masterResourceNote: data.project?.masterResourceNote ?? null,
+              }
+            : p
+        )
+      );
+      showToast(
+        nextUrl.trim()
+          ? `Đã lưu Link tổng cho ${masterLinkProject.name}!`
+          : `Đã gỡ Link tổng của ${masterLinkProject.name}.`
+      );
+      setMasterLinkProject(null);
+    } finally {
+      setSavingMasterLink(false);
+    }
+  }
+
+  async function handleSaveMasterLink(e: React.FormEvent) {
+    e.preventDefault();
+    if (!masterLinkUrl.trim()) {
+      showToast("Vui lòng nhập đường dẫn Link tổng dự án.", "error");
+      return;
+    }
+    await submitMasterLink(masterLinkUrl, masterLinkNote);
+  }
 
   function openAddModal(targetScope: ResourceScope, targetProjId?: string) {
     setEditing(null);
     setScope(targetScope);
-    setProjectId(targetProjId || projects[0]?.id || "");
+    setProjectId(targetProjId || projectList[0]?.id || "");
     setCategory(targetScope === "GLOBAL" ? "LOGO_BRAND" : "PHOTO_FOLDER");
     setTitle("");
     setUrl("");
@@ -223,7 +288,7 @@ export function ResourcesHubView({
   function openEditModal(item: WorkspaceResourceItem) {
     setEditing(item);
     setScope(item.scope);
-    setProjectId(item.projectId || projects[0]?.id || "");
+    setProjectId(item.projectId || projectList[0]?.id || "");
     setCategory(item.category);
     setTitle(item.title);
     setUrl(item.url);
@@ -303,19 +368,22 @@ export function ResourcesHubView({
     sectionFilter !== "GLOBAL" &&
     sectionFilter !== "PROJECTS_ONLY";
 
-  const projectsWithItems = visibleProjectsList.filter((proj) =>
-    matchesSearchAndCat.some(
+  const searchLower = search.trim().toLowerCase();
+  const projectHasContent = (proj: SimpleProject) => {
+    const hasResources = matchesSearchAndCat.some(
       (r) => r.scope === "PROJECT" && r.projectId === proj.id
-    )
-  );
+    );
+    if (hasResources) return true;
+    if (!proj.masterResourceUrl || categoryFilter !== "ALL") return false;
+    if (!searchLower) return true;
+    const hay = `${proj.name} ${proj.masterResourceNote || ""} ${proj.masterResourceUrl}`.toLowerCase();
+    return hay.includes(searchLower);
+  };
+
+  const projectsWithItems = visibleProjectsList.filter(projectHasContent);
   const emptyProjects = isSingleProjectFilter
     ? []
-    : visibleProjectsList.filter(
-        (proj) =>
-          !matchesSearchAndCat.some(
-            (r) => r.scope === "PROJECT" && r.projectId === proj.id
-          )
-      );
+    : visibleProjectsList.filter((proj) => !projectHasContent(proj));
   const displayedProjects = isSingleProjectFilter
     ? visibleProjectsList
     : projectsWithItems;
@@ -380,7 +448,7 @@ export function ResourcesHubView({
           todayStr={todayStr}
           initialEquipment={initialEquipment}
           initialBookings={initialBookings}
-          projects={projects}
+          projects={projectList}
         />
       ) : (
         <>
@@ -433,7 +501,7 @@ export function ResourcesHubView({
               </button>
             </div>
 
-            {projects.length > 0 && (
+            {projectList.length > 0 && (
               <select
                 value={isSingleProjectFilter ? sectionFilter : ""}
                 onChange={(e) =>
@@ -442,7 +510,7 @@ export function ResourcesHubView({
                 className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"
               >
                 <option value="">Mọi dự án</option>
-                {projects.map((p) => (
+                {projectList.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -524,20 +592,59 @@ export function ResourcesHubView({
                         </span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => openAddModal("PROJECT", proj.id)}
-                        className="rounded-lg border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 text-slate-700 px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        <Plus className="w-3 h-3" />
-                        Thêm
-                      </button>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {proj.masterResourceUrl ? (
+                          <div className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 overflow-hidden">
+                            <a
+                              href={proj.masterResourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={
+                                proj.masterResourceNote ||
+                                proj.masterResourceUrl
+                              }
+                              className="px-2.5 py-1 text-[11px] font-bold text-amber-900 hover:bg-amber-100 inline-flex items-center gap-1"
+                            >
+                              <Link2 className="w-3 h-3" />
+                              Link tổng
+                              <ExternalLink className="w-3 h-3 opacity-75" />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => openMasterLinkModal(proj)}
+                              className="px-1.5 py-1 text-amber-700 hover:bg-amber-100 border-l border-amber-200 cursor-pointer"
+                              title="Sửa link tổng"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openMasterLinkModal(proj)}
+                            className="rounded-lg border border-amber-200 bg-amber-50/70 hover:bg-amber-100 text-amber-900 px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Link2 className="w-3 h-3" />
+                            Gắn link tổng
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openAddModal("PROJECT", proj.id)}
+                          className="rounded-lg border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 text-slate-700 px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Thêm
+                        </button>
+                      </div>
                     </div>
 
                     {projItems.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-slate-200 py-5 text-center text-xs text-slate-400">
-                        Chưa có tài nguyên trong dự án này.
-                      </div>
+                      !proj.masterResourceUrl && (
+                        <div className="rounded-xl border border-dashed border-slate-200 py-5 text-center text-xs text-slate-400">
+                          Chưa có tài nguyên trong dự án này.
+                        </div>
+                      )
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {projItems.map((item) => (
@@ -563,18 +670,32 @@ export function ResourcesHubView({
                     Chưa có tài nguyên:
                   </span>
                   {emptyProjects.map((p) => (
-                    <button
+                    <div
                       key={p.id}
-                      type="button"
-                      onClick={() => openAddModal("PROJECT", p.id)}
-                      className="rounded-lg border border-slate-200 bg-slate-50 hover:bg-amber-50 hover:border-amber-300 text-slate-700 px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                      className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 overflow-hidden"
                     >
-                      <span
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: p.color }}
-                      />
-                      <span>+ {p.name}</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => openAddModal("PROJECT", p.id)}
+                        className="hover:bg-amber-50 text-slate-700 px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                        title={`Thêm tài nguyên cho ${p.name}`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: p.color }}
+                        />
+                        <span>+ {p.name}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openMasterLinkModal(p)}
+                        className="px-2 py-1 text-amber-800 bg-amber-50/70 hover:bg-amber-100 border-l border-slate-200 inline-flex items-center gap-1 text-[11px] font-semibold cursor-pointer"
+                        title={`Gắn link tổng cho ${p.name}`}
+                      >
+                        <Link2 className="w-3 h-3" />
+                        Link tổng
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -632,7 +753,7 @@ export function ResourcesHubView({
                       onChange={(e) => setProjectId(e.target.value)}
                       className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs bg-white"
                     >
-                      {projects.map((p) => (
+                      {projectList.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
                         </option>
@@ -718,6 +839,105 @@ export function ResourcesHubView({
               >
                 {saving ? "Đang lưu..." : "Lưu Tài Nguyên"}
               </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal Gắn / Sửa Link Tổng Dự Án */}
+      {masterLinkProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={() => !savingMasterLink && setMasterLinkProject(null)}
+          />
+          <form
+            onSubmit={handleSaveMasterLink}
+            className="relative z-10 w-full max-w-lg bg-white rounded-2xl border-2 border-amber-200 shadow-2xl p-5 space-y-3.5"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="w-3 h-3 rounded-full shrink-0"
+                  style={{ backgroundColor: masterLinkProject.color }}
+                />
+                <h3 className="text-base font-bold text-slate-900 truncate">
+                  🔗 Link tổng — {masterLinkProject.name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => !savingMasterLink && setMasterLinkProject(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Gắn đường dẫn thư mục tổng (Google Drive / Notion / Google Sheet / Lark) để mọi thành viên mở nhanh toàn bộ dữ liệu dự án.
+            </p>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Đường dẫn Link tổng dự án *
+              </label>
+              <input
+                type="text"
+                required
+                autoFocus
+                value={masterLinkUrl}
+                onChange={(e) => setMasterLinkUrl(e.target.value)}
+                placeholder="https://drive.google.com/drive/folders/..."
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Nhãn / Ghi chú ngắn (không bắt buộc)
+              </label>
+              <input
+                type="text"
+                maxLength={160}
+                value={masterLinkNote}
+                onChange={(e) => setMasterLinkNote(e.target.value)}
+                placeholder="VD: Drive tổng dự án, Notion Hub, Sheet quản lý..."
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <div>
+                {masterLinkProject.masterResourceUrl && (
+                  <button
+                    type="button"
+                    disabled={savingMasterLink}
+                    onClick={() => submitMasterLink("", "")}
+                    className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-2 text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Unlink className="w-3.5 h-3.5" />
+                    Gỡ link tổng
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={savingMasterLink}
+                  onClick={() => setMasterLinkProject(null)}
+                  className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-600 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingMasterLink}
+                  className="rounded-xl bg-[#0B2545] hover:bg-slate-800 text-amber-300 px-4 py-2 text-xs font-bold cursor-pointer"
+                >
+                  {savingMasterLink ? "Đang lưu..." : "Lưu Link Tổng"}
+                </button>
+              </div>
             </div>
           </form>
         </div>
