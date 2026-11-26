@@ -396,21 +396,6 @@ function TaskDrawerInner({
                 >
                   <CopyPlus className="w-4 h-4" />
                 </button>
-              </>
-            )}
-            {task && currentUserRole === "LEADER" && (
-              <>
-                {task.assignee && (
-                  <button
-                    type="button"
-                    onClick={handleSendUrgentReminder}
-                    disabled={saving}
-                    title="Gửi thông báo & Email nhắc việc ngay"
-                    className="p-2 rounded-lg text-amber-600 hover:bg-amber-50 cursor-pointer"
-                  >
-                    <BellRing className="w-4 h-4" />
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setConfirmDeleteOpen(true)}
@@ -421,6 +406,17 @@ function TaskDrawerInner({
                   <Trash2 className="w-4 h-4" />
                 </button>
               </>
+            )}
+            {task && currentUserRole === "LEADER" && task.assignee && (
+              <button
+                type="button"
+                onClick={handleSendUrgentReminder}
+                disabled={saving}
+                title="Gửi thông báo & Email nhắc việc ngay"
+                className="p-2 rounded-lg text-amber-600 hover:bg-amber-50 cursor-pointer"
+              >
+                <BellRing className="w-4 h-4" />
+              </button>
             )}
             <button
               type="button"

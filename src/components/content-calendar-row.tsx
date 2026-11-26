@@ -113,7 +113,7 @@ export function ContentCalendarRow({
             </div>
           ) : (
             <span
-              title="Chỉ Leader hoặc tác giả bản Nháp mới xóa được"
+              title="Không có quyền xóa"
               className="text-[10px] text-slate-300"
             >
               —

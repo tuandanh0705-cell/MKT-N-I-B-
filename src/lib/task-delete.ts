@@ -2,16 +2,12 @@ import type { TaskItem } from "@/types/crm";
 import type { UserRole } from "@/generated/prisma/client";
 
 export function canUserDeleteTask(
-  task: Pick<TaskItem, "status" | "requester">,
+  _task: Pick<TaskItem, "status" | "requester">,
   currentUserId?: string,
   currentUserRole?: UserRole
 ): boolean {
-  if (currentUserRole === "LEADER") return true;
-  return Boolean(
-    currentUserId &&
-      task.requester?.id === currentUserId &&
-      task.status === "DRAFT"
-  );
+  // Mọi thành viên thuộc dự án (hoặc Leader) đều có quyền chỉnh sửa & xóa bài/task trong dự án của mình
+  return Boolean(currentUserId || currentUserRole === "LEADER");
 }
 
 export async function softDeleteTasksByIds(

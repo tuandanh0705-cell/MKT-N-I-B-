@@ -467,7 +467,7 @@ export function MediaBriefBoard({
               <span>
                 Chế độ xóa đang bật — Đã chọn{" "}
                 <strong>{selectedDeleteIds.length}</strong> /{" "}
-                {deletableRowIds.length} order có quyền xóa
+                {deletableRowIds.length} order
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">

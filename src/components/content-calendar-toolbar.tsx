@@ -130,14 +130,8 @@ export function ContentCalendarToolbar({
             <Trash2 className="w-4 h-4 text-rose-600 shrink-0" />
             <span>
               Chế độ xóa đang bật — Đã chọn{" "}
-              <strong>{selectedDeleteCount}</strong> / {deletableCount} bài có
-              quyền xóa
+              <strong>{selectedDeleteCount}</strong> / {deletableCount} bài
             </span>
-            {deletableCount === 0 && (
-              <span className="text-[11px] text-rose-700 font-normal">
-                (Chỉ Leader hoặc người tạo bản Nháp mới xóa được)
-              </span>
-            )}
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {deletableCount > 0 && (

@@ -81,21 +81,12 @@ export async function PATCH(
     const body = await request.json();
     const action = body.action as string | undefined;
 
-    // 0. Xóa Link đính kèm (nếu yêu cầu)
+    // 0. Xóa Link đính kèm (bất kỳ thành viên nào có quyền truy cập task trong dự án đều xóa được)
     if (body.deleteAssetId) {
       await prisma.assetLink.deleteMany({
         where: {
           id: String(body.deleteAssetId),
           taskId: id,
-          ...(user.role === "LEADER"
-            ? {}
-            : {
-                OR: [
-                  { createdById: user.id },
-                  { task: { requesterId: user.id } },
-                  { task: { assigneeId: user.id } },
-                ],
-              }),
         },
       });
     }
@@ -618,27 +609,32 @@ export async function DELETE(
 
   const existing = await prisma.task.findUnique({
     where: { id },
-    select: { id: true, code: true, title: true, requesterId: true, status: true },
+    select: { id: true, code: true, title: true, requesterId: true, status: true, deletedAt: true },
   });
 
   if (!existing) {
     return NextResponse.json({ error: "Không tìm thấy công việc." }, { status: 404 });
   }
 
-  const canDelete =
-    user.role === "LEADER" ||
-    (existing.requesterId === user.id && existing.status === "DRAFT");
+  // Xóa vĩnh viễn trong Thùng rác: chỉ Leader; còn xóa thường (vào Thùng rác): mọi thành viên trong dự án đều xóa được
+  if (permanent) {
+    if (user.role !== "LEADER") {
+      return NextResponse.json(
+        { error: "Chỉ Leader mới có quyền xóa vĩnh viễn khỏi Thùng rác." },
+        { status: 403 }
+      );
+    }
+    await prisma.task.delete({ where: { id } });
+    return NextResponse.json({ ok: true, permanent: true });
+  }
+
+  const canDelete = await canAccessTask(user, id);
 
   if (!canDelete) {
     return NextResponse.json(
-      { error: "Chỉ Leader hoặc người tạo bản nháp mới có quyền xóa." },
+      { error: "Bạn không thuộc dự án này nên không có quyền xóa công việc." },
       { status: 403 }
     );
-  }
-
-  if (permanent && user.role === "LEADER") {
-    await prisma.task.delete({ where: { id } });
-    return NextResponse.json({ ok: true, permanent: true });
   }
 
   await prisma.task.update({

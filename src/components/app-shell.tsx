@@ -552,7 +552,7 @@ export function AppShell({
               >
                 <DenDenMushiIcon className="w-5 h-5" />
                 <span className="hidden sm:inline text-xs font-semibold text-slate-700">
-                  Tin báo
+                  Tin Bão
                 </span>
                 {unreadCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center px-1 border-2 border-white">
@@ -617,7 +617,7 @@ export function AppShell({
             <div className="flex-1 overflow-y-auto overscroll-contain divide-y divide-amber-100/70">
               {notifications.length === 0 ? (
                 <div className="p-6 text-center text-sm text-slate-500">
-                  Biển êm gió lặng — chưa có tin báo mới.
+                  Biển êm gió lặng — chưa có Tin Bão mới.
                 </div>
               ) : (
                 notifications.map((n) => (
