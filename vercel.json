@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/cron/reminders?slot=MORNING_CHECKIN",
-      "schedule": "30 1 * * 1-6"
+      "schedule": "0 2 * * 1-6"
     },
     {
-      "path": "/api/cron/reminders?slot=AFTERNOON_SUBMIT",
-      "schedule": "0 8 * * 1-6"
+      "path": "/api/cron/reminders?slot=LEADER_REVIEW",
+      "schedule": "0 9 * * 1-6"
     }
   ]
 }
