@@ -127,81 +127,85 @@ export function ChatMessageStream({
 
   return (
     <>
-      {/* Header phòng chat */}
-      <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-amber-100 bg-[#FFFDF7] flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={onMobileBack}
-            className="md:hidden p-1.5 -ml-1 rounded-xl text-slate-600 hover:bg-amber-100 cursor-pointer shrink-0"
-            aria-label="Quay lại danh sách"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-
-          {activeRoom.type === "DIRECT" && directPeer ? (
-            <PirateAvatar
-              name={directPeer.name}
-              color={directPeer.avatarColor}
-              scope={directPeer.departmentScope}
-              pirateCharacter={directPeer.pirateCharacter}
-              size="md"
-              animate={false}
-            />
-          ) : (
-            <div className="w-9 h-9 rounded-full bg-[#0B2545] text-amber-300 border-2 border-amber-300 flex items-center justify-center shrink-0">
-              {activeRoom.name?.includes("Ẩn Danh") ? (
-                <EyeOff className="w-4 h-4" />
-              ) : (
-                <Users className="w-4 h-4" />
-              )}
-            </div>
-          )}
-
-          <div className="min-w-0 flex-1">
-            <div className="text-xs sm:text-sm font-extrabold text-slate-900 flex items-center gap-1.5 min-w-0">
-              <span className="truncate">{getRoomDisplayTitle(activeRoom)}</span>
-              {activeRoom.allowAnonymous && (
-                <span className="hidden sm:inline-flex rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 px-2 py-0.5 text-[10px] font-bold shrink-0">
-                  🕵️ Hỗ trợ Ẩn danh
-                </span>
-              )}
-            </div>
-            <div className="text-[11px] text-slate-500 truncate">
-              {activeRoom.type === "DIRECT"
-                ? "Chat 1-1"
-                : `${activeRoom.participants.length} thành viên${
-                    activeRoom.allowAnonymous ? " • 🕵️ Ẩn danh" : ""
-                  }`}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={onToggleMsgSearch}
-            className={`rounded-xl border px-2.5 py-1.5 text-xs font-bold inline-flex items-center gap-1 cursor-pointer ${
-              msgSearchOpen
-                ? "bg-sky-50 border-sky-300 text-sky-700"
-                : "bg-white border-amber-200 hover:bg-amber-50 text-slate-700"
-            }`}
-            title="Tìm kiếm tin nhắn cũ trong phòng"
-          >
-            <Search className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Tìm tin</span>
-          </button>
-
-          {activeRoom.type === "GROUP" && (
+      {/* Header phòng chat (chuẩn app nhắn tin trên Mobile + Desktop) */}
+      <div className="pt-safe md:pt-0 border-b border-amber-100 bg-[#FFFDF7] shrink-0">
+        <div className="px-3 sm:px-4 h-14 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
             <button
               type="button"
-              onClick={onOpenGroupSettings}
-              className="rounded-xl border border-amber-200 bg-white hover:bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-slate-700 inline-flex items-center gap-1.5 shrink-0 cursor-pointer"
+              onClick={onMobileBack}
+              className="md:hidden w-9 h-9 -ml-1 rounded-full text-slate-700 hover:bg-amber-100 active:bg-amber-200/70 flex items-center justify-center cursor-pointer shrink-0 transition"
+              aria-label="Quay lại danh sách"
             >
-              <Settings2 className="w-3.5 h-3.5 text-amber-700" />
-              <span className="hidden sm:inline">Thành viên</span>
+              <ArrowLeft className="w-5 h-5" />
             </button>
-          )}
+
+            {activeRoom.type === "DIRECT" && directPeer ? (
+              <PirateAvatar
+                name={directPeer.name}
+                color={directPeer.avatarColor}
+                scope={directPeer.departmentScope}
+                pirateCharacter={directPeer.pirateCharacter}
+                size="md"
+                animate={false}
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-[#0B2545] text-amber-300 border-2 border-amber-300 flex items-center justify-center shrink-0">
+                {activeRoom.name?.includes("Ẩn Danh") ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Users className="w-4 h-4" />
+                )}
+              </div>
+            )}
+
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5 min-w-0">
+                <span className="truncate">{getRoomDisplayTitle(activeRoom)}</span>
+                {activeRoom.allowAnonymous && (
+                  <span className="hidden sm:inline-flex rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 px-2 py-0.5 text-[10px] font-bold shrink-0">
+                    🕵️ Hỗ trợ Ẩn danh
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] text-slate-500 truncate">
+                {activeRoom.type === "DIRECT"
+                  ? "Đang hoạt động • Chat 1-1"
+                  : `${activeRoom.participants.length} thành viên${
+                      activeRoom.allowAnonymous ? " • 🕵️ Ẩn danh" : ""
+                    }`}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={onToggleMsgSearch}
+              className={`w-9 h-9 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1.5 rounded-full sm:rounded-xl border text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer transition ${
+                msgSearchOpen
+                  ? "bg-sky-50 border-sky-300 text-sky-700"
+                  : "bg-white border-amber-200 hover:bg-amber-50 text-slate-700"
+              }`}
+              title="Tìm kiếm tin nhắn cũ trong phòng"
+              aria-label="Tìm tin nhắn"
+            >
+              <Search className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+              <span className="hidden sm:inline">Tìm tin</span>
+            </button>
+
+            {activeRoom.type === "GROUP" && (
+              <button
+                type="button"
+                onClick={onOpenGroupSettings}
+                className="w-9 h-9 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1.5 rounded-full sm:rounded-xl border border-amber-200 bg-white hover:bg-amber-50 text-xs font-bold text-slate-700 inline-flex items-center justify-center gap-1.5 shrink-0 cursor-pointer transition"
+                aria-label="Cài đặt nhóm & Thành viên"
+              >
+                <Settings2 className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-700" />
+                <span className="hidden sm:inline">Thành viên</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -235,7 +239,7 @@ export function ChatMessageStream({
       )}
 
       {/* Luồng tin nhắn */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 sm:p-4 space-y-3 bg-gradient-to-b from-[#FFFDF7]/60 to-sky-50/30">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:p-4 space-y-3 bg-gradient-to-b from-[#FFFDF7]/60 to-sky-50/30">
         {loadingRoom && !hasAnyMessages ? (
           <div className="py-12 text-center text-xs text-slate-400">
             Đang tải cuộc trò chuyện...

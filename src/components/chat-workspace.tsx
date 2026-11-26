@@ -59,6 +59,7 @@ interface ChatWorkspaceProps {
   initialRooms: ChatRoomSummary[];
   initialRoomId: string | null;
   initialMessages: ChatMessageItem[];
+  initialMobileShowChat?: boolean;
 }
 
 function compressImageToDataUrl(file: File): Promise<string> {
@@ -99,13 +100,22 @@ export function ChatWorkspace({
   initialRooms,
   initialRoomId,
   initialMessages,
+  initialMobileShowChat = false,
 }: ChatWorkspaceProps) {
   const { showToast } = useToast();
 
   const [rooms, setRooms] = useState<ChatRoomSummary[]>(initialRooms);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(initialRoomId);
   const [messages, setMessages] = useState<ChatMessageItem[]>(initialMessages);
-  const [mobileShowChat, setMobileShowChat] = useState<boolean>(false);
+  const [mobileShowChat, setMobileShowChat] = useState<boolean>(
+    initialMobileShowChat
+  );
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  const [mobileViewport, setMobileViewport] = useState<{
+    height: number;
+    top: number;
+    keyboardOpen: boolean;
+  } | null>(null);
 
   const [filterTab, setFilterTab] = useState<"ALL" | "GROUP" | "DIRECT">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -132,6 +142,7 @@ export function ChatWorkspace({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const activeRoomIdRef = useRef<string | null>(activeRoomId);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const mobileChatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const roomCacheRef = useRef<Map<string, ChatMessageItem[]>>(
     new Map(initialRoomId ? [[initialRoomId, initialMessages]] : [])
   );
@@ -140,6 +151,49 @@ export function ChatWorkspace({
   useEffect(() => {
     activeRoomIdRef.current = activeRoomId;
   }, [activeRoomId]);
+
+  // Trên Mobile: khi mở phòng chat, đồng bộ chiều cao thực tế theo visualViewport để khung chat bám sát bàn phím iOS/Android giống Messenger/Instagram
+  useEffect(() => {
+    if (!mobileShowChat || typeof window === "undefined") return;
+
+    const syncViewport = () => {
+      if (window.innerWidth >= 768) {
+        setMobileViewport(null);
+        document.body.style.overflow = "";
+        return;
+      }
+      document.body.style.overflow = "hidden";
+      const vv = window.visualViewport;
+      if (!vv) {
+        setMobileViewport({
+          height: window.innerHeight,
+          top: 0,
+          keyboardOpen: false,
+        });
+        return;
+      }
+      const keyboardOpen = window.innerHeight - vv.height > 120;
+      setMobileViewport({
+        height: Math.round(vv.height),
+        top: Math.round(vv.offsetTop),
+        keyboardOpen,
+      });
+    };
+
+    const rafId = requestAnimationFrame(syncViewport);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", syncViewport);
+    vv?.addEventListener("scroll", syncViewport);
+    window.addEventListener("resize", syncViewport);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      document.body.style.overflow = "";
+      vv?.removeEventListener("resize", syncViewport);
+      vv?.removeEventListener("scroll", syncViewport);
+      window.removeEventListener("resize", syncViewport);
+    };
+  }, [mobileShowChat]);
 
   const updateRoomMessages = useCallback(
     (
@@ -196,6 +250,13 @@ export function ChatWorkspace({
     );
   }, [messages, msgSearchQuery]);
 
+  function getActiveInputEl() {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      return mobileChatInputRef.current ?? chatInputRef.current;
+    }
+    return chatInputRef.current ?? mobileChatInputRef.current;
+  }
+
   function handleInsertMention(name: string) {
     setDraft((prev) =>
       prev.replace(/(?:^|\s)@([^\s@]{0,20})$/, (full) => {
@@ -204,11 +265,11 @@ export function ChatWorkspace({
         return `${leadingSpace}@${name} `;
       })
     );
-    chatInputRef.current?.focus();
+    getActiveInputEl()?.focus();
   }
 
   function handleInsertEmoji(emoji: string) {
-    const el = chatInputRef.current;
+    const el = getActiveInputEl();
     if (!el) {
       setDraft((prev) => prev + emoji);
       return;
@@ -217,7 +278,9 @@ export function ChatWorkspace({
     const end = el.selectionEnd ?? draft.length;
     setDraft((prev) => prev.slice(0, start) + emoji + prev.slice(end));
     requestAnimationFrame(() => {
-      el.focus();
+      if (typeof window === "undefined" || window.innerWidth >= 768) {
+        el.focus();
+      }
       const nextPos = start + emoji.length;
       el.setSelectionRange(nextPos, nextPos);
     });
@@ -701,10 +764,10 @@ export function ChatWorkspace({
       </div>
 
       <div
-        className={`bg-white rounded-2xl border-2 border-amber-200/80 shadow-sm overflow-hidden grid grid-cols-1 md:grid-cols-12 md:h-[calc(100vh-195px)] md:min-h-[520px] ${
+        className={`bg-white rounded-2xl border-2 border-amber-200/80 shadow-sm grid grid-cols-1 md:grid-cols-12 md:h-[calc(100vh-195px)] md:min-h-[520px] md:overflow-hidden ${
           mobileShowChat
-            ? "h-[calc(100dvh-184px)]"
-            : "h-[calc(100dvh-232px)]"
+            ? ""
+            : "overflow-hidden h-[calc(100dvh-232px)]"
         }`}
       >
         <ChatRoomsSidebar
@@ -723,8 +786,18 @@ export function ChatWorkspace({
         />
 
         <div
+          style={
+            mobileShowChat && mobileViewport
+              ? {
+                  top: `${mobileViewport.top}px`,
+                  height: `${mobileViewport.height}px`,
+                }
+              : undefined
+          }
           className={`md:col-span-8 lg:col-span-8 flex flex-col min-h-0 bg-white ${
-            mobileShowChat ? "flex" : "hidden md:flex"
+            mobileShowChat
+              ? "fixed inset-x-0 top-0 h-[100dvh] z-40 flex md:static md:inset-auto md:h-auto md:z-auto"
+              : "hidden md:flex"
           }`}
         >
           {!activeRoom ? (
@@ -747,7 +820,12 @@ export function ChatWorkspace({
                 messagesEndRef={messagesEndRef}
                 getDirectPeer={getDirectPeer}
                 getRoomDisplayTitle={getRoomDisplayTitle}
-                onMobileBack={() => setMobileShowChat(false)}
+                onMobileBack={() => {
+                  setPickerOpen(false);
+                  setMobileToolsOpen(false);
+                  setMobileViewport(null);
+                  setMobileShowChat(false);
+                }}
                 onToggleMsgSearch={() => {
                   setMsgSearchOpen((v) => !v);
                   if (msgSearchOpen) setMsgSearchQuery("");
@@ -758,10 +836,12 @@ export function ChatWorkspace({
                 onOpenLightbox={setLightboxImageUrl}
               />
 
-              {/* Khung soạn tin & Thanh bật/tắt Ẩn danh */}
+              {/* Khung soạn tin: Mobile dùng thanh Pill 1 hàng chuẩn Messenger/Instagram bám sát bàn phím; Desktop giữ đầy đủ toolbar */}
               <form
                 onSubmit={handleSendMessage}
-                className={`relative p-3 border-t transition-colors ${
+                className={`relative border-t shrink-0 transition-colors px-2.5 pt-2 md:p-3 ${
+                  mobileViewport?.keyboardOpen ? "pb-2" : "pb-safe md:pb-3"
+                } ${
                   anonymousMode && activeRoom.allowAnonymous
                     ? "bg-indigo-950/5 border-indigo-300"
                     : "bg-[#FFFDF7] border-amber-100"
@@ -778,13 +858,14 @@ export function ChatWorkspace({
                   onSelectSticker={handleSendSticker}
                 />
 
-                <div className="flex items-center justify-between gap-1.5 mb-2">
-                  <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar min-w-0">
+                {/* === TOOLBAR DESKTOP (md+) === */}
+                <div className="hidden md:flex items-center justify-between gap-1.5 mb-2">
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar min-w-0">
                     {activeRoom.allowAnonymous && (
                       <button
                         type="button"
                         onClick={() => setAnonymousMode((v) => !v)}
-                        className={`rounded-full px-2 sm:px-3 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
+                        className={`rounded-full px-3 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
                           anonymousMode
                             ? "bg-indigo-900 text-amber-300 border-indigo-700 shadow-sm"
                             : "bg-white text-slate-700 border-amber-200 hover:border-indigo-400"
@@ -794,14 +875,12 @@ export function ChatWorkspace({
                         {anonymousMode ? (
                           <>
                             <EyeOff className="w-3.5 h-3.5" />
-                            <span className="sm:hidden">Ẩn danh</span>
-                            <span className="hidden sm:inline">🕵️ Đang bật Ẩn danh</span>
+                            <span>🕵️ Đang bật Ẩn danh</span>
                           </>
                         ) : (
                           <>
                             <Eye className="w-3.5 h-3.5 text-slate-500" />
-                            <span className="sm:hidden">Ẩn danh</span>
-                            <span className="hidden sm:inline">Gửi Ẩn danh</span>
+                            <span>Gửi Ẩn danh</span>
                           </>
                         )}
                       </button>
@@ -811,7 +890,7 @@ export function ChatWorkspace({
                       <select
                         value={anonymousAlias}
                         onChange={(e) => setAnonymousAlias(e.target.value)}
-                        className="rounded-full border border-indigo-300 bg-white px-2 py-1 text-[11px] font-semibold text-indigo-900 focus:outline-none shrink-0 max-w-[130px] sm:max-w-none"
+                        className="rounded-full border border-indigo-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-indigo-900 focus:outline-none shrink-0"
                       >
                         {STEALTH_ALIASES.map((alias) => (
                           <option key={alias} value={alias}>
@@ -823,12 +902,10 @@ export function ChatWorkspace({
 
                     <label
                       title="Gửi ảnh từ máy"
-                      className="rounded-full p-1.5 sm:px-2.5 sm:py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer shrink-0"
+                      className="rounded-full px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer shrink-0"
                     >
                       <ImagePlus className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="hidden sm:inline">
-                        {uploadingImage ? "Đang nén..." : "Gửi Ảnh"}
-                      </span>
+                      <span>{uploadingImage ? "Đang nén..." : "Gửi Ảnh"}</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -850,24 +927,24 @@ export function ChatWorkspace({
                         chatInputRef.current?.focus();
                       }}
                       title="Nhắc tên đồng đội (@)"
-                      className="rounded-full p-1.5 sm:px-2.5 sm:py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer shrink-0"
+                      className="rounded-full px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer shrink-0"
                     >
                       <AtSign className="w-3.5 h-3.5 text-violet-600" />
-                      <span className="hidden sm:inline">@Tag tên</span>
+                      <span>@Tag tên</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setShowLinkInput((v) => !v)}
                       title="Đính kèm link"
-                      className={`rounded-full p-1.5 sm:px-2.5 sm:py-1 text-[11px] font-semibold inline-flex items-center gap-1 border cursor-pointer shrink-0 ${
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border cursor-pointer shrink-0 ${
                         showLinkInput
                           ? "bg-sky-50 border-sky-300 text-sky-700"
                           : "bg-white border-amber-200 text-slate-600 hover:bg-amber-50"
                       }`}
                     >
                       <Link2 className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Gắn Link</span>
+                      <span>Gắn Link</span>
                     </button>
                   </div>
 
@@ -896,7 +973,7 @@ export function ChatWorkspace({
                           setPickerOpen(true);
                         }
                       }}
-                      className={`rounded-full px-2 sm:px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
                         pickerOpen && pickerTab === "EMOJI"
                           ? "bg-amber-100 border-amber-400 text-amber-950"
                           : "bg-white border-amber-200 text-slate-700 hover:bg-amber-50"
@@ -904,7 +981,7 @@ export function ChatWorkspace({
                       title="Mở kho biểu tượng cảm xúc đầy đủ"
                     >
                       <Smile className="w-3.5 h-3.5 text-amber-500" />
-                      <span className="hidden sm:inline">Emoji</span>
+                      <span>Emoji</span>
                     </button>
 
                     <button
@@ -917,7 +994,7 @@ export function ChatWorkspace({
                           setPickerOpen(true);
                         }
                       }}
-                      className={`rounded-full px-2 sm:px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
                         pickerOpen && pickerTab === "STICKER"
                           ? "bg-[#0B2545] border-[#0B2545] text-amber-300"
                           : "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100"
@@ -930,13 +1007,116 @@ export function ChatWorkspace({
                   </div>
                 </div>
 
+                {/* Dải thông báo Ẩn danh: Desktop hiện đầy đủ; Mobile hiện 1 dòng siêu gọn */}
                 {anonymousMode && activeRoom.allowAnonymous && (
-                  <div className="mb-2 rounded-xl bg-indigo-900 text-indigo-100 px-3 py-1.5 text-[11px] flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                    <span>
-                      Danh tính thật của bạn sẽ được ẩn hoàn toàn khi gửi — hiển thị dưới tên{" "}
-                      <strong className="text-amber-300">{anonymousAlias}</strong>.
-                    </span>
+                  <>
+                    <div className="hidden md:flex mb-2 rounded-xl bg-indigo-900 text-indigo-100 px-3 py-1.5 text-[11px] items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                      <span>
+                        Danh tính thật của bạn sẽ được ẩn hoàn toàn khi gửi — hiển thị dưới tên{" "}
+                        <strong className="text-amber-300">{anonymousAlias}</strong>.
+                      </span>
+                    </div>
+                    <div className="md:hidden mb-1.5 flex items-center justify-between gap-2 rounded-full bg-indigo-900 text-indigo-100 px-2.5 py-1 text-[11px]">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <EyeOff className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                        <select
+                          value={anonymousAlias}
+                          onChange={(e) => setAnonymousAlias(e.target.value)}
+                          aria-label="Chọn biệt danh ẩn danh"
+                          className="bg-transparent text-amber-300 font-bold text-[11px] focus:outline-none truncate"
+                        >
+                          {STEALTH_ALIASES.map((alias) => (
+                            <option
+                              key={alias}
+                              value={alias}
+                              className="text-slate-900 bg-white"
+                            >
+                              {alias}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAnonymousMode(false)}
+                        className="text-[10px] font-bold text-indigo-200 hover:text-white px-1.5 py-0.5 rounded-full bg-white/10 shrink-0 cursor-pointer"
+                      >
+                        Tắt
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {/* Khay mở rộng nút phụ trên Mobile khi bấm dấu + */}
+                {mobileToolsOpen && (
+                  <div className="md:hidden mb-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                    {activeRoom.allowAnonymous && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAnonymousMode((v) => !v);
+                          setMobileToolsOpen(false);
+                        }}
+                        className={`rounded-full px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1.5 border shrink-0 cursor-pointer ${
+                          anonymousMode
+                            ? "bg-indigo-900 text-amber-300 border-indigo-700"
+                            : "bg-white text-slate-700 border-amber-200"
+                        }`}
+                      >
+                        {anonymousMode ? (
+                          <EyeOff className="w-3.5 h-3.5" />
+                        ) : (
+                          <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                        )}
+                        {anonymousMode ? "Tắt Ẩn danh" : "Bật Ẩn danh"}
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraft((d) =>
+                          d && !d.endsWith(" ") ? `${d} @` : `${d}@`
+                        );
+                        setMobileToolsOpen(false);
+                        mobileChatInputRef.current?.focus();
+                      }}
+                      className="rounded-full px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1.5 border bg-white border-amber-200 text-slate-700 shrink-0 cursor-pointer"
+                    >
+                      <AtSign className="w-3.5 h-3.5 text-violet-600" />
+                      @Tag tên
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowLinkInput((v) => !v);
+                        setMobileToolsOpen(false);
+                      }}
+                      className={`rounded-full px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1.5 border shrink-0 cursor-pointer ${
+                        showLinkInput
+                          ? "bg-sky-50 border-sky-300 text-sky-700"
+                          : "bg-white border-amber-200 text-slate-700"
+                      }`}
+                    >
+                      <Link2 className="w-3.5 h-3.5 text-sky-600" />
+                      Gắn Link
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileToolsOpen(false);
+                        mobileChatInputRef.current?.blur();
+                        setPickerTab("STICKER");
+                        setPickerOpen(true);
+                      }}
+                      className="rounded-full px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1.5 border bg-amber-50 border-amber-300 text-amber-900 shrink-0 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Kho Sticker
+                    </button>
                   </div>
                 )}
 
@@ -948,15 +1128,15 @@ export function ChatWorkspace({
                       width={64}
                       height={64}
                       unoptimized
-                      className="w-12 h-12 rounded-lg object-cover border border-emerald-300 shrink-0"
+                      className="w-11 h-11 rounded-lg object-cover border border-emerald-300 shrink-0"
                     />
-                    <span className="font-semibold text-emerald-900 flex-1">
-                      Đã đính kèm 1 hình ảnh sẵn sàng gửi (bạn cũng có thể Ctrl+V dán ảnh trực tiếp!)
+                    <span className="font-semibold text-emerald-900 flex-1 truncate">
+                      Đã chọn 1 hình ảnh sẵn sàng gửi
                     </span>
                     <button
                       type="button"
                       onClick={() => setAttachmentUrl("")}
-                      className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 cursor-pointer"
                       title="Bỏ ảnh này"
                     >
                       <X className="w-4 h-4" />
@@ -983,7 +1163,7 @@ export function ChatWorkspace({
                 )}
 
                 {showLinkInput && (
-                  <div className="mb-2">
+                  <div className="mb-2 flex items-center gap-1.5">
                     <input
                       type="url"
                       value={
@@ -993,12 +1173,168 @@ export function ChatWorkspace({
                       }
                       onChange={(e) => setAttachmentUrl(e.target.value)}
                       placeholder="Dán link Google Drive / Canva / Tài liệu (https://...)"
-                      className="w-full rounded-xl border border-sky-200 bg-white px-3 py-1.5 text-xs focus:border-sky-500 focus:outline-none"
+                      className="flex-1 rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs focus:border-sky-500 focus:outline-none"
                     />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowLinkInput(false);
+                        if (!attachmentUrl.startsWith("data:image/")) {
+                          setAttachmentUrl("");
+                        }
+                      }}
+                      className="p-2 rounded-xl text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 )}
 
-                <div className="flex items-end gap-2">
+                {/* === MOBILE PILL COMPOSER (chuẩn Messenger / Instagram như Ảnh 3) === */}
+                <div className="md:hidden flex items-end gap-1.5">
+                  <div
+                    className={`flex-1 flex items-center gap-1 rounded-[24px] border px-1.5 py-1 bg-white shadow-xs transition-colors ${
+                      anonymousMode && activeRoom.allowAnonymous
+                        ? "border-indigo-400 bg-indigo-50/40"
+                        : "border-amber-200 focus-within:border-amber-400"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPickerOpen(false);
+                        setMobileToolsOpen((v) => !v);
+                      }}
+                      aria-label="Mở thêm công cụ chat"
+                      className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition cursor-pointer ${
+                        mobileToolsOpen
+                          ? "bg-[#0B2545] text-amber-300 rotate-45"
+                          : anonymousMode && activeRoom.allowAnonymous
+                            ? "bg-indigo-700 text-amber-300"
+                            : "bg-amber-100 text-amber-900 active:bg-amber-200"
+                      }`}
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+
+                    <textarea
+                      ref={mobileChatInputRef}
+                      rows={1}
+                      value={draft}
+                      onFocus={() => {
+                        setPickerOpen(false);
+                        setMobileToolsOpen(false);
+                        setTimeout(() => scrollToBottom(false), 180);
+                      }}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder={
+                        anonymousMode && activeRoom.allowAnonymous
+                          ? "Nhắn ẩn danh..."
+                          : "Nhắn tin..."
+                      }
+                      className="flex-1 min-w-0 max-h-24 resize-none bg-transparent px-1.5 py-1.5 text-[16px] leading-snug text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                    />
+
+                    {!draft.trim() && !attachmentUrl.trim() ? (
+                      <div className="flex items-center gap-0.5 shrink-0 pr-0.5">
+                        <label
+                          aria-label="Gửi ảnh"
+                          className="w-9 h-9 rounded-full text-slate-600 hover:bg-slate-100 active:bg-slate-200 flex items-center justify-center cursor-pointer"
+                        >
+                          <ImagePlus className="w-5 h-5 text-emerald-600" />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              handleAttachImageFile(file);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMobileToolsOpen(false);
+                            mobileChatInputRef.current?.blur();
+                            if (pickerOpen && pickerTab === "EMOJI") {
+                              setPickerOpen(false);
+                            } else {
+                              setPickerTab("EMOJI");
+                              setPickerOpen(true);
+                            }
+                          }}
+                          aria-label="Chọn biểu tượng cảm xúc"
+                          className={`w-9 h-9 rounded-full flex items-center justify-center cursor-pointer ${
+                            pickerOpen && pickerTab === "EMOJI"
+                              ? "bg-amber-100 text-amber-700"
+                              : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          <Smile className="w-5 h-5 text-amber-500" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMobileToolsOpen(false);
+                            mobileChatInputRef.current?.blur();
+                            if (pickerOpen && pickerTab === "STICKER") {
+                              setPickerOpen(false);
+                            } else {
+                              setPickerTab("STICKER");
+                              setPickerOpen(true);
+                            }
+                          }}
+                          aria-label="Chọn Sticker"
+                          className={`w-9 h-9 rounded-full flex items-center justify-center cursor-pointer ${
+                            pickerOpen && pickerTab === "STICKER"
+                              ? "bg-[#0B2545] text-amber-300"
+                              : "text-amber-700 hover:bg-amber-50"
+                          }`}
+                        >
+                          <Sparkles className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-0.5 shrink-0 pr-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMobileToolsOpen(false);
+                            mobileChatInputRef.current?.blur();
+                            setPickerTab("EMOJI");
+                            setPickerOpen((v) => !v);
+                          }}
+                          aria-label="Chèn Emoji"
+                          className="w-9 h-9 rounded-full text-amber-500 hover:bg-amber-50 flex items-center justify-center cursor-pointer"
+                        >
+                          <Smile className="w-5 h-5" />
+                        </button>
+                        <button
+                          type="submit"
+                          aria-label="Gửi tin nhắn"
+                          className={`w-9 h-9 rounded-full text-white flex items-center justify-center shadow-sm cursor-pointer transition ${
+                            anonymousMode && activeRoom.allowAnonymous
+                              ? "bg-indigo-700 active:bg-indigo-800"
+                              : "bg-gradient-to-r from-red-500 to-amber-500 active:from-red-600 active:to-amber-600"
+                          }`}
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* === DESKTOP COMPOSER (md+) === */}
+                <div className="hidden md:flex items-end gap-2">
                   <textarea
                     ref={chatInputRef}
                     rows={1}
@@ -1029,7 +1365,7 @@ export function ChatWorkspace({
                         ? "Nhập tin nhắn ẩn danh..."
                         : `Nhắn tới ${getRoomDisplayTitle(activeRoom)}...`
                     }
-                    className={`flex-1 min-h-[40px] max-h-28 resize-none rounded-2xl border px-3.5 py-2.5 text-xs sm:text-sm leading-snug bg-white focus:outline-none ${
+                    className={`flex-1 min-h-[40px] max-h-28 resize-none rounded-2xl border px-3.5 py-2.5 text-sm leading-snug bg-white focus:outline-none ${
                       anonymousMode && activeRoom.allowAnonymous
                         ? "border-indigo-300 focus:border-indigo-500"
                         : "border-amber-200 focus:border-sky-400"
@@ -1039,14 +1375,14 @@ export function ChatWorkspace({
                   <button
                     type="submit"
                     disabled={!draft.trim() && !attachmentUrl.trim()}
-                    className={`rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-bold text-white inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50 ${
+                    className={`rounded-2xl px-4 py-2.5 text-sm font-bold text-white inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50 ${
                       anonymousMode && activeRoom.allowAnonymous
                         ? "bg-indigo-700 hover:bg-indigo-800"
                         : "bg-gradient-to-r from-red-500 to-amber-500 hover:from-red-600 hover:to-amber-600"
                     }`}
                   >
                     <Send className="w-4 h-4" />
-                    <span className="hidden sm:inline">Gửi</span>
+                    <span>Gửi</span>
                   </button>
                 </div>
               </form>

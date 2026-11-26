@@ -127,6 +127,15 @@ export function AppShell({
     };
   }, [initialChatUnreadCount]);
 
+  useEffect(() => {
+    if (!bellOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setBellOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [bellOpen]);
+
   const unreadCount = notifications.filter((n) => !n.isRead).length;
   const pirateRank = getPirateRankLabel(
     liveUser.departmentScope,
@@ -494,126 +503,64 @@ export function AppShell({
       )}
 
       <div className="flex-1 min-w-0 flex flex-col pb-24 md:pb-6">
-        <header className="sticky top-0 z-30 bg-[#FFFDF7]/95 backdrop-blur border-b border-amber-200/70 px-3 sm:px-6 h-14 flex items-center justify-between gap-2 sm:gap-3 print:hidden">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Mở menu điều hướng"
-              className="md:hidden p-2 -ml-1.5 rounded-xl text-slate-700 hover:bg-amber-100/60 shrink-0 cursor-pointer"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-2 min-w-0">
+        <header className="sticky top-0 z-30 bg-[#FFFDF7]/95 backdrop-blur border-b border-amber-200/70 pt-safe print:hidden">
+          <div className="px-3 sm:px-6 h-14 flex items-center justify-between gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="Mở menu điều hướng"
+                className="md:hidden p-2 -ml-1.5 rounded-xl text-slate-700 hover:bg-amber-100/60 shrink-0 cursor-pointer"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-2 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setAccountModalTab("PROFILE")}
+                  title="Mở cài đặt tài khoản cá nhân"
+                  className="inline-flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-0.5 text-[11px] font-bold border bg-amber-50 hover:bg-amber-100 text-slate-900 border-amber-200 shrink-0 max-w-[110px] sm:max-w-none truncate transition cursor-pointer"
+                >
+                  <span className="shrink-0">{liveUser.preferredIcon || pirateRank.emoji}</span>
+                  <span className="truncate">{liveUser.name}</span>
+                </button>
+                <span className="text-xs font-bold text-slate-700 truncate">
+                  {activePageTitle}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2 relative shrink-0">
+              <PushNotificationButton compact />
               <button
                 type="button"
                 onClick={() => setAccountModalTab("PROFILE")}
-                title="Mở cài đặt tài khoản cá nhân"
-                className="inline-flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-0.5 text-[11px] font-bold border bg-amber-50 hover:bg-amber-100 text-slate-900 border-amber-200 shrink-0 max-w-[110px] sm:max-w-none truncate transition cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-white hover:bg-amber-50 p-2 sm:px-2.5 sm:py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
+                title="Đổi Tên, Tài khoản, Mật khẩu & Cá nhân hóa"
+                aria-label="Cài đặt tài khoản cá nhân"
               >
-                <span className="shrink-0">{liveUser.preferredIcon || pirateRank.emoji}</span>
-                <span className="truncate">{liveUser.name}</span>
+                <UserCog className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-600" />
+                <span className="hidden sm:inline">Tài khoản</span>
               </button>
-              <span className="text-xs font-bold text-slate-700 truncate">
-                {activePageTitle}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 sm:gap-2 relative shrink-0">
-            <PushNotificationButton compact />
-            <button
-              type="button"
-              onClick={() => setAccountModalTab("PROFILE")}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-white hover:bg-amber-50 p-2 sm:px-2.5 sm:py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
-              title="Đổi Tên, Tài khoản, Mật khẩu & Cá nhân hóa"
-              aria-label="Cài đặt tài khoản cá nhân"
-            >
-              <UserCog className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-600" />
-              <span className="hidden sm:inline">Tài khoản</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setBellOpen((prev) => !prev)}
-              className="relative px-2 sm:px-2.5 py-1.5 rounded-2xl border border-amber-200 bg-white hover:bg-amber-50 transition cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
-              aria-label="Ốc sên truyền tin"
-              title="Den Den Mushi — Thông báo"
-            >
-              <DenDenMushiIcon className="w-5 h-5" />
-              <span className="hidden sm:inline text-xs font-semibold text-slate-700">
-                Tin báo
-              </span>
-              {unreadCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center px-1 border-2 border-white">
-                  {unreadCount}
+              <button
+                type="button"
+                onClick={() => setBellOpen((prev) => !prev)}
+                className="relative px-2 sm:px-2.5 py-1.5 rounded-2xl border border-amber-200 bg-white hover:bg-amber-50 transition cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+                aria-label="Ốc sên truyền tin"
+                aria-expanded={bellOpen}
+                title="Den Den Mushi — Thông báo"
+              >
+                <DenDenMushiIcon className="w-5 h-5" />
+                <span className="hidden sm:inline text-xs font-semibold text-slate-700">
+                  Tin báo
                 </span>
-              )}
-            </button>
-
-            {bellOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-30"
-                  onClick={() => setBellOpen(false)}
-                />
-                <div className="fixed left-3 right-3 top-15 sm:left-auto sm:right-0 sm:top-12 sm:absolute sm:w-96 bg-white rounded-2xl border-2 border-amber-200 shadow-xl z-40 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-amber-100 bg-amber-50/50 flex items-center justify-between">
-                    <span className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                      <DenDenMushiIcon className="w-4 h-4" />
-                      Den Den Mushi ({unreadCount} tin mới)
-                    </span>
-                    {unreadCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={markAllRead}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        <CheckCheck className="w-3.5 h-3.5" />
-                        Đọc hết
-                      </button>
-                    )}
-                  </div>
-                  <div className="max-h-96 overflow-y-auto divide-y divide-amber-100/70">
-                    {notifications.length === 0 ? (
-                      <div className="p-6 text-center text-sm text-slate-500">
-                        Biển êm gió lặng — chưa có tin báo mới.
-                      </div>
-                    ) : (
-                      notifications.map((n) => (
-                        <button
-                          key={n.id}
-                          type="button"
-                          onClick={() => handleClickNotification(n)}
-                          className={`w-full text-left px-4 py-3 hover:bg-amber-50/50 transition cursor-pointer ${
-                            !n.isRead ? "bg-sky-50/50" : ""
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="text-xs font-bold text-slate-900">
-                              {n.title}
-                            </span>
-                            {!n.isRead && (
-                              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1" />
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-600 mt-1 line-clamp-2">
-                            {n.message}
-                          </p>
-                          <div className="mt-1.5 flex items-center gap-2 text-[10px] text-slate-400">
-                            <span>{formatVnDateTime(n.createdAt)}</span>
-                            {n.emailSent && (
-                              <span className="rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5">
-                                Đã gửi Email
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center px-1 border-2 border-white">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
         </header>
 
@@ -621,6 +568,93 @@ export function AppShell({
           {children}
         </main>
       </div>
+
+      {/* Popup Thông báo Den Den Mushi render ngoài <header> để không bị backdrop-blur kẹt position:fixed trên iOS */}
+      {bellOpen && (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            aria-label="Đóng bảng thông báo"
+            onClick={() => setBellOpen(false)}
+            className="fixed inset-0 w-full h-full bg-slate-950/35 backdrop-blur-[1px] cursor-default"
+          />
+          <div
+            role="dialog"
+            aria-label="Danh sách thông báo"
+            style={{
+              top: "calc(env(safe-area-inset-top) + 3.75rem)",
+            }}
+            className="fixed left-3 right-3 sm:left-auto sm:right-6 sm:w-96 max-h-[75dvh] bg-white rounded-2xl border-2 border-amber-200 shadow-2xl z-10 flex flex-col overflow-hidden"
+          >
+            <div className="px-4 py-3 border-b border-amber-100 bg-amber-50/80 flex items-center justify-between gap-2 shrink-0">
+              <span className="text-sm font-bold text-slate-900 flex items-center gap-1.5 min-w-0 truncate">
+                <DenDenMushiIcon className="w-4 h-4 shrink-0" />
+                <span className="truncate">
+                  Den Den Mushi ({unreadCount} tin mới)
+                </span>
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={markAllRead}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <CheckCheck className="w-3.5 h-3.5" />
+                    Đọc hết
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setBellOpen(false)}
+                  aria-label="Đóng thông báo"
+                  className="p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-amber-100 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto overscroll-contain divide-y divide-amber-100/70">
+              {notifications.length === 0 ? (
+                <div className="p-6 text-center text-sm text-slate-500">
+                  Biển êm gió lặng — chưa có tin báo mới.
+                </div>
+              ) : (
+                notifications.map((n) => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={() => handleClickNotification(n)}
+                    className={`w-full text-left px-4 py-3 hover:bg-amber-50/50 active:bg-amber-50 transition cursor-pointer ${
+                      !n.isRead ? "bg-sky-50/50" : ""
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-bold text-slate-900">
+                        {n.title}
+                      </span>
+                      {!n.isRead && (
+                        <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1" />
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1 line-clamp-2">
+                      {n.message}
+                    </p>
+                    <div className="mt-1.5 flex items-center gap-2 text-[10px] text-slate-400">
+                      <span>{formatVnDateTime(n.createdAt)}</span>
+                      {n.emailSent && (
+                        <span className="rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5">
+                          Đã gửi Email
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <AccountSettingsModal
         open={accountModalTab !== null}

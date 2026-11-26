@@ -29,6 +29,10 @@ a,
   scrollbar-width: none;
 }
 
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
 .pb-safe {
   padding-bottom: max(0.375rem, env(safe-area-inset-bottom));
 }

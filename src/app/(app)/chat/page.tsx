@@ -70,6 +70,7 @@ export default async function ChatPage({
       initialRooms={rooms}
       initialRoomId={initialRoomId}
       initialMessages={initialMessages}
+      initialMobileShowChat={Boolean(resolvedParams.room)}
     />
   );
 }
