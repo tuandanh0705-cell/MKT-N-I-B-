@@ -2,11 +2,204 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import { Check, LogOut, X } from "lucide-react";
+import { Check, EyeOff, LogOut, ShieldCheck, X } from "lucide-react";
 import { PirateAvatar } from "@/components/pirate-art";
 import { useToast } from "@/components/toast-provider";
 import type { ChatParticipantUser, ChatRoomSummary } from "@/types/crm";
 import type { UserRole } from "@/generated/prisma/client";
+
+const ANON_MODAL_ALIASES = [
+  "🎭 Hải Tặc Bí Ẩn",
+  "🦉 Cú Đêm Trên Buồm",
+  "👒 Bóng Ma Tàu Sunny",
+  "🌊 Thủy Thủ Vô Danh",
+  "🪙 Kho Báu Bí Mật",
+  "🔥 Kẻ Giấu Mặt",
+];
+
+export function ChatAnonymousDirectModal({
+  open,
+  teammates,
+  onClose,
+  onOpened,
+}: {
+  open: boolean;
+  teammates: ChatParticipantUser[];
+  onClose: () => void;
+  onOpened: (room: ChatRoomSummary, alias: string) => void;
+}) {
+  const { showToast } = useToast();
+  const [targetUserId, setTargetUserId] = useState("");
+  const [alias, setAlias] = useState(ANON_MODAL_ALIASES[0]);
+  const [opening, setOpening] = useState(false);
+
+  if (!open) return null;
+
+  async function handleStart(e: React.FormEvent) {
+    e.preventDefault();
+    if (!targetUserId) {
+      showToast("Vui lòng chọn người bạn muốn nhắn ẩn danh.", "info");
+      return;
+    }
+    setOpening(true);
+    try {
+      const res = await fetch("/api/chat/rooms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "DIRECT",
+          targetUserId,
+          isAnonymousThread: true,
+          anonymousAlias: alias,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Không mở được hội thoại ẩn danh.", "error");
+        return;
+      }
+      const room: ChatRoomSummary = data.room;
+      setTargetUserId("");
+      onOpened(room, alias);
+    } catch {
+      showToast("Lỗi kết nối khi mở hội thoại ẩn danh.", "error");
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <form
+        onSubmit={handleStart}
+        className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl border-2 border-indigo-300 shadow-2xl p-5 space-y-4"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-indigo-950 text-amber-300 flex items-center justify-center shrink-0">
+              <EyeOff className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900">
+                🕵️ Nhắn Tin Ẩn Danh 1-1
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Tạo hội thoại tách biệt hoàn toàn — không dính vào đoạn chat tên thật
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="rounded-xl bg-indigo-950 text-indigo-100 px-3 py-2.5 text-xs flex items-start gap-2">
+          <ShieldCheck className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+          <span>
+            Người nhận sẽ thấy một cuộc hội thoại riêng mang tên{" "}
+            <strong className="text-amber-300">{alias}</strong> (không thấy tên thật, không thấy avatar của bạn) và vẫn có thể trả lời lại bình thường.
+          </span>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Chọn biệt danh hiển thị
+          </label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {ANON_MODAL_ALIASES.map((item) => {
+              const active = alias === item;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setAlias(item)}
+                  className={`rounded-xl border px-2.5 py-2 text-xs font-bold text-left transition cursor-pointer ${
+                    active
+                      ? "bg-indigo-900 text-amber-300 border-indigo-700 shadow-sm"
+                      : "bg-slate-50 text-slate-700 border-slate-200 hover:border-indigo-300"
+                  }`}
+                >
+                  {item}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-xs font-bold text-slate-700 mb-2">
+            Chọn người nhận tin nhắn ẩn danh *
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+            {teammates.map((m) => {
+              const selected = targetUserId === m.id;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setTargetUserId(m.id)}
+                  className={`flex items-center justify-between gap-2 rounded-xl border-2 px-2.5 py-2 text-left transition cursor-pointer ${
+                    selected
+                      ? "border-indigo-500 bg-indigo-50"
+                      : "border-slate-200 bg-white hover:border-indigo-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <PirateAvatar
+                      name={m.name}
+                      color={m.avatarColor}
+                      scope={m.departmentScope}
+                      pirateCharacter={m.pirateCharacter}
+                      size="sm"
+                      animate={false}
+                    />
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-900 truncate">
+                        {m.name}
+                      </div>
+                      <div className="text-[10px] text-slate-500 truncate">
+                        {m.title}
+                      </div>
+                    </div>
+                  </div>
+                  {selected && (
+                    <Check className="w-4 h-4 text-indigo-600 shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 cursor-pointer"
+          >
+            Hủy
+          </button>
+          <button
+            type="submit"
+            disabled={opening || !targetUserId}
+            className="rounded-xl bg-indigo-900 hover:bg-indigo-800 disabled:opacity-50 text-amber-300 px-4 py-2 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <EyeOff className="w-3.5 h-3.5" />
+            {opening ? "Đang mở..." : "Mở hội thoại ẩn danh"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 export function ChatCreateGroupModal({
   open,

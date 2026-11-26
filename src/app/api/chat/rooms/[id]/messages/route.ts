@@ -4,7 +4,9 @@ import { getCurrentUser } from "@/lib/auth";
 import {
   ANONYMOUS_ALIASES,
   CHAT_USER_SELECT,
+  findOrCreateAnonymousDirectRoom,
   serializeChatMessage,
+  serializeChatRoomForViewer,
 } from "@/lib/chat";
 import { createNotification } from "@/lib/notifications";
 import { isBuiltInStickerUrl } from "@/lib/chat-stickers";
@@ -21,7 +23,16 @@ export async function GET(
   const { id } = await context.params;
   const participant = await prisma.chatParticipant.findUnique({
     where: { roomId_userId: { roomId: id, userId: user.id } },
-    select: { id: true },
+    select: {
+      id: true,
+      room: {
+        select: {
+          isAnonymousThread: true,
+          createdById: true,
+          anonymousAlias: true,
+        },
+      },
+    },
   });
 
   if (!participant) {
@@ -30,6 +41,13 @@ export async function GET(
       { status: 403 }
     );
   }
+
+  const msgSerializeOpts = participant.room.isAnonymousThread
+    ? {
+        forceAnonymousSenderId: participant.room.createdById,
+        fallbackAlias: participant.room.anonymousAlias,
+      }
+    : undefined;
 
   const { searchParams } = new URL(request.url);
   const markRead = searchParams.get("peek") !== "1";
@@ -67,7 +85,9 @@ export async function GET(
 
     return NextResponse.json({
       incremental: true,
-      messages: newMessagesRaw.map((m) => serializeChatMessage(m, user.id)),
+      messages: newMessagesRaw.map((m) =>
+        serializeChatMessage(m, user.id, msgSerializeOpts)
+      ),
       deletedIds: deletedRows.map((d) => d.id),
     });
   }
@@ -94,7 +114,9 @@ export async function GET(
 
   return NextResponse.json({
     incremental: false,
-    messages: messagesRaw.map((m) => serializeChatMessage(m, user.id)),
+    messages: messagesRaw.map((m) =>
+      serializeChatMessage(m, user.id, msgSerializeOpts)
+    ),
   });
 }
 
@@ -175,7 +197,14 @@ export async function POST(
       }
     }
 
-    const wantAnonymous = Boolean(body.isAnonymous);
+    const isInitiatorOfAnonymousThread =
+      room.isAnonymousThread && room.createdById === user.id;
+
+    // Nếu người khởi tạo luồng ẩn danh 1-1 gửi tin -> BẮT BUỘC luôn ẩn danh để không bao giờ lộ tên thật
+    const wantAnonymous = isInitiatorOfAnonymousThread
+      ? true
+      : Boolean(body.isAnonymous);
+
     if (wantAnonymous && !room.allowAnonymous) {
       return NextResponse.json(
         { error: "Nhóm chat này đang tắt chế độ nhắn ẩn danh." },
@@ -188,26 +217,117 @@ export async function POST(
       : "";
     const resolvedAlias = wantAnonymous
       ? requestedAlias ||
+        (isInitiatorOfAnonymousThread ? room.anonymousAlias : null) ||
         ANONYMOUS_ALIASES[
           Math.floor(Math.random() * ANONYMOUS_ALIASES.length)
         ]
       : null;
 
     const now = new Date();
-
     const isDataImage = Boolean(
       attachmentUrl && /^data:image\//i.test(attachmentUrl)
     );
+    const finalContent =
+      content ||
+      (isDataImage
+        ? "🖼️ Đã gửi 1 hình ảnh"
+        : "📎 Đã gửi 1 liên kết tài liệu");
 
+    // TRƯỜNG HỢP QUAN TRỌNG: Gửi ẩn danh trong phòng 1-1 có tên thật -> TỰ ĐỘNG TÁCH SANG PHÒNG ẨN DANH RIÊNG BIỆT!
+    // Tuyệt đối KHÔNG ghi tin ẩn danh vào cuộc hội thoại có tên thật giữa 2 người.
+    if (room.type === "DIRECT" && !room.isAnonymousThread && wantAnonymous) {
+      const peer = room.participants.find((p) => p.userId !== user.id);
+      if (!peer) {
+        return NextResponse.json(
+          { error: "Không xác định được người nhận tin nhắn ẩn danh." },
+          { status: 400 }
+        );
+      }
+
+      const { room: secretRoom } = await findOrCreateAnonymousDirectRoom(
+        user.id,
+        peer.userId,
+        resolvedAlias
+      );
+
+      const created = await prisma.chatMessage.create({
+        data: {
+          roomId: secretRoom.id,
+          senderId: user.id,
+          content: finalContent,
+          isAnonymous: true,
+          anonymousAlias: resolvedAlias,
+          attachmentUrl,
+        },
+        include: {
+          sender: { select: CHAT_USER_SELECT },
+        },
+      });
+
+      await Promise.all([
+        prisma.chatRoom.update({
+          where: { id: secretRoom.id },
+          data: {
+            lastMessageAt: now,
+            anonymousAlias: resolvedAlias || secretRoom.anonymousAlias,
+          },
+        }),
+        prisma.chatParticipant.update({
+          where: { roomId_userId: { roomId: secretRoom.id, userId: user.id } },
+          data: { lastReadAt: now },
+        }),
+      ]);
+
+      const previewText =
+        created.content.length > 90
+          ? created.content.slice(0, 90) + "..."
+          : created.content;
+
+      after(async () => {
+        try {
+          await createNotification({
+            userId: peer.userId,
+            type: "CHAT_MESSAGE",
+            title: `🕵️ Tin nhắn ẩn danh mới (${resolvedAlias})`,
+            message: previewText,
+            linkUrl: `/chat?room=${secretRoom.id}`,
+          });
+        } catch (bgErr) {
+          console.error("Background anonymous chat notify error:", bgErr);
+        }
+      });
+
+      const serializedMessage = serializeChatMessage(created, user.id, {
+        forceAnonymousSenderId: user.id,
+        fallbackAlias: resolvedAlias,
+      });
+
+      const serializedSecretRoom = serializeChatRoomForViewer(
+        {
+          ...secretRoom,
+          anonymousAlias: resolvedAlias || secretRoom.anonymousAlias,
+          lastMessageAt: now,
+          messages: [created],
+        },
+        user.id,
+        0
+      );
+
+      return NextResponse.json(
+        {
+          message: serializedMessage,
+          redirectedRoom: serializedSecretRoom,
+        },
+        { status: 201 }
+      );
+    }
+
+    // Các trường hợp còn lại: Group chat, 1-1 công khai, hoặc đang chat trực tiếp trong phòng ẩn danh 1-1
     const created = await prisma.chatMessage.create({
       data: {
         roomId: id,
         senderId: user.id,
-        content:
-          content ||
-          (isDataImage
-            ? "🖼️ Đã gửi 1 hình ảnh"
-            : "📎 Đã gửi 1 liên kết tài liệu"),
+        content: finalContent,
         isAnonymous: wantAnonymous,
         anonymousAlias: resolvedAlias,
         attachmentUrl,
@@ -220,7 +340,12 @@ export async function POST(
     await Promise.all([
       prisma.chatRoom.update({
         where: { id },
-        data: { lastMessageAt: now },
+        data: {
+          lastMessageAt: now,
+          ...(isInitiatorOfAnonymousThread && resolvedAlias
+            ? { anonymousAlias: resolvedAlias }
+            : {}),
+        },
       }),
       prisma.chatParticipant.update({
         where: { roomId_userId: { roomId: id, userId: user.id } },
@@ -239,12 +364,20 @@ export async function POST(
         if (room.type === "DIRECT") {
           const peer = room.participants.find((p) => p.userId !== user.id);
           if (peer) {
+            const notifTitle = room.isAnonymousThread
+              ? isInitiatorOfAnonymousThread
+                ? `🕵️ Tin nhắn ẩn danh mới (${resolvedAlias})`
+                : wantAnonymous
+                  ? `🕵️ Phản hồi ẩn danh mới (${resolvedAlias})`
+                  : `💬 ${user.name} vừa phản hồi tin nhắn ẩn danh của bạn`
+              : wantAnonymous
+                ? `🕵️ Tin nhắn ẩn danh mới (${resolvedAlias})`
+                : `💬 ${user.name} vừa nhắn tin cho bạn`;
+
             await createNotification({
               userId: peer.userId,
               type: "CHAT_MESSAGE",
-              title: wantAnonymous
-                ? `🕵️ Tin nhắn ẩn danh mới (${resolvedAlias})`
-                : `💬 ${user.name} vừa nhắn tin cho bạn`,
+              title: notifTitle,
               message: previewText,
               linkUrl: `/chat?room=${id}`,
             });
@@ -276,7 +409,18 @@ export async function POST(
     });
 
     return NextResponse.json(
-      { message: serializeChatMessage(created, user.id) },
+      {
+        message: serializeChatMessage(
+          created,
+          user.id,
+          room.isAnonymousThread
+            ? {
+                forceAnonymousSenderId: room.createdById,
+                fallbackAlias: resolvedAlias || room.anonymousAlias,
+              }
+            : undefined
+        ),
+      },
       { status: 201 }
     );
   } catch (err) {

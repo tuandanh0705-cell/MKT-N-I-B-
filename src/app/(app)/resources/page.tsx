@@ -123,7 +123,7 @@ export default async function ResourcesPage({
     });
   }
 
-  const [resources, equipment, bookings] = await Promise.all([
+  const [resources, equipment, bookings, teamMembers] = await Promise.all([
     prisma.workspaceResource.findMany({
       where: {
         OR: [
@@ -138,7 +138,7 @@ export default async function ResourcesPage({
       },
     }),
     prisma.equipmentItem.findMany({
-      orderBy: [{ category: "asc" }, { code: "asc" }],
+      orderBy: [{ code: "asc" }, { name: "asc" }],
     }),
     prisma.equipmentBooking.findMany({
       orderBy: { startAt: "desc" },
@@ -156,6 +156,11 @@ export default async function ResourcesPage({
         project: { select: { id: true, slug: true, name: true, color: true } },
       },
     }),
+    prisma.user.findMany({
+      where: { isActive: true },
+      orderBy: [{ role: "asc" }, { name: "asc" }],
+      select: { id: true, name: true },
+    }),
   ]);
 
   return (
@@ -166,6 +171,7 @@ export default async function ResourcesPage({
       initialEquipment={equipment}
       initialBookings={bookings}
       projects={projects}
+      teamMembers={teamMembers}
       userRole={user.role}
       toneMode={user.preferredTone}
       initialProjectFilter={projectId || "ALL"}

@@ -6,12 +6,15 @@ import type { ChatParticipantUser, ChatRoomSummary } from "@/types/crm";
 
 function formatRoomShortDate(iso: string) {
   const d = new Date(iso);
+  const now = new Date();
+  const sameDay =
+    d.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) ===
+    now.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
   return new Intl.DateTimeFormat("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
+    ...(sameDay
+      ? { hour: "2-digit", minute: "2-digit" }
+      : { day: "2-digit", month: "2-digit" }),
   }).format(d);
 }
 
@@ -21,10 +24,11 @@ interface ChatRoomsSidebarProps {
   activeRoomId: string | null;
   mobileShowChat: boolean;
   searchQuery: string;
-  filterTab: "ALL" | "GROUP" | "DIRECT";
+  filterTab: "ALL" | "GROUP" | "DIRECT" | "ANON";
   onSearchQueryChange: (q: string) => void;
-  onFilterTabChange: (tab: "ALL" | "GROUP" | "DIRECT") => void;
+  onFilterTabChange: (tab: "ALL" | "GROUP" | "DIRECT" | "ANON") => void;
   onStartDirectChat: (userId: string) => void;
+  onOpenAnonymousModal: () => void;
   onSelectRoom: (roomId: string) => void;
   getDirectPeer: (room: ChatRoomSummary) => ChatParticipantUser | null;
   getRoomDisplayTitle: (room: ChatRoomSummary) => string;
@@ -40,6 +44,7 @@ export function ChatRoomsSidebar({
   onSearchQueryChange,
   onFilterTabChange,
   onStartDirectChat,
+  onOpenAnonymousModal,
   onSelectRoom,
   getDirectPeer,
   getRoomDisplayTitle,
@@ -52,8 +57,19 @@ export function ChatRoomsSidebar({
     >
       {/* Nhắn nhanh 1-1 cho từng người */}
       <div className="p-3 border-b border-amber-100">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800/80 mb-2">
-          Nhắn riêng 1-1 nhanh
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800/80 truncate">
+            Nhắn riêng 1-1
+          </div>
+          <button
+            type="button"
+            onClick={onOpenAnonymousModal}
+            className="rounded-full bg-indigo-900 hover:bg-indigo-800 text-amber-300 px-2.5 py-0.5 text-[10px] font-bold inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer transition shadow-xs"
+            title="Mở cuộc trò chuyện ẩn danh 1-1 tách biệt"
+          >
+            <EyeOff className="w-3 h-3 shrink-0" />
+            <span>Nhắn ẩn danh</span>
+          </button>
         </div>
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
           {teammates.map((member) => (
@@ -99,15 +115,18 @@ export function ChatRoomsSidebar({
           {[
             { id: "ALL" as const, label: "Tất cả" },
             { id: "GROUP" as const, label: "Nhóm" },
-            { id: "DIRECT" as const, label: "Cá nhân 1-1" },
+            { id: "DIRECT" as const, label: "1-1" },
+            { id: "ANON" as const, label: "Ẩn danh" },
           ].map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => onFilterTabChange(t.id)}
-              className={`flex-1 rounded-lg py-1 text-[11px] font-bold transition cursor-pointer ${
+              className={`flex-1 rounded-lg py-1 px-1 text-[11px] font-bold whitespace-nowrap transition cursor-pointer ${
                 filterTab === t.id
-                  ? "bg-[#0B2545] text-amber-300"
+                  ? t.id === "ANON"
+                    ? "bg-indigo-900 text-amber-300"
+                    : "bg-[#0B2545] text-amber-300"
                   : "bg-amber-50 text-slate-600 hover:bg-amber-100"
               }`}
             >
@@ -129,7 +148,9 @@ export function ChatRoomsSidebar({
             const selected = room.id === activeRoomId;
             const last = room.lastMessage;
             const previewText = !last
-              ? "Chưa có tin nhắn nào"
+              ? room.isAnonymousThread
+                ? "Hội thoại ẩn danh bảo mật — sẵn sàng nhắn tin"
+                : "Chưa có tin nhắn nào"
               : last.isDeleted
                 ? "Tin nhắn đã thu hồi"
                 : last.isAnonymous
@@ -143,11 +164,22 @@ export function ChatRoomsSidebar({
                 onClick={() => onSelectRoom(room.id)}
                 className={`w-full text-left px-3.5 py-3 transition flex items-start gap-2.5 cursor-pointer ${
                   selected
-                    ? "bg-amber-100/70 border-l-4 border-l-amber-500"
-                    : "hover:bg-amber-50/60"
+                    ? room.isAnonymousThread
+                      ? "bg-indigo-50/90 border-l-4 border-l-indigo-600"
+                      : "bg-amber-100/70 border-l-4 border-l-amber-500"
+                    : room.isAnonymousThread
+                      ? "bg-indigo-50/30 hover:bg-indigo-50/70"
+                      : "hover:bg-amber-50/60"
                 }`}
               >
-                {room.type === "DIRECT" && peer ? (
+                {room.isAnonymousThread ? (
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 border-2 bg-indigo-950 text-amber-300 border-indigo-400 shadow-xs"
+                    title="Hội thoại ẩn danh bảo mật"
+                  >
+                    <EyeOff className="w-4 h-4" />
+                  </div>
+                ) : room.type === "DIRECT" && peer ? (
                   <PirateAvatar
                     name={peer.name}
                     color={peer.avatarColor}
@@ -173,8 +205,8 @@ export function ChatRoomsSidebar({
                 )}
 
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs font-extrabold text-slate-900 truncate flex items-center gap-1">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="text-xs font-extrabold text-slate-900 truncate flex items-center gap-1 min-w-0">
                       {room.isPinned && (
                         <Pin className="w-3 h-3 text-amber-600 shrink-0" />
                       )}

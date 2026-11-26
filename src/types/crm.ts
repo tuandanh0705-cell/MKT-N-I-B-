@@ -281,6 +281,7 @@ export interface EquipmentItemType {
   name: string;
   category: EquipmentCategory;
   code: string;
+  managerName: string | null;
   description: string | null;
   status: EquipmentCondition;
 }
@@ -487,6 +488,9 @@ export interface ChatRoomSummary {
   name: string | null;
   description: string | null;
   allowAnonymous: boolean;
+  isAnonymousThread: boolean;
+  anonymousAlias: string | null;
+  isAnonymousSender: boolean;
   isPinned: boolean;
   createdById: string;
   lastMessageAt: string;

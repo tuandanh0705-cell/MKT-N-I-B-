@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
   CHAT_USER_SELECT,
+  findOrCreateAnonymousDirectRoom,
   getUserChatRoomsWithMeta,
-  serializeChatMessage,
+  serializeChatRoomForViewer,
 } from "@/lib/chat";
 
 export async function GET(request: Request) {
@@ -31,6 +32,11 @@ export async function POST(request: Request) {
 
     if (type === "DIRECT") {
       const targetUserId = String(body.targetUserId ?? "").trim();
+      const isAnonymousThread = Boolean(body.isAnonymousThread);
+      const anonymousAlias = body.anonymousAlias
+        ? String(body.anonymousAlias).trim().slice(0, 40)
+        : null;
+
       if (!targetUserId || targetUserId === user.id) {
         return NextResponse.json(
           { error: "Chọn một đồng đội khác để bắt đầu chat riêng." },
@@ -49,10 +55,27 @@ export async function POST(request: Request) {
         );
       }
 
-      // Tìm phòng 1-1 đã có giữa đúng 2 người
+      // Phòng chat ẩn danh 1-1: tách hoàn toàn khỏi phòng 1-1 có tên thật
+      if (isAnonymousThread) {
+        const { room: secretRoom, created } =
+          await findOrCreateAnonymousDirectRoom(
+            user.id,
+            targetUserId,
+            anonymousAlias
+          );
+        return NextResponse.json(
+          {
+            room: serializeChatRoomForViewer(secretRoom, user.id, 0),
+          },
+          { status: created ? 201 : 200 }
+        );
+      }
+
+      // Tìm phòng 1-1 công khai (KHÔNG ẩn danh) đã có giữa đúng 2 người
       const existingDirectRooms = await prisma.chatRoom.findMany({
         where: {
           type: "DIRECT",
+          isAnonymousThread: false,
           AND: [
             { participants: { some: { userId: user.id } } },
             { participants: { some: { userId: targetUserId } } },
@@ -61,6 +84,7 @@ export async function POST(request: Request) {
         include: {
           participants: {
             include: { user: { select: CHAT_USER_SELECT } },
+            orderBy: { joinedAt: "asc" },
           },
           messages: {
             orderBy: { createdAt: "desc" },
@@ -75,25 +99,7 @@ export async function POST(request: Request) {
       );
       if (exactMatch) {
         return NextResponse.json({
-          room: {
-            id: exactMatch.id,
-            type: exactMatch.type,
-            name: exactMatch.name,
-            description: exactMatch.description,
-            allowAnonymous: exactMatch.allowAnonymous,
-            isPinned: exactMatch.isPinned,
-            createdById: exactMatch.createdById,
-            lastMessageAt: exactMatch.lastMessageAt.toISOString(),
-            unreadCount: 0,
-            participants: exactMatch.participants.map((p) => ({
-              userId: p.userId,
-              isAdmin: p.isAdmin,
-              user: p.user,
-            })),
-            lastMessage: exactMatch.messages[0]
-              ? serializeChatMessage(exactMatch.messages[0], user.id)
-              : null,
-          },
+          room: serializeChatRoomForViewer(exactMatch, user.id, 0),
         });
       }
 
@@ -101,6 +107,7 @@ export async function POST(request: Request) {
         data: {
           type: "DIRECT",
           allowAnonymous: true,
+          isAnonymousThread: false,
           createdById: user.id,
           participants: {
             create: [
@@ -112,29 +119,14 @@ export async function POST(request: Request) {
         include: {
           participants: {
             include: { user: { select: CHAT_USER_SELECT } },
+            orderBy: { joinedAt: "asc" },
           },
         },
       });
 
       return NextResponse.json(
         {
-          room: {
-            id: created.id,
-            type: created.type,
-            name: created.name,
-            description: created.description,
-            allowAnonymous: created.allowAnonymous,
-            isPinned: created.isPinned,
-            createdById: created.createdById,
-            lastMessageAt: created.lastMessageAt.toISOString(),
-            unreadCount: 0,
-            participants: created.participants.map((p) => ({
-              userId: p.userId,
-              isAdmin: p.isAdmin,
-              user: p.user,
-            })),
-            lastMessage: null,
-          },
+          room: serializeChatRoomForViewer({ ...created, messages: [] }, user.id, 0),
         },
         { status: 201 }
       );
@@ -179,6 +171,7 @@ export async function POST(request: Request) {
         name,
         description,
         allowAnonymous,
+        isAnonymousThread: false,
         createdById: user.id,
         participants: {
           create: validIds.map((uid) => ({
@@ -197,6 +190,7 @@ export async function POST(request: Request) {
       include: {
         participants: {
           include: { user: { select: CHAT_USER_SELECT } },
+          orderBy: { joinedAt: "asc" },
         },
         messages: {
           orderBy: { createdAt: "desc" },
@@ -208,25 +202,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        room: {
-          id: createdGroup.id,
-          type: createdGroup.type,
-          name: createdGroup.name,
-          description: createdGroup.description,
-          allowAnonymous: createdGroup.allowAnonymous,
-          isPinned: createdGroup.isPinned,
-          createdById: createdGroup.createdById,
-          lastMessageAt: createdGroup.lastMessageAt.toISOString(),
-          unreadCount: 0,
-          participants: createdGroup.participants.map((p) => ({
-            userId: p.userId,
-            isAdmin: p.isAdmin,
-            user: p.user,
-          })),
-          lastMessage: createdGroup.messages[0]
-            ? serializeChatMessage(createdGroup.messages[0], user.id)
-            : null,
-        },
+        room: serializeChatRoomForViewer(createdGroup, user.id, 0),
       },
       { status: 201 }
     );

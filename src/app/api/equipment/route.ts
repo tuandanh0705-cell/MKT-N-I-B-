@@ -61,6 +61,23 @@ export async function GET() {
   return NextResponse.json({ items });
 }
 
+function inferEquipmentCategory(name: string, code: string): EquipmentCategory {
+  const s = `${name} ${code}`.toLowerCase();
+  if (s.includes("iphone") || s.includes("điện thoại") || s.includes("phone") || s.includes("phn")) {
+    return "PHONE";
+  }
+  if (s.includes("máy quay") || s.includes("camcorder") || s.includes("zv-") || s.includes("fx3")) {
+    return "CAMCORDER";
+  }
+  if (s.includes("máy ảnh") || s.includes("camera") || s.includes("canon") || s.includes("sony")) {
+    return "CAMERA";
+  }
+  if (s.includes("mic") || s.includes("đèn") || s.includes("light") || s.includes("godox")) {
+    return "MIC_LIGHT";
+  }
+  return "OTHER";
+}
+
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
@@ -73,6 +90,9 @@ export async function POST(request: Request) {
     const code =
       String(body.code ?? "").trim().toUpperCase() ||
       `EQ-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+    const managerName = body.managerName
+      ? String(body.managerName).trim().slice(0, 80)
+      : null;
 
     if (!name) {
       return NextResponse.json(
@@ -85,7 +105,10 @@ export async function POST(request: Request) {
       data: {
         name,
         code,
-        category: (body.category as EquipmentCategory) || "CAMERA",
+        category:
+          (body.category as EquipmentCategory) ||
+          inferEquipmentCategory(name, code),
+        managerName,
         status: (body.status as EquipmentCondition) || "AVAILABLE",
         description: body.description ? String(body.description).trim() : null,
       },
@@ -116,6 +139,12 @@ export async function PATCH(request: Request) {
         name: body.name ? String(body.name).trim() : undefined,
         code: body.code ? String(body.code).trim().toUpperCase() : undefined,
         category: (body.category as EquipmentCategory) || undefined,
+        managerName:
+          body.managerName !== undefined
+            ? body.managerName
+              ? String(body.managerName).trim().slice(0, 80)
+              : null
+            : undefined,
         status: (body.status as EquipmentCondition) || undefined,
         description:
           body.description !== undefined

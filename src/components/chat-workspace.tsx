@@ -21,6 +21,7 @@ import { ChatRoomsSidebar } from "@/components/chat-rooms-sidebar";
 import { ChatMessageStream } from "@/components/chat-message-stream";
 import { ChatEmojiStickerPicker } from "@/components/chat-emoji-sticker-picker";
 import {
+  ChatAnonymousDirectModal,
   ChatCreateGroupModal,
   ChatGroupSettingsModal,
   ChatImageLightbox,
@@ -117,7 +118,7 @@ export function ChatWorkspace({
     keyboardOpen: boolean;
   } | null>(null);
 
-  const [filterTab, setFilterTab] = useState<"ALL" | "GROUP" | "DIRECT">("ALL");
+  const [filterTab, setFilterTab] = useState<"ALL" | "GROUP" | "DIRECT" | "ANON">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingRoom, setLoadingRoom] = useState(false);
 
@@ -130,10 +131,20 @@ export function ChatWorkspace({
   const [msgSearchQuery, setMsgSearchQuery] = useState("");
   const [anonymousMode, setAnonymousMode] = useState<boolean>(() => {
     const first = initialRooms.find((r) => r.id === initialRoomId);
-    return Boolean(first?.name?.includes("Ẩn Danh"));
+    return Boolean(
+      (first?.isAnonymousThread && first?.isAnonymousSender) ||
+        (first?.name?.includes("Ẩn Danh") && first?.allowAnonymous)
+    );
   });
-  const [anonymousAlias, setAnonymousAlias] = useState<string>(STEALTH_ALIASES[0]);
+  const [anonymousAlias, setAnonymousAlias] = useState<string>(() => {
+    const first = initialRooms.find((r) => r.id === initialRoomId);
+    if (first?.isAnonymousThread && first?.isAnonymousSender && first.anonymousAlias) {
+      return first.anonymousAlias;
+    }
+    return STEALTH_ALIASES[0];
+  });
 
+  const [anonDirectOpen, setAnonDirectOpen] = useState(false);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -217,11 +228,21 @@ export function ChatWorkspace({
     [rooms, activeRoomId]
   );
 
+  const isLockedAnonymous = Boolean(
+    activeRoom?.isAnonymousThread && activeRoom?.isAnonymousSender
+  );
+
+  const effectiveAnonymous = Boolean(
+    isLockedAnonymous || (anonymousMode && activeRoom?.allowAnonymous)
+  );
+
   const mentionCandidates = useMemo(() => {
     const pool = activeRoom
       ? activeRoom.participants.map((p) => p.user)
       : teammates;
-    return pool.filter((u) => u.id !== currentUser.id);
+    return pool.filter(
+      (u) => u.id !== currentUser.id && u.id !== "anonymous-sender"
+    );
   }, [activeRoom, teammates, currentUser.id]);
 
   const filteredMentions = useMemo(() => {
@@ -318,6 +339,13 @@ export function ChatWorkspace({
 
   const getRoomDisplayTitle = useCallback(
     (room: ChatRoomSummary): string => {
+      if (room.isAnonymousThread) {
+        if (room.isAnonymousSender) {
+          const peer = getDirectPeer(room);
+          return `Ẩn danh → ${peer?.name || "Đồng đội"}`;
+        }
+        return room.anonymousAlias || "🎭 Hải Tặc Bí Ẩn";
+      }
       if (room.type === "DIRECT") {
         const peer = getDirectPeer(room);
         return peer?.name || "Trò chuyện riêng";
@@ -353,9 +381,16 @@ export function ChatWorkspace({
       setMobileShowChat(true);
       const source = roomListSnapshot ?? rooms;
       const target = source.find((r) => r.id === roomId);
-      setAnonymousMode(
-        Boolean(target?.name?.includes("Ẩn Danh") && target.allowAnonymous)
+      const lockedAnon = Boolean(
+        target?.isAnonymousThread && target.isAnonymousSender
       );
+      setAnonymousMode(
+        lockedAnon ||
+          Boolean(target?.name?.includes("Ẩn Danh") && target.allowAnonymous)
+      );
+      if (lockedAnon && target?.anonymousAlias) {
+        setAnonymousAlias(target.anonymousAlias);
+      }
 
       // Hiển thị tức thì tin nhắn đã cache của phòng này (0ms)
       const cached = roomCacheRef.current.get(roomId);
@@ -568,14 +603,136 @@ export function ChatWorkspace({
     if (!activeRoom) return;
     if (!cleanText && !cleanUrl) return;
 
-    const targetRoomId = activeRoom.id;
-    const useAnon = Boolean(anonymousMode && activeRoom.allowAnonymous);
+    const useAnon = Boolean(
+      (activeRoom.isAnonymousThread && activeRoom.isAnonymousSender) ||
+        (anonymousMode && activeRoom.allowAnonymous)
+    );
     const chosenAlias = useAnon ? anonymousAlias : null;
     const isDataImage = Boolean(cleanUrl && /^data:image\//i.test(cleanUrl));
     const displayContent =
       cleanText ||
       (isDataImage ? "🖼️ Đã gửi 1 hình ảnh" : "📎 Đã gửi 1 liên kết tài liệu");
 
+    const sortRoomsList = (list: ChatRoomSummary[]) =>
+      [...list].sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+        return (
+          new Date(b.lastMessageAt).getTime() -
+          new Date(a.lastMessageAt).getTime()
+        );
+      });
+
+    // Nếu người dùng đang đứng ở phòng 1-1 có tên thật nhưng bật Ẩn danh -> tách sang phòng ẩn danh riêng!
+    const isDirectAnonRedirect = Boolean(
+      activeRoom.type === "DIRECT" && !activeRoom.isAnonymousThread && useAnon
+    );
+
+    if (isDirectAnonRedirect) {
+      const peer = getDirectPeer(activeRoom);
+      const existingSecret = peer
+        ? rooms.find(
+            (r) =>
+              r.type === "DIRECT" &&
+              r.isAnonymousThread &&
+              r.isAnonymousSender &&
+              r.participants.some((p) => p.userId === peer.id)
+          )
+        : null;
+
+      if (!options?.keepComposer) {
+        setDraft("");
+        setAttachmentUrl("");
+        setShowLinkInput(false);
+      }
+
+      const endpointRoomId = existingSecret ? existingSecret.id : activeRoom.id;
+
+      try {
+        const res = await fetch(`/api/chat/rooms/${endpointRoomId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: cleanText,
+            attachmentUrl: cleanUrl || null,
+            isAnonymous: true,
+            anonymousAlias: chosenAlias,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (!options?.keepComposer) {
+            setDraft((cur) => (cur ? cur : cleanText));
+            if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
+          }
+          showToast(data.error || "Không gửi được tin nhắn ẩn danh.", "error");
+          return;
+        }
+
+        const sent: ChatMessageItem = data.message;
+        const secretRoom: ChatRoomSummary | null =
+          data.redirectedRoom ??
+          (existingSecret
+            ? {
+                ...existingSecret,
+                anonymousAlias: chosenAlias || existingSecret.anonymousAlias,
+                lastMessage: sent,
+                lastMessageAt: sent.createdAt,
+                unreadCount: 0,
+              }
+            : null);
+
+        if (secretRoom) {
+          setRooms((prev) => {
+            const hasRoom = prev.some((r) => r.id === secretRoom.id);
+            const next = hasRoom
+              ? prev.map((r) => (r.id === secretRoom.id ? secretRoom : r))
+              : [secretRoom, ...prev];
+            return sortRoomsList(next);
+          });
+
+          const hadCache = roomCacheRef.current.has(secretRoom.id);
+          activeRoomIdRef.current = secretRoom.id;
+          setActiveRoomId(secretRoom.id);
+          setAnonymousMode(true);
+          if (secretRoom.anonymousAlias) {
+            setAnonymousAlias(secretRoom.anonymousAlias);
+          }
+
+          updateRoomMessages(secretRoom.id, (prev) =>
+            prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]
+          );
+          scrollToBottom(true);
+
+          if (!hadCache) {
+            // Tải thêm lịch sử cũ của phòng ẩn danh (nếu trước đó đã từng nhắn)
+            void fetch(`/api/chat/rooms/${secretRoom.id}/messages`)
+              .then((r) => (r.ok ? r.json() : null))
+              .then((hist) => {
+                if (hist?.messages && activeRoomIdRef.current === secretRoom.id) {
+                  roomCacheRef.current.set(secretRoom.id, hist.messages);
+                  setMessages(hist.messages);
+                  scrollToBottom(false);
+                }
+              })
+              .catch(() => {});
+          }
+
+          showToast(
+            "🕵️ Đã chuyển sang hội thoại ẩn danh riêng — người nhận sẽ KHÔNG thấy tên bạn!",
+            "success"
+          );
+        }
+      } catch {
+        if (!options?.keepComposer) {
+          setDraft((cur) => (cur ? cur : cleanText));
+          if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
+        }
+        showToast("Lỗi kết nối khi gửi tin nhắn ẩn danh.", "error");
+      }
+      return;
+    }
+
+    const targetRoomId = activeRoom.id;
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const optimisticMsg: ChatMessageItem = {
       id: tempId,
@@ -607,25 +764,24 @@ export function ChatWorkspace({
       setAttachmentUrl("");
       setShowLinkInput(false);
     }
-    setRooms((prev) => {
-      const updated = prev.map((r) =>
-        r.id === targetRoomId
-          ? {
-              ...r,
-              lastMessage: optimisticMsg,
-              lastMessageAt: optimisticMsg.createdAt,
-              unreadCount: 0,
-            }
-          : r
-      );
-      return [...updated].sort((a, b) => {
-        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-        return (
-          new Date(b.lastMessageAt).getTime() -
-          new Date(a.lastMessageAt).getTime()
-        );
-      });
-    });
+    setRooms((prev) =>
+      sortRoomsList(
+        prev.map((r) =>
+          r.id === targetRoomId
+            ? {
+                ...r,
+                anonymousAlias:
+                  r.isAnonymousThread && r.isAnonymousSender && chosenAlias
+                    ? chosenAlias
+                    : r.anonymousAlias,
+                lastMessage: optimisticMsg,
+                lastMessageAt: optimisticMsg.createdAt,
+                unreadCount: 0,
+              }
+            : r
+        )
+      )
+    );
     scrollToBottom(true);
 
     try {
@@ -653,6 +809,28 @@ export function ChatWorkspace({
       }
 
       const sent: ChatMessageItem = data.message;
+      if (data.redirectedRoom) {
+        const redirected: ChatRoomSummary = data.redirectedRoom;
+        updateRoomMessages(targetRoomId, (prev) =>
+          prev.filter((m) => m.id !== tempId)
+        );
+        setRooms((prev) => {
+          const hasRoom = prev.some((r) => r.id === redirected.id);
+          const next = hasRoom
+            ? prev.map((r) => (r.id === redirected.id ? redirected : r))
+            : [redirected, ...prev];
+          return sortRoomsList(next);
+        });
+        activeRoomIdRef.current = redirected.id;
+        setActiveRoomId(redirected.id);
+        setAnonymousMode(true);
+        updateRoomMessages(redirected.id, (prev) =>
+          prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]
+        );
+        scrollToBottom(true);
+        return;
+      }
+
       updateRoomMessages(targetRoomId, (prev) => {
         const alreadyHasReal = prev.some((m) => m.id === sent.id);
         if (alreadyHasReal) {
@@ -719,7 +897,11 @@ export function ChatWorkspace({
 
   const filteredRooms = useMemo(() => {
     return rooms.filter((r) => {
-      if (filterTab !== "ALL" && r.type !== filterTab) return false;
+      if (filterTab === "ANON") {
+        if (!r.isAnonymousThread && !r.name?.includes("Ẩn Danh")) return false;
+      } else if (filterTab !== "ALL" && r.type !== filterTab) {
+        return false;
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         const title = getRoomDisplayTitle(r).toLowerCase();
@@ -747,20 +929,32 @@ export function ChatWorkspace({
             </h1>
             <p className="hidden sm:block text-xs text-slate-500">
               Nhắn riêng 1-1, lập nhóm dự án hoặc bật{" "}
-              <strong className="text-indigo-700">🕵️ Chế độ Ẩn danh</strong> góp ý bảo mật
+              <strong className="text-indigo-700">🕵️ Chế độ Ẩn danh</strong> tách phòng bảo mật
             </p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setCreateGroupOpen(true)}
-          className="rounded-2xl bg-gradient-to-r from-red-500 to-amber-500 hover:from-red-600 hover:to-amber-600 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 shadow-sm transition hover:-translate-y-0.5 cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Tạo nhóm</span>
-          <span className="hidden sm:inline">chat</span>
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setAnonDirectOpen(true)}
+            className="rounded-2xl bg-indigo-900 hover:bg-indigo-800 text-amber-300 px-2.5 sm:px-3.5 py-2 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 shadow-sm transition hover:-translate-y-0.5 cursor-pointer shrink-0"
+            title="Nhắn tin ẩn danh 1-1 tách biệt"
+          >
+            <EyeOff className="w-4 h-4" />
+            <span>Ẩn danh</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCreateGroupOpen(true)}
+            className="rounded-2xl bg-gradient-to-r from-red-500 to-amber-500 hover:from-red-600 hover:to-amber-600 text-white px-2.5 sm:px-4 py-2 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 shadow-sm transition hover:-translate-y-0.5 cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tạo nhóm</span>
+            <span className="hidden sm:inline">chat</span>
+          </button>
+        </div>
       </div>
 
       <div
@@ -780,6 +974,7 @@ export function ChatWorkspace({
           onSearchQueryChange={setSearchQuery}
           onFilterTabChange={setFilterTab}
           onStartDirectChat={handleStartDirectChat}
+          onOpenAnonymousModal={() => setAnonDirectOpen(true)}
           onSelectRoom={(id) => handleSelectRoom(id)}
           getDirectPeer={getDirectPeer}
           getRoomDisplayTitle={getRoomDisplayTitle}
@@ -842,7 +1037,7 @@ export function ChatWorkspace({
                 className={`relative border-t shrink-0 transition-colors px-2.5 pt-2 md:p-3 ${
                   mobileViewport?.keyboardOpen ? "pb-2" : "pb-safe md:pb-3"
                 } ${
-                  anonymousMode && activeRoom.allowAnonymous
+                  effectiveAnonymous
                     ? "bg-indigo-950/5 border-indigo-300"
                     : "bg-[#FFFDF7] border-amber-100"
                 }`}
@@ -861,32 +1056,41 @@ export function ChatWorkspace({
                 {/* === TOOLBAR DESKTOP (md+) === */}
                 <div className="hidden md:flex items-center justify-between gap-1.5 mb-2">
                   <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar min-w-0">
-                    {activeRoom.allowAnonymous && (
-                      <button
-                        type="button"
-                        onClick={() => setAnonymousMode((v) => !v)}
-                        className={`rounded-full px-3 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
-                          anonymousMode
-                            ? "bg-indigo-900 text-amber-300 border-indigo-700 shadow-sm"
-                            : "bg-white text-slate-700 border-amber-200 hover:border-indigo-400"
-                        }`}
-                        title="Bật/tắt chế độ gửi ẩn danh"
-                      >
-                        {anonymousMode ? (
-                          <>
-                            <EyeOff className="w-3.5 h-3.5" />
-                            <span>🕵️ Đang bật Ẩn danh</span>
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Gửi Ẩn danh</span>
-                          </>
-                        )}
-                      </button>
-                    )}
+                    {activeRoom.allowAnonymous &&
+                      (isLockedAnonymous ? (
+                        <span
+                          className="rounded-full px-3 py-1 text-[11px] font-bold inline-flex items-center gap-1 border bg-indigo-900 text-amber-300 border-indigo-700 shadow-sm shrink-0"
+                          title="Phòng ẩn danh riêng luôn giữ bí mật danh tính thật của bạn"
+                        >
+                          <EyeOff className="w-3.5 h-3.5" />
+                          <span>🔒 Luôn bật Ẩn danh</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAnonymousMode((v) => !v)}
+                          className={`rounded-full px-3 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
+                            effectiveAnonymous
+                              ? "bg-indigo-900 text-amber-300 border-indigo-700 shadow-sm"
+                              : "bg-white text-slate-700 border-amber-200 hover:border-indigo-400"
+                          }`}
+                          title="Bật/tắt chế độ gửi ẩn danh"
+                        >
+                          {effectiveAnonymous ? (
+                            <>
+                              <EyeOff className="w-3.5 h-3.5" />
+                              <span>🕵️ Đang bật Ẩn danh</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-3.5 h-3.5 text-slate-500" />
+                              <span>Gửi Ẩn danh</span>
+                            </>
+                          )}
+                        </button>
+                      ))}
 
-                    {anonymousMode && activeRoom.allowAnonymous && (
+                    {effectiveAnonymous && (
                       <select
                         value={anonymousAlias}
                         onChange={(e) => setAnonymousAlias(e.target.value)}
@@ -1008,13 +1212,25 @@ export function ChatWorkspace({
                 </div>
 
                 {/* Dải thông báo Ẩn danh: Desktop hiện đầy đủ; Mobile hiện 1 dòng siêu gọn */}
-                {anonymousMode && activeRoom.allowAnonymous && (
+                {effectiveAnonymous && (
                   <>
                     <div className="hidden md:flex mb-2 rounded-xl bg-indigo-900 text-indigo-100 px-3 py-1.5 text-[11px] items-center gap-1.5">
                       <ShieldCheck className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                       <span>
-                        Danh tính thật của bạn sẽ được ẩn hoàn toàn khi gửi — hiển thị dưới tên{" "}
-                        <strong className="text-amber-300">{anonymousAlias}</strong>.
+                        {activeRoom.type === "DIRECT" && !activeRoom.isAnonymousThread ? (
+                          <>
+                            Khi gửi, tin nhắn sẽ{" "}
+                            <strong className="text-amber-300">
+                              tự tách sang hội thoại ẩn danh riêng
+                            </strong>{" "}
+                            dưới tên <strong className="text-amber-300">{anonymousAlias}</strong> — KHÔNG hiện trong đoạn chat có tên thật của bạn.
+                          </>
+                        ) : (
+                          <>
+                            Danh tính thật của bạn sẽ được ẩn hoàn toàn khi gửi — người khác chỉ thấy{" "}
+                            <strong className="text-amber-300">{anonymousAlias}</strong>.
+                          </>
+                        )}
                       </span>
                     </div>
                     <div className="md:hidden mb-1.5 flex items-center justify-between gap-2 rounded-full bg-indigo-900 text-indigo-100 px-2.5 py-1 text-[11px]">
@@ -1036,14 +1252,26 @@ export function ChatWorkspace({
                             </option>
                           ))}
                         </select>
+                        {activeRoom.type === "DIRECT" &&
+                          !activeRoom.isAnonymousThread && (
+                            <span className="text-[10px] text-indigo-200 shrink-0">
+                              • Tách phòng riêng
+                            </span>
+                          )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setAnonymousMode(false)}
-                        className="text-[10px] font-bold text-indigo-200 hover:text-white px-1.5 py-0.5 rounded-full bg-white/10 shrink-0 cursor-pointer"
-                      >
-                        Tắt
-                      </button>
+                      {isLockedAnonymous ? (
+                        <span className="text-[10px] font-bold text-amber-300 px-1.5 py-0.5 rounded-full bg-white/10 shrink-0">
+                          🔒 Bảo mật
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAnonymousMode(false)}
+                          className="text-[10px] font-bold text-indigo-200 hover:text-white px-1.5 py-0.5 rounded-full bg-white/10 shrink-0 cursor-pointer"
+                        >
+                          Tắt
+                        </button>
+                      )}
                     </div>
                   </>
                 )}
@@ -1051,7 +1279,7 @@ export function ChatWorkspace({
                 {/* Khay mở rộng nút phụ trên Mobile khi bấm dấu + */}
                 {mobileToolsOpen && (
                   <div className="md:hidden mb-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                    {activeRoom.allowAnonymous && (
+                    {activeRoom.allowAnonymous && !isLockedAnonymous && (
                       <button
                         type="button"
                         onClick={() => {
@@ -1059,17 +1287,17 @@ export function ChatWorkspace({
                           setMobileToolsOpen(false);
                         }}
                         className={`rounded-full px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1.5 border shrink-0 cursor-pointer ${
-                          anonymousMode
+                          effectiveAnonymous
                             ? "bg-indigo-900 text-amber-300 border-indigo-700"
                             : "bg-white text-slate-700 border-amber-200"
                         }`}
                       >
-                        {anonymousMode ? (
+                        {effectiveAnonymous ? (
                           <EyeOff className="w-3.5 h-3.5" />
                         ) : (
                           <Eye className="w-3.5 h-3.5 text-indigo-600" />
                         )}
-                        {anonymousMode ? "Tắt Ẩn danh" : "Bật Ẩn danh"}
+                        {effectiveAnonymous ? "Tắt Ẩn danh" : "Bật Ẩn danh"}
                       </button>
                     )}
 
@@ -1194,7 +1422,7 @@ export function ChatWorkspace({
                 <div className="md:hidden flex items-end gap-1.5">
                   <div
                     className={`flex-1 flex items-center gap-1 rounded-[24px] border px-1.5 py-1 bg-white shadow-xs transition-colors ${
-                      anonymousMode && activeRoom.allowAnonymous
+                      effectiveAnonymous
                         ? "border-indigo-400 bg-indigo-50/40"
                         : "border-amber-200 focus-within:border-amber-400"
                     }`}
@@ -1209,7 +1437,7 @@ export function ChatWorkspace({
                       className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition cursor-pointer ${
                         mobileToolsOpen
                           ? "bg-[#0B2545] text-amber-300 rotate-45"
-                          : anonymousMode && activeRoom.allowAnonymous
+                          : effectiveAnonymous
                             ? "bg-indigo-700 text-amber-300"
                             : "bg-amber-100 text-amber-900 active:bg-amber-200"
                       }`}
@@ -1234,7 +1462,7 @@ export function ChatWorkspace({
                         }
                       }}
                       placeholder={
-                        anonymousMode && activeRoom.allowAnonymous
+                        effectiveAnonymous
                           ? "Nhắn ẩn danh..."
                           : "Nhắn tin..."
                       }
@@ -1321,7 +1549,7 @@ export function ChatWorkspace({
                           type="submit"
                           aria-label="Gửi tin nhắn"
                           className={`w-9 h-9 rounded-full text-white flex items-center justify-center shadow-sm cursor-pointer transition ${
-                            anonymousMode && activeRoom.allowAnonymous
+                            effectiveAnonymous
                               ? "bg-indigo-700 active:bg-indigo-800"
                               : "bg-gradient-to-r from-red-500 to-amber-500 active:from-red-600 active:to-amber-600"
                           }`}
@@ -1361,12 +1589,12 @@ export function ChatWorkspace({
                       }
                     }}
                     placeholder={
-                      anonymousMode && activeRoom.allowAnonymous
+                      effectiveAnonymous
                         ? "Nhập tin nhắn ẩn danh..."
                         : `Nhắn tới ${getRoomDisplayTitle(activeRoom)}...`
                     }
                     className={`flex-1 min-h-[40px] max-h-28 resize-none rounded-2xl border px-3.5 py-2.5 text-sm leading-snug bg-white focus:outline-none ${
-                      anonymousMode && activeRoom.allowAnonymous
+                      effectiveAnonymous
                         ? "border-indigo-300 focus:border-indigo-500"
                         : "border-amber-200 focus:border-sky-400"
                     }`}
@@ -1376,7 +1604,7 @@ export function ChatWorkspace({
                     type="submit"
                     disabled={!draft.trim() && !attachmentUrl.trim()}
                     className={`rounded-2xl px-4 py-2.5 text-sm font-bold text-white inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50 ${
-                      anonymousMode && activeRoom.allowAnonymous
+                      effectiveAnonymous
                         ? "bg-indigo-700 hover:bg-indigo-800"
                         : "bg-gradient-to-r from-red-500 to-amber-500 hover:from-red-600 hover:to-amber-600"
                     }`}
@@ -1390,6 +1618,23 @@ export function ChatWorkspace({
           )}
         </div>
       </div>
+
+      <ChatAnonymousDirectModal
+        open={anonDirectOpen}
+        teammates={teammates}
+        onClose={() => setAnonDirectOpen(false)}
+        onOpened={async (room, alias) => {
+          const exists = rooms.some((r) => r.id === room.id);
+          const nextRooms = exists
+            ? rooms.map((r) => (r.id === room.id ? room : r))
+            : [room, ...rooms];
+          setRooms(nextRooms);
+          setAnonDirectOpen(false);
+          setAnonymousAlias(alias);
+          setAnonymousMode(true);
+          await handleSelectRoom(room.id, nextRooms);
+        }}
+      />
 
       <ChatCreateGroupModal
         open={createGroupOpen}

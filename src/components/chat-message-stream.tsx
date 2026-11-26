@@ -140,7 +140,11 @@ export function ChatMessageStream({
               <ArrowLeft className="w-5 h-5" />
             </button>
 
-            {activeRoom.type === "DIRECT" && directPeer ? (
+            {activeRoom.isAnonymousThread ? (
+              <div className="w-9 h-9 rounded-full bg-indigo-950 text-amber-300 border-2 border-indigo-400 flex items-center justify-center shrink-0 shadow-xs">
+                <EyeOff className="w-4 h-4" />
+              </div>
+            ) : activeRoom.type === "DIRECT" && directPeer ? (
               <PirateAvatar
                 name={directPeer.name}
                 color={directPeer.avatarColor}
@@ -162,18 +166,28 @@ export function ChatMessageStream({
             <div className="min-w-0 flex-1">
               <div className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5 min-w-0">
                 <span className="truncate">{getRoomDisplayTitle(activeRoom)}</span>
-                {activeRoom.allowAnonymous && (
-                  <span className="hidden sm:inline-flex rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 px-2 py-0.5 text-[10px] font-bold shrink-0">
-                    🕵️ Hỗ trợ Ẩn danh
+                {activeRoom.isAnonymousThread ? (
+                  <span className="hidden lg:inline-flex rounded-full bg-indigo-900 text-amber-300 px-2 py-0.5 text-[10px] font-bold shrink-0">
+                    🔒 Bảo mật
                   </span>
+                ) : (
+                  activeRoom.allowAnonymous && (
+                    <span className="hidden lg:inline-flex rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 px-2 py-0.5 text-[10px] font-bold shrink-0">
+                      🕵️ Hỗ trợ Ẩn danh
+                    </span>
+                  )
                 )}
               </div>
               <div className="text-[11px] text-slate-500 truncate">
-                {activeRoom.type === "DIRECT"
-                  ? "Đang hoạt động • Chat 1-1"
-                  : `${activeRoom.participants.length} thành viên${
-                      activeRoom.allowAnonymous ? " • 🕵️ Ẩn danh" : ""
-                    }`}
+                {activeRoom.isAnonymousThread
+                  ? activeRoom.isAnonymousSender
+                    ? `Bạn đang ẩn danh (${activeRoom.anonymousAlias || "🎭 Hải Tặc Bí Ẩn"}) • Người nhận không thấy tên bạn`
+                    : "Tin nhắn ẩn danh • Bạn có thể trả lời trực tiếp tại đây"
+                  : activeRoom.type === "DIRECT"
+                    ? "Đang hoạt động • Chat 1-1"
+                    : `${activeRoom.participants.length} thành viên${
+                        activeRoom.allowAnonymous ? " • 🕵️ Ẩn danh" : ""
+                      }`}
               </div>
             </div>
           </div>
@@ -240,6 +254,27 @@ export function ChatMessageStream({
 
       {/* Luồng tin nhắn */}
       <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:p-4 space-y-3 bg-gradient-to-b from-[#FFFDF7]/60 to-sky-50/30">
+        {activeRoom.isAnonymousThread && (
+          <div className="mx-auto max-w-md rounded-2xl border border-indigo-200 bg-indigo-50/80 px-3.5 py-2.5 text-center text-[11px] text-indigo-900 shadow-2xs">
+            {activeRoom.isAnonymousSender ? (
+              <>
+                <span className="font-extrabold">🕵️ Hội thoại ẩn danh tách biệt:</span>{" "}
+                Mọi tin nhắn bạn gửi ở đây hiển thị với{" "}
+                <strong>{directPeer?.name || "người nhận"}</strong> dưới tên{" "}
+                <strong className="text-indigo-700">
+                  {activeRoom.anonymousAlias || "🎭 Hải Tặc Bí Ẩn"}
+                </strong>{" "}
+                — không bao giờ lộ tên hay avatar thật của bạn.
+              </>
+            ) : (
+              <>
+                <span className="font-extrabold">🎭 Tin nhắn ẩn danh bảo mật:</span>{" "}
+                Danh tính người gửi được ẩn hoàn toàn khỏi hệ thống hiển thị. Bạn có thể phản hồi trực tiếp ngay tại cuộc hội thoại này.
+              </>
+            )}
+          </div>
+        )}
+
         {loadingRoom && !hasAnyMessages ? (
           <div className="py-12 text-center text-xs text-slate-400">
             Đang tải cuộc trò chuyện...
@@ -300,10 +335,14 @@ export function ChatMessageStream({
                 >
                   <div className="flex items-center gap-1.5 px-1 text-[10px] text-slate-500">
                     {msg.isAnonymous ? (
-                      <span className="font-bold text-indigo-700 inline-flex items-center gap-1">
-                        <EyeOff className="w-2.5 h-2.5" />
-                        {msg.anonymousAlias || "🎭 Hải Tặc Bí Ẩn"}
-                        {mine ? " (Bạn)" : ""}
+                      <span className="font-bold text-indigo-700 inline-flex items-center gap-1 flex-wrap">
+                        <EyeOff className="w-2.5 h-2.5 shrink-0" />
+                        <span>{msg.anonymousAlias || "🎭 Hải Tặc Bí Ẩn"}</span>
+                        {mine && (
+                          <span className="rounded bg-indigo-100 text-indigo-700 px-1 py-0.5 text-[9px] font-bold">
+                            Bạn · ẩn với người khác
+                          </span>
+                        )}
                       </span>
                     ) : (
                       <span className="font-bold text-slate-700">

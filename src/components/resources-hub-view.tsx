@@ -142,6 +142,7 @@ export function ResourcesHubView({
   initialEquipment,
   initialBookings,
   projects,
+  teamMembers,
   userRole,
   toneMode,
   initialProjectFilter = "ALL",
@@ -153,6 +154,7 @@ export function ResourcesHubView({
   initialEquipment: EquipmentItemType[];
   initialBookings: EquipmentBookingItem[];
   projects: SimpleProject[];
+  teamMembers: { id: string; name: string }[];
   userRole: UserRole;
   toneMode?: string;
   initialProjectFilter?: string;
@@ -449,6 +451,7 @@ export function ResourcesHubView({
           initialEquipment={initialEquipment}
           initialBookings={initialBookings}
           projects={projectList}
+          teamMembers={teamMembers}
         />
       ) : (
         <>

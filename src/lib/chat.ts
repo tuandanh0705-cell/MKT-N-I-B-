@@ -11,6 +11,8 @@ export const ANONYMOUS_ALIASES = [
   "🔥 Kẻ Giấu Mặt",
 ] as const;
 
+export const ANONYMOUS_SENDER_USER_ID = "anonymous-sender";
+
 export const CHAT_USER_SELECT = {
   id: true,
   name: true,
@@ -20,7 +22,16 @@ export const CHAT_USER_SELECT = {
   departmentScope: true,
 } as const;
 
-interface RawChatMessage {
+export interface RawChatUser {
+  id: string;
+  name: string;
+  title: string;
+  avatarColor: string;
+  pirateCharacter: string | null;
+  departmentScope: DepartmentScope;
+}
+
+export interface RawChatMessage {
   id: string;
   roomId: string;
   senderId: string;
@@ -30,38 +41,62 @@ interface RawChatMessage {
   attachmentUrl: string | null;
   isDeleted: boolean;
   createdAt: Date;
-  sender: {
-    id: string;
-    name: string;
-    title: string;
-    avatarColor: string;
-    pirateCharacter: string | null;
-    departmentScope: DepartmentScope;
-  };
+  sender: RawChatUser;
+}
+
+export interface RawChatRoomForSerialization {
+  id: string;
+  type: ChatRoomType;
+  name: string | null;
+  description: string | null;
+  allowAnonymous: boolean;
+  isAnonymousThread: boolean;
+  anonymousAlias: string | null;
+  isPinned: boolean;
+  createdById: string;
+  lastMessageAt: Date;
+  participants: {
+    userId: string;
+    isAdmin: boolean;
+    user: RawChatUser;
+  }[];
+  messages?: RawChatMessage[];
 }
 
 /**
  * Chuẩn hóa tin nhắn trước khi trả về client.
- * Đảm bảo tuyệt đối KHÔNG rò rỉ thông tin sender khi tin nhắn ở chế độ ẩn danh.
+ * Đảm bảo tuyệt đối KHÔNG rò rỉ thông tin sender khi tin nhắn ở chế độ ẩn danh
+ * hoặc thuộc luồng hội thoại ẩn danh 1-1 do người khởi tạo gửi.
  */
 export function serializeChatMessage(
   msg: RawChatMessage,
-  viewerUserId: string
+  viewerUserId: string,
+  options?: {
+    forceAnonymousSenderId?: string;
+    fallbackAlias?: string | null;
+  }
 ): ChatMessageItem {
+  const effectiveAnonymous =
+    msg.isAnonymous ||
+    Boolean(
+      options?.forceAnonymousSenderId &&
+        msg.senderId === options.forceAnonymousSenderId
+    );
+
   return {
     id: msg.id,
     roomId: msg.roomId,
     content: msg.isDeleted ? "" : msg.content,
-    isAnonymous: msg.isAnonymous,
-    anonymousAlias: msg.isAnonymous
-      ? msg.anonymousAlias || ANONYMOUS_ALIASES[0]
+    isAnonymous: effectiveAnonymous,
+    anonymousAlias: effectiveAnonymous
+      ? msg.anonymousAlias || options?.fallbackAlias || ANONYMOUS_ALIASES[0]
       : null,
     attachmentUrl: msg.isDeleted ? null : msg.attachmentUrl,
     isDeleted: msg.isDeleted,
     isMine: msg.senderId === viewerUserId,
     createdAt: msg.createdAt.toISOString(),
     sender:
-      msg.isAnonymous || msg.isDeleted
+      effectiveAnonymous || msg.isDeleted
         ? null
         : {
             id: msg.sender.id,
@@ -72,6 +107,295 @@ export function serializeChatMessage(
             departmentScope: msg.sender.departmentScope,
           },
   };
+}
+
+/**
+ * Chuẩn hóa thông tin phòng chat theo góc nhìn của từng người xem.
+ * Với phòng ẩn danh 1-1 (isAnonymousThread = true):
+ * - Người nhận (viewerUserId !== createdById): ẨN HOÀN TOÀN createdById và thay người gửi trong
+ *   participants bằng nhân vật ẩn danh (ANONYMOUS_SENDER_USER_ID) để tuyệt đối không lộ tên/avatar/ID.
+ * - Người gửi (viewerUserId === createdById): biết rõ mình đang nhắn ẩn danh tới ai (isAnonymousSender = true).
+ */
+export function serializeChatRoomForViewer(
+  room: RawChatRoomForSerialization,
+  viewerUserId: string,
+  unreadCount = 0
+): ChatRoomSummary {
+  const isAnonymousThread = Boolean(room.isAnonymousThread);
+  const isAnonymousSender =
+    isAnonymousThread && room.createdById === viewerUserId;
+  const shouldMaskCreator =
+    isAnonymousThread && room.createdById !== viewerUserId;
+  const aliasLabel = room.anonymousAlias || ANONYMOUS_ALIASES[0];
+
+  const participants = room.participants.map((p) => {
+    if (shouldMaskCreator && p.userId === room.createdById) {
+      return {
+        userId: ANONYMOUS_SENDER_USER_ID,
+        isAdmin: false,
+        user: {
+          id: ANONYMOUS_SENDER_USER_ID,
+          name: aliasLabel,
+          title: "Người gửi ẩn danh",
+          avatarColor: "#312e81",
+          pirateCharacter: null,
+          departmentScope: "SUPPORT" as DepartmentScope,
+        },
+      };
+    }
+    return {
+      userId: p.userId,
+      isAdmin: p.isAdmin,
+      user: p.user,
+    };
+  });
+
+  const lastMsgRaw = room.messages?.[0] ?? null;
+
+  return {
+    id: room.id,
+    type: room.type as ChatRoomType,
+    name: room.name,
+    description: room.description,
+    allowAnonymous: room.allowAnonymous,
+    isAnonymousThread,
+    anonymousAlias: isAnonymousThread ? aliasLabel : room.anonymousAlias,
+    isAnonymousSender,
+    isPinned: room.isPinned,
+    createdById: shouldMaskCreator ? "anonymous" : room.createdById,
+    lastMessageAt: room.lastMessageAt.toISOString(),
+    unreadCount,
+    participants,
+    lastMessage: lastMsgRaw
+      ? serializeChatMessage(lastMsgRaw, viewerUserId, {
+          forceAnonymousSenderId: isAnonymousThread
+            ? room.createdById
+            : undefined,
+          fallbackAlias: aliasLabel,
+        })
+      : null,
+  };
+}
+
+/**
+ * Tìm hoặc tạo phòng chat ẩn danh 1-1 chuyên biệt (tách hoàn toàn khỏi hội thoại có tên thật).
+ * Mỗi chiều (A -> B và B -> A) có một luồng ẩn danh riêng biệt theo createdById = người giấu danh tính.
+ */
+export async function findOrCreateAnonymousDirectRoom(
+  senderId: string,
+  targetUserId: string,
+  requestedAlias?: string | null
+) {
+  const cleanAlias = requestedAlias?.trim().slice(0, 40) || "";
+
+  const existing = await prisma.chatRoom.findMany({
+    where: {
+      type: "DIRECT",
+      isAnonymousThread: true,
+      createdById: senderId,
+      AND: [
+        { participants: { some: { userId: senderId } } },
+        { participants: { some: { userId: targetUserId } } },
+      ],
+    },
+    include: {
+      participants: {
+        include: { user: { select: CHAT_USER_SELECT } },
+        orderBy: { joinedAt: "asc" },
+      },
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        include: { sender: { select: CHAT_USER_SELECT } },
+      },
+    },
+  });
+
+  const exactMatch = existing.find((r) => r.participants.length === 2);
+  if (exactMatch) {
+    if (cleanAlias && exactMatch.anonymousAlias !== cleanAlias) {
+      const updated = await prisma.chatRoom.update({
+        where: { id: exactMatch.id },
+        data: { anonymousAlias: cleanAlias },
+        include: {
+          participants: {
+            include: { user: { select: CHAT_USER_SELECT } },
+            orderBy: { joinedAt: "asc" },
+          },
+          messages: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            include: { sender: { select: CHAT_USER_SELECT } },
+          },
+        },
+      });
+      return { room: updated, created: false };
+    }
+    return { room: exactMatch, created: false };
+  }
+
+  const resolvedAlias =
+    cleanAlias ||
+    ANONYMOUS_ALIASES[Math.floor(Math.random() * ANONYMOUS_ALIASES.length)];
+
+  const created = await prisma.chatRoom.create({
+    data: {
+      type: "DIRECT",
+      allowAnonymous: true,
+      isAnonymousThread: true,
+      anonymousAlias: resolvedAlias,
+      createdById: senderId,
+      participants: {
+        create: [
+          { userId: senderId, isAdmin: true },
+          { userId: targetUserId, isAdmin: false },
+        ],
+      },
+    },
+    include: {
+      participants: {
+        include: { user: { select: CHAT_USER_SELECT } },
+        orderBy: { joinedAt: "asc" },
+      },
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        include: { sender: { select: CHAT_USER_SELECT } },
+      },
+    },
+  });
+
+  return { room: created, created: true };
+}
+
+let legacyAnonymousMigrationPromise: Promise<void> | null = null;
+
+/**
+ * Tự động tách các tin nhắn ẩn danh 1-1 cũ (từng bị lưu nhầm vào phòng 1-1 có tên thật)
+ * sang phòng ẩn danh riêng biệt để đảm bảo bảo mật danh tính cho cả dữ liệu cũ.
+ */
+export async function migrateLegacyDirectAnonymousMessagesOnce(): Promise<void> {
+  if (!legacyAnonymousMigrationPromise) {
+    legacyAnonymousMigrationPromise = (async () => {
+      const legacyMessages = await prisma.chatMessage.findMany({
+        where: {
+          isAnonymous: true,
+          room: {
+            type: "DIRECT",
+            isAnonymousThread: false,
+          },
+        },
+        orderBy: { createdAt: "asc" },
+        include: {
+          room: {
+            include: {
+              participants: { select: { userId: true } },
+            },
+          },
+        },
+      });
+
+      if (legacyMessages.length === 0) return;
+
+      const grouped = new Map<
+        string,
+        {
+          oldRoomId: string;
+          senderId: string;
+          recipientId: string;
+          messageIds: string[];
+          latestAlias: string | null;
+          latestCreatedAt: Date;
+        }
+      >();
+
+      const touchedOldRoomIds = new Set<string>();
+
+      for (const msg of legacyMessages) {
+        const peer = msg.room.participants.find(
+          (p) => p.userId !== msg.senderId
+        );
+        if (!peer) continue;
+        const key = `${msg.roomId}::${msg.senderId}`;
+        const existing = grouped.get(key);
+        if (existing) {
+          existing.messageIds.push(msg.id);
+          if (msg.anonymousAlias) existing.latestAlias = msg.anonymousAlias;
+          if (msg.createdAt > existing.latestCreatedAt) {
+            existing.latestCreatedAt = msg.createdAt;
+          }
+        } else {
+          grouped.set(key, {
+            oldRoomId: msg.roomId,
+            senderId: msg.senderId,
+            recipientId: peer.userId,
+            messageIds: [msg.id],
+            latestAlias: msg.anonymousAlias,
+            latestCreatedAt: msg.createdAt,
+          });
+        }
+        touchedOldRoomIds.add(msg.roomId);
+      }
+
+      for (const group of grouped.values()) {
+        const { room: secretRoom } = await findOrCreateAnonymousDirectRoom(
+          group.senderId,
+          group.recipientId,
+          group.latestAlias
+        );
+
+        await prisma.chatMessage.updateMany({
+          where: { id: { in: group.messageIds } },
+          data: { roomId: secretRoom.id },
+        });
+
+        await prisma.chatRoom.update({
+          where: { id: secretRoom.id },
+          data: {
+            lastMessageAt:
+              secretRoom.lastMessageAt > group.latestCreatedAt
+                ? secretRoom.lastMessageAt
+                : group.latestCreatedAt,
+          },
+        });
+
+        await prisma.notification.updateMany({
+          where: {
+            userId: group.recipientId,
+            type: "CHAT_MESSAGE",
+            linkUrl: `/chat?room=${group.oldRoomId}`,
+            title: { contains: "ẩn danh", mode: "insensitive" },
+          },
+          data: {
+            linkUrl: `/chat?room=${secretRoom.id}`,
+          },
+        });
+      }
+
+      for (const oldRoomId of touchedOldRoomIds) {
+        const remainingLatest = await prisma.chatMessage.findFirst({
+          where: { roomId: oldRoomId },
+          orderBy: { createdAt: "desc" },
+          select: { createdAt: true },
+        });
+
+        if (!remainingLatest) {
+          // Phòng 1-1 cũ chỉ chứa đúng các tin ẩn danh vừa tách -> xóa vỏ rỗng để không lộ tên người gửi
+          await prisma.chatRoom.delete({ where: { id: oldRoomId } });
+        } else {
+          await prisma.chatRoom.update({
+            where: { id: oldRoomId },
+            data: { lastMessageAt: remainingLatest.createdAt },
+          });
+        }
+      }
+    })().catch((err) => {
+      console.error("Legacy direct anonymous chat migration error:", err);
+      legacyAnonymousMigrationPromise = null;
+    });
+  }
+
+  return legacyAnonymousMigrationPromise;
 }
 
 /**
@@ -184,6 +508,7 @@ export async function getUserChatRoomsWithMeta(
 ): Promise<ChatRoomSummary[]> {
   if (!options?.skipEnsure) {
     await ensureDefaultChatRooms();
+    await migrateLegacyDirectAnonymousMessagesOnce();
   }
 
   const [rooms, unreadMap] = await Promise.all([
@@ -216,26 +541,15 @@ export async function getUserChatRoomsWithMeta(
     return getUserChatRoomsWithMeta(userId, { skipEnsure: false });
   }
 
-  return rooms.map((r) => {
-    const lastMsgRaw = r.messages[0] ?? null;
-    return {
-      id: r.id,
-      type: r.type as ChatRoomType,
-      name: r.name,
-      description: r.description,
-      allowAnonymous: r.allowAnonymous,
-      isPinned: r.isPinned,
-      createdById: r.createdById,
-      lastMessageAt: r.lastMessageAt.toISOString(),
-      unreadCount: unreadMap.get(r.id) ?? 0,
-      participants: r.participants.map((p) => ({
-        userId: p.userId,
-        isAdmin: p.isAdmin,
-        user: p.user,
-      })),
-      lastMessage: lastMsgRaw ? serializeChatMessage(lastMsgRaw, userId) : null,
-    };
-  });
+  return rooms
+    .filter((r) => {
+      // Không hiển thị phòng ẩn danh rỗng cho người nhận trước khi có tin nhắn đầu tiên
+      if (r.isAnonymousThread && r.createdById !== userId && r.messages.length === 0) {
+        return false;
+      }
+      return true;
+    })
+    .map((r) => serializeChatRoomForViewer(r, userId, unreadMap.get(r.id) ?? 0));
 }
 
 export async function getChatUnreadCountForUser(userId: string): Promise<number> {

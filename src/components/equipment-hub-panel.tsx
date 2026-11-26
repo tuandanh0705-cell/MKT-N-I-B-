@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
+  UserCheck,
   X,
 } from "lucide-react";
 import type { AuthUser } from "@/lib/auth";
@@ -26,10 +27,7 @@ import type {
   EquipmentItemType,
   SimpleProject,
 } from "@/types/crm";
-import type {
-  EquipmentCategory,
-  EquipmentCondition,
-} from "@/generated/prisma/client";
+import type { EquipmentCondition } from "@/generated/prisma/client";
 
 export function EquipmentHubPanel({
   currentUser,
@@ -37,12 +35,14 @@ export function EquipmentHubPanel({
   initialEquipment,
   initialBookings,
   projects,
+  teamMembers = [],
 }: {
   currentUser: AuthUser;
   todayStr: string;
   initialEquipment: EquipmentItemType[];
   initialBookings: EquipmentBookingItem[];
   projects: SimpleProject[];
+  teamMembers?: { id: string; name: string }[];
 }) {
   const { showToast } = useToast();
 
@@ -59,12 +59,12 @@ export function EquipmentHubPanel({
   const [bookEnd, setBookEnd] = useState(`${todayStr}T12:00`);
   const [savingBook, setSavingBook] = useState(false);
 
-  // Modal Thêm / Sửa Thiết bị
+  // Modal Thêm / Sửa Thiết bị (5 trường chuẩn: Tên Thiết Bị, Mã Thiết Bị, Người Quản Lý, Tình Trạng, Mô Tả/Phụ Kiện Đi Kèm)
   const [equipModalOpen, setEquipModalOpen] = useState(false);
   const [editingEquip, setEditingEquip] = useState<EquipmentItemType | null>(null);
   const [equipName, setEquipName] = useState("");
   const [equipCode, setEquipCode] = useState("");
-  const [equipCat, setEquipCat] = useState<EquipmentCategory>("CAMERA");
+  const [equipManager, setEquipManager] = useState("");
   const [equipStatus, setEquipStatus] = useState<EquipmentCondition>("AVAILABLE");
   const [equipDesc, setEquipDesc] = useState("");
   const [savingEquip, setSavingEquip] = useState(false);
@@ -165,7 +165,7 @@ export function EquipmentHubPanel({
     setEditingEquip(null);
     setEquipName("");
     setEquipCode("");
-    setEquipCat("CAMERA");
+    setEquipManager("");
     setEquipStatus("AVAILABLE");
     setEquipDesc("");
     setEquipModalOpen(true);
@@ -175,7 +175,7 @@ export function EquipmentHubPanel({
     setEditingEquip(item);
     setEquipName(item.name);
     setEquipCode(item.code);
-    setEquipCat(item.category);
+    setEquipManager(item.managerName || "");
     setEquipStatus(item.status);
     setEquipDesc(item.description || "");
     setEquipModalOpen(true);
@@ -194,14 +194,14 @@ export function EquipmentHubPanel({
                 id: editingEquip.id,
                 name: equipName,
                 code: equipCode,
-                category: equipCat,
+                managerName: equipManager,
                 status: equipStatus,
                 description: equipDesc,
               }
             : {
                 name: equipName,
                 code: equipCode,
-                category: equipCat,
+                managerName: equipManager,
                 status: equipStatus,
                 description: equipDesc,
               }
@@ -307,13 +307,13 @@ export function EquipmentHubPanel({
               key={eq.id}
               className="bg-white rounded-xl border border-slate-200 p-3.5 flex flex-col justify-between gap-2 shadow-sm"
             >
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xl shrink-0">{cat.emoji}</span>
+                  <div className="flex items-start gap-2 min-w-0">
+                    <span className="text-xl shrink-0 mt-0.5">{cat.emoji}</span>
                     <div className="min-w-0">
-                      <div className="text-[10px] font-mono text-slate-400 font-bold">
-                        {eq.code}
+                      <div className="text-[10px] font-mono text-slate-500 font-bold">
+                        Mã: {eq.code}
                       </div>
                       <div className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug">
                         {eq.name}
@@ -337,8 +337,19 @@ export function EquipmentHubPanel({
                   </span>
                 </div>
 
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-600 bg-slate-50 rounded-lg px-2 py-1 border border-slate-100">
+                  <UserCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span className="text-slate-500 shrink-0">Quản lý:</span>
+                  <span className="font-bold text-slate-800 truncate">
+                    {eq.managerName || "Chưa gán"}
+                  </span>
+                </div>
+
                 {eq.description && (
-                  <p className="text-[11px] text-slate-500 line-clamp-1">
+                  <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
+                    <span className="font-semibold text-slate-500">
+                      Mô tả / Phụ kiện:{" "}
+                    </span>
                     {eq.description}
                   </p>
                 )}
@@ -463,6 +474,7 @@ export function EquipmentHubPanel({
                     <div className="text-[10px] font-mono text-slate-500 mt-0.5">
                       {eq.code} •{" "}
                       {eq.status === "MAINTENANCE" ? "Bảo trì" : "Sẵn sàng"}
+                      {eq.managerName ? ` • QL: ${eq.managerName}` : ""}
                     </div>
                   </div>
                   {eq.status !== "MAINTENANCE" && (
@@ -833,7 +845,7 @@ export function EquipmentHubPanel({
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Tên thiết bị *
+                Tên Thiết Bị *
               </label>
               <input
                 type="text"
@@ -845,10 +857,10 @@ export function EquipmentHubPanel({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Mã thiết bị
+                  Mã Thiết Bị
                 </label>
                 <input
                   type="text"
@@ -860,49 +872,61 @@ export function EquipmentHubPanel({
               </div>
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Phân loại
+                  Tình Trạng
                 </label>
                 <select
-                  value={equipCat}
+                  value={equipStatus}
                   onChange={(e) =>
-                    setEquipCat(e.target.value as EquipmentCategory)
+                    setEquipStatus(e.target.value as EquipmentCondition)
                   }
                   className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2"
                 >
-                  {Object.entries(EQUIPMENT_CATEGORY_META).map(([k, m]) => (
-                    <option key={k} value={k}>
-                      {m.emoji} {m.label}
-                    </option>
-                  ))}
+                  <option value="AVAILABLE">✅ Sẵn sàng cho mượn</option>
+                  <option value="MAINTENANCE">🔧 Đang bảo trì / Tạm khóa</option>
                 </select>
               </div>
             </div>
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Tình trạng máy
+                Người Quản Lý
               </label>
-              <select
-                value={equipStatus}
-                onChange={(e) =>
-                  setEquipStatus(e.target.value as EquipmentCondition)
-                }
-                className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2"
-              >
-                <option value="AVAILABLE">✅ Sẵn sàng cho mượn</option>
-                <option value="MAINTENANCE">🔧 Đang bảo trì / Tạm khóa</option>
-              </select>
+              <input
+                type="text"
+                value={equipManager}
+                onChange={(e) => setEquipManager(e.target.value)}
+                placeholder="VD: Chị Hương / Hoàng / Kho HCNS..."
+                className="w-full rounded-xl border border-slate-200 px-3 py-2"
+              />
+              {teamMembers.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {teamMembers.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setEquipManager(m.name)}
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold border cursor-pointer transition ${
+                        equipManager === m.name
+                          ? "bg-[#0B2545] text-amber-300 border-[#0B2545]"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:border-amber-300"
+                      }`}
+                    >
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Mô tả / Phụ kiện đi kèm
+                Mô Tả / Phụ Kiện Đi Kèm
               </label>
               <textarea
-                rows={2}
+                rows={3}
                 value={equipDesc}
                 onChange={(e) => setEquipDesc(e.target.value)}
-                placeholder="VD: Kèm 2 pin + thẻ 128GB + mic thu âm..."
+                placeholder="VD: Kèm 2 pin + thẻ 128GB + mic thu âm + túi đựng..."
                 className="w-full rounded-xl border border-slate-200 px-3 py-2"
               />
             </div>

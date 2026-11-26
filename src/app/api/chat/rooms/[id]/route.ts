@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { CHAT_USER_SELECT } from "@/lib/chat";
+import { CHAT_USER_SELECT, serializeChatRoomForViewer } from "@/lib/chat";
 
 export async function PATCH(
   request: Request,
@@ -111,26 +111,17 @@ export async function PATCH(
           include: { user: { select: CHAT_USER_SELECT } },
           orderBy: { joinedAt: "asc" },
         },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: { sender: { select: CHAT_USER_SELECT } },
+        },
       },
     });
 
     return NextResponse.json({
       room: refreshed
-        ? {
-            id: refreshed.id,
-            type: refreshed.type,
-            name: refreshed.name,
-            description: refreshed.description,
-            allowAnonymous: refreshed.allowAnonymous,
-            isPinned: refreshed.isPinned,
-            createdById: refreshed.createdById,
-            lastMessageAt: refreshed.lastMessageAt.toISOString(),
-            participants: refreshed.participants.map((p) => ({
-              userId: p.userId,
-              isAdmin: p.isAdmin,
-              user: p.user,
-            })),
-          }
+        ? serializeChatRoomForViewer(refreshed, user.id, 0)
         : null,
     });
   } catch (err) {

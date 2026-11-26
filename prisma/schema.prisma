@@ -498,22 +498,25 @@ model BudgetRequest {
 }
 
 model ChatRoom {
-  id             String       @id @default(cuid())
-  type           ChatRoomType @default(GROUP)
-  name           String?
-  description    String?
-  allowAnonymous Boolean      @default(true)
-  isPinned       Boolean      @default(false)
-  createdById    String
-  lastMessageAt  DateTime     @default(now())
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id                String       @id @default(cuid())
+  type              ChatRoomType @default(GROUP)
+  name              String?
+  description       String?
+  allowAnonymous    Boolean      @default(true)
+  isAnonymousThread Boolean      @default(false)
+  anonymousAlias    String?
+  isPinned          Boolean      @default(false)
+  createdById       String
+  lastMessageAt     DateTime     @default(now())
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   createdBy    User              @relation("ChatRoomCreator", fields: [createdById], references: [id], onDelete: Cascade)
   participants ChatParticipant[]
   messages     ChatMessage[]
 
   @@index([type, lastMessageAt])
+  @@index([type, isAnonymousThread, lastMessageAt])
 }
 
 model ChatParticipant {
@@ -639,8 +642,9 @@ model LeaveRequest {
 model EquipmentItem {
   id          String             @id @default(cuid())
   name        String
-  category    EquipmentCategory  @default(CAMERA)
+  category    EquipmentCategory  @default(OTHER)
   code        String             @unique
+  managerName String?
   description String?
   status      EquipmentCondition @default(AVAILABLE)
   createdAt   DateTime           @default(now())
