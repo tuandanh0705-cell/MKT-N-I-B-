@@ -140,6 +140,8 @@ export function ProjectWorkspace({
     taskType?: TaskType;
     orderMode?: "MEDIA" | "TASK";
     videoKind?: "SHOOT_AND_EDIT" | "EDIT_ONLY";
+    parentTaskId?: string;
+    parentLabel?: string;
   }>({});
   const [prevDeepLinkKey, setPrevDeepLinkKey] = useState<string>(
     `${initialTaskId ?? ""}:${initialOpenChat ? "1" : "0"}`
@@ -411,18 +413,20 @@ export function ProjectWorkspace({
               <Plus className="w-4 h-4" />
               Order Media / Giao việc
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setContentEditorTask(null);
-                setContentEditorPrefill(null);
-                setContentEditorOpen(true);
-              }}
-              className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              <PenLine className="w-4 h-4" />
-              + Viết bài mới
-            </button>
+            {viewMode !== "CONTENT_CALENDAR" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setContentEditorTask(null);
+                  setContentEditorPrefill(null);
+                  setContentEditorOpen(true);
+                }}
+                className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <PenLine className="w-4 h-4" />
+                + Viết bài mới
+              </button>
+            )}
           </div>
         </div>
 
@@ -720,6 +724,8 @@ export function ProjectWorkspace({
               taskType: isVid ? "MEDIA_VIDEO" : "MEDIA_IMAGE",
               orderMode: "MEDIA",
               pillar: sourceTask.contentPillar || undefined,
+              parentTaskId: sourceTask.id,
+              parentLabel: `${sourceTask.code} — ${sourceTask.title}`,
             });
             setCreateOpen(true);
           }}
@@ -727,7 +733,7 @@ export function ProjectWorkspace({
       )}
 
       <CreateTaskModal
-        key={`${project.id}-${matrixDefaults.pillar || ""}-${matrixDefaults.week || 0}-${matrixDefaults.title || ""}-${matrixDefaults.taskType || ""}-${matrixDefaults.orderMode || ""}-${matrixDefaults.videoKind || ""}`}
+        key={`${project.id}-${matrixDefaults.pillar || ""}-${matrixDefaults.week || 0}-${matrixDefaults.title || ""}-${matrixDefaults.taskType || ""}-${matrixDefaults.orderMode || ""}-${matrixDefaults.videoKind || ""}-${matrixDefaults.parentTaskId || ""}`}
         open={createOpen}
         onClose={() => {
           setCreateOpen(false);
@@ -748,6 +754,8 @@ export function ProjectWorkspace({
         defaultTaskType={matrixDefaults.taskType}
         defaultOrderMode={matrixDefaults.orderMode}
         defaultVideoKind={matrixDefaults.videoKind}
+        defaultParentTaskId={matrixDefaults.parentTaskId}
+        defaultParentLabel={matrixDefaults.parentLabel}
         onCreated={(newTask) => {
           if (newTask.project.id === project.id) {
             setTasks((prev) => [newTask, ...prev]);

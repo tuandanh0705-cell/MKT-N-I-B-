@@ -385,6 +385,31 @@ export async function PATCH(
           actionLabel: body.notifyUrl ? "Mở bài viết duyệt ngay" : "Mở Hàng đợi Duyệt",
         });
       }
+
+      // Nếu là Order Media gắn với 1 bài Content gốc -> báo luôn cho người phụ trách bài Content biết Media đã nộp sản phẩm!
+      if (existing.parentTaskId) {
+        const parentTask = await prisma.task.findUnique({
+          where: { id: existing.parentTaskId },
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            assigneeId: true,
+            requesterId: true,
+            project: { select: { slug: true } },
+          },
+        });
+        const contentPicId = parentTask?.assigneeId || parentTask?.requesterId;
+        if (parentTask && contentPicId && contentPicId !== user.id) {
+          await createNotification({
+            userId: contentPicId,
+            type: "SYSTEM",
+            title: `🎨 Media vừa nộp ấn phẩm cho bài ${parentTask.code}`,
+            message: `${user.name} vừa gửi duyệt "${existing.title}" (liên kết với "${parentTask.title}").`,
+            linkUrl: `/projects/${parentTask.project.slug}?tab=CONTENT_CALENDAR&taskId=${parentTask.id}`,
+          });
+        }
+      }
     } else if (action === "APPROVE") {
       if (user.role !== "LEADER") {
         return NextResponse.json(
@@ -414,6 +439,36 @@ export async function PATCH(
           sendEmailNow: true,
           actionLabel: "Mở đầu việc đã duyệt",
         });
+      }
+
+      // Liên kết 2 chiều: Media Order được duyệt Final -> báo ngay cho PIC bài Content gốc lấy link đăng bài!
+      if (existing.parentTaskId) {
+        const parentTask = await prisma.task.findUnique({
+          where: { id: existing.parentTaskId },
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            assigneeId: true,
+            requesterId: true,
+            project: { select: { slug: true } },
+          },
+        });
+        const contentPicId = parentTask?.assigneeId || parentTask?.requesterId;
+        if (
+          parentTask &&
+          contentPicId &&
+          contentPicId !== user.id &&
+          !recipients.has(contentPicId)
+        ) {
+          await createNotification({
+            userId: contentPicId,
+            type: "APPROVED",
+            title: `🎬 Media Final đã sẵn sàng cho bài ${parentTask.code}!`,
+            message: `Ấn phẩm "${existing.title}" đã được Leader duyệt Final — mở bài viết để lấy link đăng ngay.`,
+            linkUrl: `/projects/${parentTask.project.slug}?tab=CONTENT_CALENDAR&taskId=${parentTask.id}`,
+          });
+        }
       }
     } else if (action === "REQUEST_REVISION") {
       if (user.role !== "LEADER") {

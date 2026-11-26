@@ -490,12 +490,14 @@ export function OutputsHubView({
 
   function handleTaskUpdated(updated: TaskItem) {
     setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    window.dispatchEvent(new CustomEvent("reviews-count-updated"));
   }
 
   function handleTaskDeleted(deletedId: string) {
     setTasks((prev) => prev.filter((t) => t.id !== deletedId));
     setInspectTaskId((cur) => (cur === deletedId ? null : cur));
     setDrawerTaskId((cur) => (cur === deletedId ? null : cur));
+    window.dispatchEvent(new CustomEvent("reviews-count-updated"));
   }
 
   async function handleCopyCaption(task: TaskItem) {

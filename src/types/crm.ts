@@ -136,6 +136,14 @@ export interface TaskItem {
   externalDepartment?: string | null;
   externalContact?: string | null;
   dailyKpiKey?: string | null;
+  parentTaskId?: string | null;
+  parentTask?: {
+    id: string;
+    code: string;
+    title: string;
+    status: TaskStatus;
+    project?: { slug: string };
+  } | null;
   lastAiQcJson?: unknown;
   lastAiQcAt?: string | Date | null;
   deletedAt?: string | Date | null;

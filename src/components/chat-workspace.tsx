@@ -463,6 +463,7 @@ export function ChatWorkspace({
   useEffect(() => {
     let active = true;
     let inFlight = false;
+    let lastActivityAt = Date.now();
 
     const refreshRoomsList = async (currentId: string | null) => {
       const roomsRes = await fetch("/api/chat/rooms?poll=1");
@@ -541,7 +542,10 @@ export function ChatWorkspace({
           }
         }
 
-        // Chỉ refresh danh sách phòng mỗi 3 nhịp (~5.4s), khi có tin mới, hoặc khi vừa quay lại tab
+        if (hasNewIncoming) {
+          lastActivityAt = Date.now();
+        }
+        // Chỉ refresh danh sách phòng mỗi 3 nhịp, khi có tin mới, hoặc khi vừa quay lại tab
         if (forceRooms || hasNewIncoming || pollTickRef.current % 3 === 0) {
           await refreshRoomsList(currentId);
         }
@@ -552,23 +556,42 @@ export function ChatWorkspace({
       }
     };
 
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = () => {
+      if (!active) return;
+      if (timeoutId) clearTimeout(timeoutId);
+      // Adaptive polling: 2s khi đang nhắn/có tin mới -> tự giãn lên 5s sau 25s nhàn rỗi (tiết kiệm ~65% Neon compute)
+      const idleMs = Date.now() - lastActivityAt;
+      const delay = idleMs < 25_000 ? 2000 : 5000;
+      timeoutId = setTimeout(async () => {
+        await poll(false);
+        scheduleNext();
+      }, delay);
+    };
+
     const onFocusOrVisible = () => {
       if (document.visibilityState === "visible") {
-        void poll(true);
+        lastActivityAt = Date.now();
+        void poll(true).finally(() => scheduleNext());
       }
     };
 
-    const timer = setInterval(() => {
-      void poll(false);
-    }, 1800);
+    const onUserTypingOrSending = () => {
+      lastActivityAt = Date.now();
+    };
+
+    scheduleNext();
     window.addEventListener("focus", onFocusOrVisible);
     document.addEventListener("visibilitychange", onFocusOrVisible);
+    window.addEventListener("keydown", onUserTypingOrSending, { passive: true });
 
     return () => {
       active = false;
-      clearInterval(timer);
+      if (timeoutId) clearTimeout(timeoutId);
       window.removeEventListener("focus", onFocusOrVisible);
       document.removeEventListener("visibilitychange", onFocusOrVisible);
+      window.removeEventListener("keydown", onUserTypingOrSending);
     };
   }, [broadcastTotalUnread, scrollToBottom, updateRoomMessages]);
 

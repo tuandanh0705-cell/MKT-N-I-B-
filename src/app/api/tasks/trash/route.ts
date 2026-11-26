@@ -9,13 +9,28 @@ export async function GET() {
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   }
 
+  const memberTrashWhere = {
+    deletedAt: { not: null },
+    OR: [
+      { requesterId: user.id },
+      { deletedById: user.id },
+      {
+        project: {
+          members: {
+            some: {
+              userId: user.id,
+              scope: "PROJECT_WIDE" as const,
+            },
+          },
+        },
+      },
+    ],
+  };
+
   const where =
     user.role === "LEADER"
       ? { deletedAt: { not: null } }
-      : {
-          deletedAt: { not: null },
-          OR: [{ requesterId: user.id }, { deletedById: user.id }],
-        };
+      : memberTrashWhere;
 
   const tasks = await prisma.task.findMany({
     where,
@@ -48,7 +63,20 @@ export async function POST(request: Request) {
           ? { deletedAt: { not: null } }
           : {
               deletedAt: { not: null },
-              OR: [{ requesterId: user.id }, { deletedById: user.id }],
+              OR: [
+                { requesterId: user.id },
+                { deletedById: user.id },
+                {
+                  project: {
+                    members: {
+                      some: {
+                        userId: user.id,
+                        scope: "PROJECT_WIDE" as const,
+                      },
+                    },
+                  },
+                },
+              ],
             };
       const restored = await prisma.task.updateMany({
         where: scopeWhere,
@@ -82,7 +110,14 @@ export async function POST(request: Request) {
 
     const existing = await prisma.task.findUnique({
       where: { id: taskId },
-      select: { id: true, code: true, title: true, requesterId: true, deletedById: true },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        projectId: true,
+        requesterId: true,
+        deletedById: true,
+      },
     });
 
     if (!existing) {
@@ -103,11 +138,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, deleted: true });
     }
 
-    if (
-      user.role !== "LEADER" &&
-      existing.requesterId !== user.id &&
-      existing.deletedById !== user.id
-    ) {
+    let canRestore =
+      user.role === "LEADER" ||
+      existing.requesterId === user.id ||
+      existing.deletedById === user.id;
+
+    if (!canRestore) {
+      const projectMembership = await prisma.projectMember.findFirst({
+        where: {
+          projectId: existing.projectId,
+          userId: user.id,
+          scope: "PROJECT_WIDE",
+        },
+        select: { id: true },
+      });
+      canRestore = Boolean(projectMembership);
+    }
+
+    if (!canRestore) {
       return NextResponse.json(
         { error: "Bạn không có quyền khôi phục công việc này." },
         { status: 403 }

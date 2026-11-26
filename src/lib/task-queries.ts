@@ -63,6 +63,15 @@ export const TASK_DETAIL_INCLUDE = {
   assignee: TASK_CARD_INCLUDE.assignee,
   requester: TASK_CARD_INCLUDE.requester,
   reviewer: TASK_CARD_INCLUDE.reviewer,
+  parentTask: {
+    select: {
+      id: true,
+      code: true,
+      title: true,
+      status: true,
+      project: { select: { slug: true } },
+    },
+  },
   assets: {
     orderBy: [{ kind: "asc" }, { version: "desc" }, { createdAt: "desc" }],
     include: { createdBy: { select: { id: true, name: true } } },

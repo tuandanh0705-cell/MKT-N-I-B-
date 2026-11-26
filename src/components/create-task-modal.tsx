@@ -54,6 +54,8 @@ interface CreateTaskModalProps {
   defaultTaskType?: TaskType;
   defaultOrderMode?: "MEDIA" | "TASK";
   defaultVideoKind?: VideoOrderKind;
+  defaultParentTaskId?: string;
+  defaultParentLabel?: string;
   onCreated: (task: TaskItem) => void;
 }
 
@@ -109,6 +111,8 @@ export function CreateTaskModal({
   defaultTaskType,
   defaultOrderMode,
   defaultVideoKind = "SHOOT_AND_EDIT",
+  defaultParentTaskId,
+  defaultParentLabel,
   onCreated,
 }: CreateTaskModalProps) {
   const router = useRouter();
@@ -374,6 +378,7 @@ export function CreateTaskModal({
           description: effectiveDescription,
           caption,
           briefLinkUrl,
+          parentTaskId: defaultParentTaskId || null,
           mediaBriefItemsJson: isMediaOrder ? mediaBriefItems : undefined,
         }),
       });
@@ -385,6 +390,7 @@ export function CreateTaskModal({
       }
 
       onCreated(data.task);
+      window.dispatchEvent(new CustomEvent("reviews-count-updated"));
       showToast(`Đã tạo ${data.task.code}: ${data.task.title}`);
       setTitle("");
       setPublishChannel("");
@@ -445,6 +451,15 @@ export function CreateTaskModal({
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-3.5">
+          {defaultParentLabel && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-xs text-indigo-900 font-semibold flex items-center gap-2">
+              <span>🔗</span>
+              <span className="truncate">
+                Liên kết 2 chiều với bài viết: <strong>{defaultParentLabel}</strong> (khi Media nộp/duyệt Final sẽ tự báo cho bài viết gốc)
+              </span>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">
               {error}

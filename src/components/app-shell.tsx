@@ -7,6 +7,7 @@ import {
   Compass,
   CheckSquare,
   ScrollText,
+  Search,
   Users,
   LogOut,
   Map as MapIcon,
@@ -35,6 +36,7 @@ import {
   type AccountSettingsTab,
 } from "@/components/account-settings-modal";
 import { PushNotificationButton } from "@/components/push-notification-button";
+import { GlobalSearchModal } from "@/components/global-search-modal";
 import { TrashBinDrawer } from "@/components/trash-bin-drawer";
 import {
   DenDenMushiIcon,
@@ -84,14 +86,27 @@ export function AppShell({
       ? chatUnreadOverride.value
       : initialChatUnreadCount;
 
-  // Modal Cài đặt Tài khoản Cá nhân (Tên, Tài khoản, Mật khẩu, Cá nhân hóa) & Thùng rác
+  const [pendingReviewsOverride, setPendingReviewsOverride] = useState<{
+    base: number;
+    value: number;
+  } | null>(null);
+  const livePendingReviews =
+    pendingReviewsOverride && pendingReviewsOverride.base === pendingReviewsCount
+      ? pendingReviewsOverride.value
+      : pendingReviewsCount;
+
+  // Modal Cài đặt Tài khoản Cá nhân, Tìm nhanh Ctrl+K & Thùng rác
   const [accountModalTab, setAccountModalTab] =
     useState<AccountSettingsTab | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
+    let hiddenSince: number | null = null;
+
     const syncUnread = () => {
+      if (document.visibilityState !== "visible") return;
       fetch("/api/notifications")
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
@@ -101,6 +116,12 @@ export function AppShell({
             setChatUnreadOverride({
               base: initialChatUnreadCount,
               value: data.chatUnreadCount,
+            });
+          }
+          if (typeof data.pendingReviewsCount === "number") {
+            setPendingReviewsOverride({
+              base: pendingReviewsCount,
+              value: data.pendingReviewsCount,
             });
           }
         })
@@ -119,13 +140,52 @@ export function AppShell({
         syncUnread();
       }
     };
+    const onReviewsSync = () => {
+      syncUnread();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenSince = Date.now();
+        return;
+      }
+      // Khi quay lại tab: đồng bộ thông báo/badge ngay; nếu đi vắng >20s và không đang nhập liệu -> tự refresh server data
+      syncUnread();
+      if (hiddenSince && Date.now() - hiddenSince > 20_000) {
+        const activeTag = document.activeElement?.tagName?.toLowerCase();
+        const isEditing =
+          activeTag === "input" ||
+          activeTag === "textarea" ||
+          activeTag === "select" ||
+          Boolean(document.querySelector('[role="dialog"]'));
+        if (!isEditing && !window.location.pathname.startsWith("/chat")) {
+          router.refresh();
+        }
+      }
+      hiddenSince = null;
+    };
+
     window.addEventListener("chat-unread-updated", onChatSync);
+    window.addEventListener("reviews-count-updated", onReviewsSync);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       active = false;
       clearInterval(timer);
       window.removeEventListener("chat-unread-updated", onChatSync);
+      window.removeEventListener("reviews-count-updated", onReviewsSync);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [initialChatUnreadCount]);
+  }, [initialChatUnreadCount, pendingReviewsCount, router]);
+
+  useEffect(() => {
+    const onGlobalKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    };
+    document.addEventListener("keydown", onGlobalKey);
+    return () => document.removeEventListener("keydown", onGlobalKey);
+  }, []);
 
   useEffect(() => {
     if (!bellOpen) return;
@@ -196,7 +256,7 @@ export function AppShell({
               ? "Kiểm Tra & Duyệt Output"
               : "Output Của Tôi",
           icon: FolderCheck,
-          badge: user.role === "LEADER" ? pendingReviewsCount : 0,
+          badge: user.role === "LEADER" ? livePendingReviews : 0,
         },
         {
           href: "/reports",
@@ -531,6 +591,19 @@ export function AppShell({
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2 relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-white hover:bg-amber-50 p-2 sm:px-2.5 sm:py-1.5 text-xs font-semibold text-slate-600 cursor-pointer transition"
+                title="Tìm nhanh toàn hệ thống (Ctrl + K)"
+                aria-label="Tìm nhanh toàn hệ thống"
+              >
+                <Search className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-600" />
+                <span className="hidden lg:inline">Tìm nhanh</span>
+                <kbd className="hidden lg:inline-block rounded border border-slate-200 bg-slate-50 px-1 py-0.2 text-[10px] font-mono text-slate-400">
+                  Ctrl K
+                </kbd>
+              </button>
               <PushNotificationButton compact />
               <button
                 type="button"
@@ -669,6 +742,13 @@ export function AppShell({
         }
       />
 
+      <GlobalSearchModal
+        open={searchOpen}
+        userRole={user.role}
+        isMediaProduction={isMediaProduction}
+        onClose={() => setSearchOpen(false)}
+      />
+
       <TrashBinDrawer
         open={trashOpen}
         onClose={() => setTrashOpen(false)}
@@ -746,9 +826,9 @@ export function AppShell({
           <span className="truncate max-w-full px-0.5">
             {user.role === "LEADER" ? "Duyệt QC" : "Output"}
           </span>
-          {user.role === "LEADER" && pendingReviewsCount > 0 && (
+          {user.role === "LEADER" && livePendingReviews > 0 && (
             <span className="absolute top-0.5 right-1.5 rounded-full bg-rose-600 text-white text-[9px] font-bold px-1.5 leading-tight">
-              {pendingReviewsCount}
+              {livePendingReviews}
             </span>
           )}
         </Link>

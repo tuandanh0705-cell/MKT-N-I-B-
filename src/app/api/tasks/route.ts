@@ -123,6 +123,20 @@ export async function POST(request: Request) {
       : null;
 
     const assigneeId = body.assigneeId ? String(body.assigneeId) : null;
+    let parentTaskId: string | null = null;
+    if (body.parentTaskId) {
+      const parentCheck = await prisma.task.findFirst({
+        where: {
+          id: String(body.parentTaskId),
+          projectId,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (parentCheck) {
+        parentTaskId = parentCheck.id;
+      }
+    }
     const briefLinkUrl = body.briefLinkUrl ? String(body.briefLinkUrl).trim() : "";
     const mediaDueAt = body.mediaDueAt ? new Date(body.mediaDueAt) : null;
     const productLink = body.productLink ? String(body.productLink).trim() : null;
@@ -186,6 +200,7 @@ export async function POST(request: Request) {
         projectId,
         requesterId: user.id,
         assigneeId,
+        parentTaskId,
         assets: briefLinkUrl
           ? {
               create: {

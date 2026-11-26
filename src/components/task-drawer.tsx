@@ -212,6 +212,7 @@ function TaskDrawerInner({
         setTask(data.task);
         syncDrafts(data.task);
         onUpdated(data.task);
+        window.dispatchEvent(new CustomEvent("reviews-count-updated"));
         if (successToast) showToast(successToast);
         router.refresh();
       }
@@ -291,6 +292,7 @@ function TaskDrawerInner({
         "info"
       );
       onDeleted?.(task.id);
+      window.dispatchEvent(new CustomEvent("reviews-count-updated"));
       router.refresh();
       onClose();
     } else {
@@ -516,6 +518,25 @@ function TaskDrawerInner({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4">
+          {!loading && task && task.parentTask && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/75 px-3 py-2 flex items-center justify-between gap-2 text-xs">
+              <div className="min-w-0 text-indigo-950 truncate">
+                <span className="font-bold text-indigo-700">🔗 Bài viết gốc:</span>{" "}
+                <span className="font-mono font-bold">[{task.parentTask.code}]</span>{" "}
+                <span className="font-semibold">{task.parentTask.title}</span>
+              </div>
+              {task.parentTask.project?.slug && (
+                <a
+                  href={`/projects/${task.parentTask.project.slug}?tab=CONTENT_CALENDAR&taskId=${task.parentTask.id}`}
+                  className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 text-[11px] font-bold shrink-0 inline-flex items-center gap-1"
+                >
+                  Mở bài
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+          )}
+
           {loading && (
             <div className="py-12 text-center text-sm text-slate-500">
               Đang tải thông tin công việc...

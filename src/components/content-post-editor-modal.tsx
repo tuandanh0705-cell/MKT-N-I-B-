@@ -326,6 +326,7 @@ function ContentPostEditorInner({
           return;
         }
         onSaved(data.task, prefill?.matrixIdeaId || null);
+        window.dispatchEvent(new CustomEvent("reviews-count-updated"));
         showToast(
           mode === "SUBMIT_REVIEW"
             ? "Đã lưu bài & gửi thông báo cho Leader duyệt!"
@@ -377,6 +378,7 @@ function ContentPostEditorInner({
         return;
       }
       onSaved(data.task, prefill?.matrixIdeaId || task.matrixIdeaId || null);
+      window.dispatchEvent(new CustomEvent("reviews-count-updated"));
       showToast(
         mode === "SUBMIT_REVIEW"
           ? "Đã lưu bài & bắn thông báo tới Leader duyệt!"
@@ -414,6 +416,7 @@ function ContentPostEditorInner({
         return;
       }
       onSaved(data.task, task.matrixIdeaId || null);
+      window.dispatchEvent(new CustomEvent("reviews-count-updated"));
       showToast(
         action === "APPROVE"
           ? "Đã duyệt Final bài viết & báo cho người viết!"

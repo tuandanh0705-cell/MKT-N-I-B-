@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getChatUnreadCountForUser } from "@/lib/chat";
+import { buildTaskVisibilityWhere } from "@/lib/permissions";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -9,18 +10,31 @@ export async function GET() {
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   }
 
-  const [notifications, chatUnreadCount] = await Promise.all([
+  const [notifications, chatUnreadCount, pendingReviewsCount] = await Promise.all([
     prisma.notification.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
       take: 30,
     }),
     getChatUnreadCountForUser(user.id),
+    prisma.task.count({
+      where: {
+        AND: [
+          buildTaskVisibilityWhere(user),
+          { status: { in: ["WAITING_APPROVAL", "BRIEF_REVIEW"] } },
+        ],
+      },
+    }),
   ]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  return NextResponse.json({ notifications, unreadCount, chatUnreadCount });
+  return NextResponse.json({
+    notifications,
+    unreadCount,
+    chatUnreadCount,
+    pendingReviewsCount,
+  });
 }
 
 export async function PATCH(request: Request) {

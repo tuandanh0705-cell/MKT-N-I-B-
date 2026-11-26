@@ -21,6 +21,7 @@ interface ContentCalendarRowProps {
   task: TaskItem;
   projectSlug: string;
   users: SimpleUser[];
+  linkedMediaOrders?: TaskItem[];
   channelSuggestions?: ProjectChannelSuggestions | null;
   todayStr: string;
   currentUserRole: UserRole;
@@ -38,6 +39,7 @@ interface ContentCalendarRowProps {
     toastMsg?: string
   ) => void;
   onOpenEditor: (task: TaskItem) => void;
+  onOpenMediaOrder?: (taskId: string) => void;
   onInspectAiScore: (taskId: string) => void;
   onRequestMediaOrder: (task: TaskItem) => void;
   onRequireCaptionBeforeSubmit: (task: TaskItem) => void;
@@ -47,6 +49,7 @@ export function ContentCalendarRow({
   task: t,
   projectSlug,
   users,
+  linkedMediaOrders = [],
   todayStr,
   currentUserRole,
   rowBusy,
@@ -59,6 +62,7 @@ export function ContentCalendarRow({
   onRequestDeleteSingle,
   onPatchTaskInline,
   onOpenEditor,
+  onOpenMediaOrder,
   onInspectAiScore,
   onRequestMediaOrder,
   onRequireCaptionBeforeSubmit,
@@ -348,14 +352,66 @@ export function ContentCalendarRow({
         </div>
       </td>
 
-      {/* 9. Link SP */}
-      <td className="py-2.5 px-2 max-w-[100px] whitespace-nowrap">
+      {/* 9. Link SP & Trạng thái Media liên kết 2 chiều */}
+      <td className="py-2.5 px-2 max-w-[140px] space-y-1">
+        {linkedMediaOrders.length > 0 && (
+          <div className="space-y-1">
+            {linkedMediaOrders.map((m) => {
+              const isDone =
+                m.status === "APPROVED_FINAL" ||
+                m.status === "PUBLISHED" ||
+                m.status === "DONE";
+              const isWaiting = m.status === "WAITING_APPROVAL";
+              const isRev = m.status === "REVISION_NEEDED";
+              const finalAsset =
+                m.assets.find((a) => a.kind === "FINAL") || m.assets[0];
+              return (
+                <div key={m.id} className="flex items-center gap-1 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => onOpenMediaOrder?.(m.id)}
+                    title={`${m.code}: ${m.title}`}
+                    className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap cursor-pointer ${
+                      isDone
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                        : isWaiting
+                          ? "bg-sky-50 text-sky-800 border-sky-200"
+                          : isRev
+                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            : "bg-amber-50 text-amber-900 border-amber-200"
+                    }`}
+                  >
+                    {isDone
+                      ? "✅ Media Final"
+                      : isWaiting
+                        ? "👀 Media chờ duyệt"
+                        : isRev
+                          ? "🔧 Media sửa"
+                          : "🎨 Media đang làm"}
+                  </button>
+                  {finalAsset && (
+                    <a
+                      href={finalAsset.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Mở link sản phẩm Media"
+                      className="text-emerald-700 hover:text-emerald-900"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {t.productLink ? (
           <a
             href={t.productLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
+            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline whitespace-nowrap"
           >
             Mở link
             <ExternalLink className="w-3 h-3" />
@@ -365,20 +421,20 @@ export function ContentCalendarRow({
             href={t.assets[0].url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:underline"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:underline whitespace-nowrap"
           >
             Ảnh/File
             <ExternalLink className="w-3 h-3" />
           </a>
-        ) : (
+        ) : linkedMediaOrders.length === 0 ? (
           <button
             type="button"
             onClick={() => onOpenEditor(t)}
-            className="text-[11px] text-slate-400 hover:text-blue-600 cursor-pointer"
+            className="text-[11px] text-slate-400 hover:text-blue-600 cursor-pointer whitespace-nowrap"
           >
             + Gắn link
           </button>
-        )}
+        ) : null}
       </td>
 
       {/* 10. PIC */}

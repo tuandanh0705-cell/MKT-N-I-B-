@@ -183,6 +183,7 @@ export function ContentCalendarToolbar({
           className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
         >
           <option value="ALL">Tất cả tháng</option>
+          <option value="UNSCHEDULED">⚠️ Chưa xếp lịch đăng</option>
           {availableMonths.map((m) => (
             <option key={m} value={m}>
               Tháng {m}

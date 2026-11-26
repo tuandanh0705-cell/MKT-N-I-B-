@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
+import { ContentCalendarMobileCard } from "@/components/content-calendar-mobile-card";
 import { ContentCalendarRow } from "@/components/content-calendar-row";
 import { ContentCalendarToolbar } from "@/components/content-calendar-toolbar";
 import { OutputInspectorModal } from "@/components/output-inspector-modal";
@@ -140,9 +141,41 @@ export function ProjectContentCalendarPanel({
     return Array.from(set).sort();
   }, [contentPosts]);
 
+  // Bản đồ liên kết 2 chiều: Bài Content -> Danh sách Order Media thuộc bài đó
+  const linkedMediaByParentId = useMemo(() => {
+    const map = new Map<string, TaskItem[]>();
+    const mediaTasks = tasks.filter(
+      (t) =>
+        t.isMediaOrder ||
+        t.taskType === "MEDIA_IMAGE" ||
+        t.taskType === "MEDIA_VIDEO"
+    );
+    const codeToContentId = new Map<string, string>();
+    for (const post of contentPosts) {
+      codeToContentId.set(post.code.toUpperCase(), post.id);
+    }
+
+    for (const m of mediaTasks) {
+      let parentId = m.parentTaskId || null;
+      if (!parentId) {
+        const match = m.title.match(/\[Media cho ([A-Z0-9-]+)\]/i);
+        if (match) {
+          parentId = codeToContentId.get(match[1].toUpperCase()) ?? null;
+        }
+      }
+      if (!parentId) continue;
+      const arr = map.get(parentId) ?? [];
+      arr.push(m);
+      map.set(parentId, arr);
+    }
+    return map;
+  }, [tasks, contentPosts]);
+
   const filteredPosts = useMemo(() => {
     return contentPosts.filter((t) => {
-      if (monthFilter !== "ALL") {
+      if (monthFilter === "UNSCHEDULED") {
+        if (t.scheduledPublishAt) return false;
+      } else if (monthFilter !== "ALL") {
         if (!t.scheduledPublishAt) return false;
         const m = getVnDateString(new Date(t.scheduledPublishAt)).slice(0, 7);
         if (m !== monthFilter) return false;
@@ -211,6 +244,7 @@ export function ProjectContentCalendarPanel({
       }
       setSelectedDeleteIds((prev) => prev.filter((id) => !removed.has(id)));
       if (deletedIds.length > 0) {
+        window.dispatchEvent(new CustomEvent("reviews-count-updated"));
         showToast(`Đã chuyển ${deletedIds.length} bài viết vào Thùng rác.`);
       } else {
         showToast("Không xóa được bài viết đã chọn.", "error");
@@ -244,6 +278,7 @@ export function ProjectContentCalendarPanel({
         return;
       }
       onTaskUpdated(data.task);
+      window.dispatchEvent(new CustomEvent("reviews-count-updated"));
       if (toastMsg) showToast(toastMsg);
     } finally {
       setSavingId(null);
@@ -360,8 +395,123 @@ export function ProjectContentCalendarPanel({
         onOpenNewEditor={() => onOpenEditor(null)}
       />
 
-      {/* Bảng Timeline Đăng Bài (11 cột tinh gọn) */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto shadow-sm">
+      {/* Chế độ xem Thẻ gọn trên Mobile (không phải vuốt ngang 11 cột) */}
+      <div className="md:hidden space-y-2.5">
+        {quickOpen && (
+          <form
+            onSubmit={handleQuickAdd}
+            className="rounded-2xl border-2 border-sky-200 bg-sky-50/70 p-3.5 space-y-2.5 text-xs"
+          >
+            <div className="font-extrabold text-sky-950">➕ Thêm nhanh bài viết mới</div>
+            <input
+              type="text"
+              required
+              value={qTitle}
+              onChange={(e) => setQTitle(e.target.value)}
+              placeholder="Nhập tiêu đề / ý tưởng bài viết..."
+              className="w-full rounded-xl border border-sky-300 bg-white px-3 py-2 text-xs"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="date"
+                value={qDate}
+                onChange={(e) => setQDate(e.target.value)}
+                className="rounded-xl border border-sky-300 bg-white px-2.5 py-1.5 text-xs"
+              />
+              <select
+                value={qPlatform}
+                onChange={(e) => setQPlatform(e.target.value)}
+                className="rounded-xl border border-sky-300 bg-white px-2 py-1.5 text-xs"
+              >
+                {CONTENT_PLATFORM_OPTIONS.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={qFormat}
+                onChange={(e) => setQFormat(e.target.value)}
+                className="rounded-xl border border-sky-300 bg-white px-2 py-1.5 text-xs"
+              >
+                {POST_FORMAT_OPTIONS.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={qPicId}
+                onChange={(e) => setQPicId(e.target.value)}
+                className="rounded-xl border border-sky-300 bg-white px-2 py-1.5 text-xs"
+              >
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setQuickOpen(false)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 cursor-pointer"
+              >
+                Đóng
+              </button>
+              <button
+                type="submit"
+                disabled={creatingQuick || !qTitle.trim()}
+                className="rounded-xl bg-blue-600 text-white px-3.5 py-1.5 text-xs font-bold cursor-pointer disabled:opacity-50"
+              >
+                {creatingQuick ? "..." : "+ Lưu bài"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {filteredPosts.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-10 px-4 text-center text-xs text-slate-400">
+            Chưa có bài viết nào trong bộ lọc này — bấm{" "}
+            <strong>&ldquo;Viết bài mới&rdquo;</strong> hoặc{" "}
+            <strong>&ldquo;Thêm dòng&rdquo;</strong> để bắt đầu ngay!
+          </div>
+        ) : (
+          filteredPosts.map((t) => (
+            <ContentCalendarMobileCard
+              key={t.id}
+              task={t}
+              projectSlug={project.slug}
+              users={users}
+              linkedMediaOrders={linkedMediaByParentId.get(t.id) ?? []}
+              todayStr={todayStr}
+              currentUserRole={currentUserRole}
+              rowBusy={savingId === t.id}
+              deleteMode={deleteMode}
+              deletable={canUserDeleteTask(t, currentUserId, currentUserRole)}
+              deleting={deleting}
+              isSelectedForDelete={selectedDeleteIds.includes(t.id)}
+              onToggleSelectDelete={toggleSelectDelete}
+              onRequestDeleteSingle={(id) => setDeleteConfirmIds([id])}
+              onPatchTaskInline={patchTaskInline}
+              onOpenEditor={(target) => onOpenEditor(target)}
+              onOpenMediaOrder={(id) => onOpenTaskDrawer?.(id)}
+              onRequestMediaOrder={onRequestMediaOrder}
+              onRequireCaptionBeforeSubmit={(target) => {
+                onOpenEditor(target);
+                showToast(
+                  "Hãy viết nội dung bài viết xong rồi bấm Gửi Leader duyệt nhé!",
+                  "info"
+                );
+              }}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Bảng Timeline Đăng Bài (Desktop 11 cột chuẩn Google Sheets) */}
+      <div className="hidden md:block bg-white rounded-2xl border border-slate-200 overflow-x-auto shadow-sm">
         <table className="w-full text-left border-collapse text-xs min-w-[1040px]">
           <thead>
             <tr className="bg-[#38761d] text-white uppercase text-[11px] font-extrabold">
@@ -532,6 +682,7 @@ export function ProjectContentCalendarPanel({
                   task={t}
                   projectSlug={project.slug}
                   users={users}
+                  linkedMediaOrders={linkedMediaByParentId.get(t.id) ?? []}
                   channelSuggestions={channelSuggestions}
                   todayStr={todayStr}
                   currentUserRole={currentUserRole}
@@ -549,6 +700,7 @@ export function ProjectContentCalendarPanel({
                   onRequestDeleteSingle={(id) => setDeleteConfirmIds([id])}
                   onPatchTaskInline={patchTaskInline}
                   onOpenEditor={(target) => onOpenEditor(target)}
+                  onOpenMediaOrder={(id) => onOpenTaskDrawer?.(id)}
                   onInspectAiScore={(id) => setInspectTaskId(id)}
                   onRequestMediaOrder={onRequestMediaOrder}
                   onRequireCaptionBeforeSubmit={(target) => {
