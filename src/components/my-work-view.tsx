@@ -43,6 +43,11 @@ import {
   type DailyKpiSummaryResult,
 } from "@/lib/daily-kpi";
 import { getVnDateString, getVnWeekBounds } from "@/lib/dates";
+import {
+  formatTaskAssigneesLabel,
+  getTaskAssignees,
+  isUserAssignedToTask,
+} from "@/lib/task-assignees";
 import { softDeleteTasksByIds } from "@/lib/task-delete";
 import { normalizeSubtasks } from "@/lib/subtasks";
 import type { PendingMandatoryCourseSummary } from "@/lib/knowledge-data";
@@ -221,13 +226,15 @@ export function MyWorkView({
   const [showCompleted, setShowCompleted] = useState(false);
 
   const assignedToMe = useMemo(
-    () => tasks.filter((t) => t.assignee?.id === currentUserId),
+    () => tasks.filter((t) => isUserAssignedToTask(t, currentUserId)),
     [tasks, currentUserId]
   );
   const requestedByMe = useMemo(
     () =>
       tasks.filter(
-        (t) => t.requester.id === currentUserId && t.assignee?.id !== currentUserId
+        (t) =>
+          t.requester.id === currentUserId &&
+          !isUserAssignedToTask(t, currentUserId)
       ),
     [tasks, currentUserId]
   );
@@ -259,7 +266,7 @@ export function MyWorkView({
         t.title.toLowerCase().includes(q) ||
         t.code.toLowerCase().includes(q) ||
         t.project.name.toLowerCase().includes(q) ||
-        (t.assignee?.name.toLowerCase().includes(q) ?? false)
+        getTaskAssignees(t).some((u) => u.name.toLowerCase().includes(q))
       );
     });
   }, [requestedByMe, projectFilter, searchQuery]);
@@ -691,7 +698,7 @@ export function MyWorkView({
         return;
       }
       showToast(
-        `Đã gửi thông báo nhắc tiến độ tới ${task.assignee?.name || "người thực hiện"}!`
+        `Đã gửi thông báo nhắc tiến độ tới ${formatTaskAssigneesLabel(task, "người thực hiện")}!`
       );
     } catch {
       showToast("Lỗi kết nối máy chủ.", "error");

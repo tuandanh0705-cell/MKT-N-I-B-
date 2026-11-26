@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { AuthUser } from "@/lib/auth";
 import { RESOURCE_CATEGORY_META } from "@/lib/constants";
+import { extractResourceHost, getResourceLinks } from "@/lib/resource-links";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { EquipmentHubPanel } from "@/components/equipment-hub-panel";
 import { useToast } from "@/components/toast-provider";
@@ -33,12 +34,18 @@ import type {
   UserRole,
 } from "@/generated/prisma/client";
 
-function extractHost(rawUrl: string): string {
-  try {
-    return new URL(rawUrl).hostname.replace(/^www\./, "");
-  } catch {
-    return rawUrl;
-  }
+interface ResourceLinkDraft {
+  id: string;
+  label: string;
+  url: string;
+}
+
+function createLinkDraft(label = "", url = ""): ResourceLinkDraft {
+  return {
+    id: `rl-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    label,
+    url,
+  };
 }
 
 function ResourceCard({
@@ -55,17 +62,28 @@ function ResourceCard({
   const { showToast } = useToast();
   const catMeta =
     RESOURCE_CATEGORY_META[item.category] || RESOURCE_CATEGORY_META.OTHER;
+  const links = getResourceLinks(item);
+  const primaryLink = links[0] ?? { label: "", url: item.url };
+  const hasMultipleLinks = links.length > 1;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 hover:border-amber-300 p-3.5 flex flex-col justify-between gap-2.5 shadow-sm transition">
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${catMeta.badgeClass}`}
-          >
-            <span>{catMeta.emoji}</span>
-            <span>{catMeta.label}</span>
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${catMeta.badgeClass}`}
+            >
+              <span>{catMeta.emoji}</span>
+              <span>{catMeta.label}</span>
+            </span>
+            {hasMultipleLinks && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 text-[10px] font-bold">
+                <Link2 className="w-2.5 h-2.5" />
+                {links.length} link
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-0.5 shrink-0">
             <button
               type="button"
@@ -89,48 +107,132 @@ function ResourceCard({
         </div>
 
         <a
-          href={item.url}
+          href={primaryLink.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="block text-sm font-bold text-slate-900 hover:text-blue-700 leading-snug line-clamp-1"
+          className="block text-sm font-bold text-slate-900 hover:text-blue-700 leading-snug line-clamp-2"
         >
           {item.title}
         </a>
 
         {item.description && (
-          <p className="text-xs text-slate-500 line-clamp-1">
+          <p className="text-xs text-slate-500 line-clamp-2 whitespace-pre-line">
             {item.description}
           </p>
         )}
+
+        {hasMultipleLinks && (
+          <div className="space-y-1.5 pt-1">
+            {links.map((lk, idx) => {
+              const displayLabel =
+                lk.label || `Link #${idx + 1} (${extractResourceHost(lk.url)})`;
+              return (
+                <div
+                  key={`${lk.url}-${idx}`}
+                  className="flex items-center justify-between gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50/75 hover:border-blue-300 hover:bg-blue-50/40 px-2.5 py-1.5 transition"
+                >
+                  <a
+                    href={lk.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`${displayLabel} — ${lk.url}`}
+                    className="min-w-0 flex-1 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-900"
+                  >
+                    <Link2 className="w-3 h-3 shrink-0 text-blue-500" />
+                    <span className="truncate">{displayLabel}</span>
+                  </a>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(lk.url);
+                        showToast(`Đã copy link "${displayLabel}"!`);
+                      }}
+                      title="Copy đường dẫn này"
+                      className="p-1 rounded-md text-slate-500 hover:text-slate-900 hover:bg-white cursor-pointer"
+                    >
+                      <Copy className="w-3 h-3" />
+                    </button>
+                    <a
+                      href={lk.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Mở link"
+                      className="p-1 rounded-md text-blue-600 hover:bg-blue-100"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-        <span className="text-[11px] text-slate-400 truncate">
-          {extractHost(item.url)}
-        </span>
-        <div className="flex items-center gap-1.5 shrink-0">
+      {hasMultipleLinks ? (
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-slate-400 truncate">
+            {links.length} đường dẫn đính kèm
+          </span>
           <button
             type="button"
             onClick={() => {
-              navigator.clipboard.writeText(item.url);
-              showToast("Đã copy link!");
+              const allText = links
+                .map((lk, idx) =>
+                  lk.label ? `${lk.label}: ${lk.url}` : `Link ${idx + 1}: ${lk.url}`
+                )
+                .join("\n");
+              navigator.clipboard.writeText(allText);
+              showToast(`Đã copy toàn bộ ${links.length} đường link!`);
             }}
-            className="rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer"
+            className="rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer shrink-0"
           >
             <Copy className="w-3 h-3" />
-            Copy
+            Copy tất cả
           </button>
-          <a
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1"
-          >
-            <ExternalLink className="w-3 h-3" />
-            Mở
-          </a>
         </div>
-      </div>
+      ) : (
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+          <span
+            title={primaryLink.url}
+            className="text-[11px] text-slate-500 truncate inline-flex items-center gap-1 min-w-0"
+          >
+            {primaryLink.label ? (
+              <>
+                <Link2 className="w-3 h-3 text-blue-500 shrink-0" />
+                <span className="font-semibold text-blue-700 truncate">
+                  {primaryLink.label}
+                </span>
+              </>
+            ) : (
+              extractResourceHost(primaryLink.url)
+            )}
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(primaryLink.url);
+                showToast("Đã copy link!");
+              }}
+              className="rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer"
+            >
+              <Copy className="w-3 h-3" />
+              Copy
+            </button>
+            <a
+              href={primaryLink.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Mở
+            </a>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -178,7 +280,9 @@ export function ResourcesHubView({
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [category, setCategory] = useState<ResourceCategory>("LOGO_BRAND");
   const [title, setTitle] = useState("");
-  const [url, setUrl] = useState("");
+  const [linkDrafts, setLinkDrafts] = useState<ResourceLinkDraft[]>(() => [
+    createLinkDraft(),
+  ]);
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
   const [saving, setSaving] = useState(false);
@@ -198,9 +302,12 @@ export function ResourcesHubView({
     return resources.filter((r) => {
       if (categoryFilter !== "ALL" && r.category !== categoryFilter) return false;
       if (q) {
+        const linksText = getResourceLinks(r)
+          .map((lk) => `${lk.label} ${lk.url}`)
+          .join(" ");
         const hay = `${r.title} ${r.description || ""} ${r.tags || ""} ${
           r.project?.name || ""
-        }`.toLowerCase();
+        } ${linksText}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -281,7 +388,7 @@ export function ResourcesHubView({
     setProjectId(targetProjId || projectList[0]?.id || "");
     setCategory(targetScope === "GLOBAL" ? "LOGO_BRAND" : "PHOTO_FOLDER");
     setTitle("");
-    setUrl("");
+    setLinkDrafts([createLinkDraft()]);
     setDescription("");
     setTags("");
     setModalOpen(true);
@@ -293,7 +400,12 @@ export function ResourcesHubView({
     setProjectId(item.projectId || projectList[0]?.id || "");
     setCategory(item.category);
     setTitle(item.title);
-    setUrl(item.url);
+    const existingLinks = getResourceLinks(item);
+    setLinkDrafts(
+      existingLinks.length > 0
+        ? existingLinks.map((lk) => createLinkDraft(lk.label, lk.url))
+        : [createLinkDraft("", item.url)]
+    );
     setDescription(item.description || "");
     setTags(item.tags || "");
     setModalOpen(true);
@@ -301,6 +413,18 @@ export function ResourcesHubView({
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    const cleanedLinks = linkDrafts
+      .map((d) => ({ label: d.label.trim(), url: d.url.trim() }))
+      .filter((d) => d.url.length > 0 || d.label.length > 0);
+    if (cleanedLinks.length === 0) {
+      showToast("Vui lòng nhập ít nhất 1 đường dẫn Link.", "error");
+      return;
+    }
+    if (cleanedLinks.some((d) => !d.url)) {
+      showToast("Vui lòng điền đầy đủ đường dẫn URL cho các mục đã đặt tên.", "error");
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch("/api/resources", {
@@ -308,13 +432,22 @@ export function ResourcesHubView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           editing
-            ? { id: editing.id, title, url, category, description, tags }
+            ? {
+                id: editing.id,
+                title,
+                url: cleanedLinks[0].url,
+                links: cleanedLinks,
+                category,
+                description,
+                tags,
+              }
             : {
                 scope,
                 projectId: scope === "PROJECT" ? projectId : null,
                 category,
                 title,
-                url,
+                url: cleanedLinks[0].url,
+                links: cleanedLinks,
                 description,
                 tags,
               }
@@ -716,7 +849,7 @@ export function ResourcesHubView({
           />
           <form
             onSubmit={handleSave}
-            className="relative z-10 w-full max-w-lg bg-white rounded-2xl border-2 border-amber-200 shadow-2xl p-5 space-y-3.5"
+            className="relative z-10 w-full max-w-xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl border-2 border-amber-200 shadow-2xl p-5 space-y-3.5"
           >
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900">
@@ -800,18 +933,107 @@ export function ResourcesHubView({
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Đường dẫn Link (Drive / Canva / Figma / Notion) *
-              </label>
-              <input
-                type="url"
-                required
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://drive.google.com/drive/folders/..."
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs"
-              />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-bold text-slate-700">
+                  Danh sách đường dẫn Link ({linkDrafts.length}) *
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLinkDrafts((prev) =>
+                      prev.length >= 20 ? prev : [...prev, createLinkDraft()]
+                    )
+                  }
+                  disabled={linkDrafts.length >= 20}
+                  className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 disabled:opacity-40 text-blue-700 px-2.5 py-1 text-[11px] font-bold cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" />
+                  Thêm đường link
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {linkDrafts.map((row, idx) => (
+                  <div
+                    key={row.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-extrabold text-slate-500">
+                        Link #{idx + 1}
+                      </span>
+                      {linkDrafts.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setLinkDrafts((prev) =>
+                              prev.filter((d) => d.id !== row.id)
+                            )
+                          }
+                          title="Xóa đường link này"
+                          className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Xóa
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                      <div className="sm:col-span-5">
+                        <input
+                          type="text"
+                          maxLength={120}
+                          value={row.label}
+                          onChange={(e) =>
+                            setLinkDrafts((prev) =>
+                              prev.map((d) =>
+                                d.id === row.id
+                                  ? { ...d, label: e.target.value }
+                                  : d
+                              )
+                            )
+                          }
+                          placeholder="Tên thay thế (VD: File Standee, Hashtag...)"
+                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="sm:col-span-7">
+                        <input
+                          type="text"
+                          required={idx === 0 || Boolean(row.label.trim())}
+                          value={row.url}
+                          onChange={(e) =>
+                            setLinkDrafts((prev) =>
+                              prev.map((d) =>
+                                d.id === row.id
+                                  ? { ...d, url: e.target.value }
+                                  : d
+                              )
+                            )
+                          }
+                          placeholder="https://drive.google.com/..."
+                          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setLinkDrafts((prev) =>
+                    prev.length >= 20 ? prev : [...prev, createLinkDraft()]
+                  )
+                }
+                disabled={linkDrafts.length >= 20}
+                className="w-full rounded-xl border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/40 text-slate-600 hover:text-blue-700 py-1.5 text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Thêm đường link khác
+              </button>
             </div>
 
             <div>

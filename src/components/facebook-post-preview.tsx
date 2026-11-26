@@ -10,10 +10,13 @@ import {
   Monitor,
   Smartphone,
   X,
+  ZoomIn,
 } from "lucide-react";
+import { DemoImageLightbox } from "@/components/demo-image-lightbox";
 import {
   FacebookMockupCard,
   InstagramMockupCard,
+  MockupLightboxProvider,
   ThreadsMockupCard,
   TikTokMockupCard,
   normalizePlatformToMockup,
@@ -59,7 +62,7 @@ function fileToSmallDataUrl(file: File): Promise<string> {
       const img = document.createElement("img");
       img.onerror = () => reject(new Error("invalid image"));
       img.onload = () => {
-        const maxDim = 960;
+        const maxDim = 1400;
         const scale = Math.min(
           1,
           maxDim / Math.max(img.width || 1, img.height || 1)
@@ -112,6 +115,7 @@ export function FacebookPostPreview({
   const [demoImages, setDemoImages] = useState<string[]>([]);
   const [extraUrlInput, setExtraUrlInput] = useState("");
   const [showUrlAdd, setShowUrlAdd] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const effectiveLayout = onChangeLayout ? layout : internalLayout;
 
@@ -362,14 +366,24 @@ export function FacebookPostPreview({
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           {demoImages.map((imgSrc, i) => (
             <div key={`${imgSrc.slice(0, 32)}-${i}`} className="relative shrink-0">
-              <Image
-                src={imgSrc}
-                alt={`Demo ${i + 1}`}
-                width={44}
-                height={44}
-                unoptimized
-                className="w-11 h-11 rounded-lg object-cover border border-[#DECBB8]"
-              />
+              <button
+                type="button"
+                onClick={() => {
+                  const foundIdx = previewMedia.indexOf(imgSrc);
+                  setLightboxIndex(foundIdx >= 0 ? foundIdx : 0);
+                }}
+                title="Bấm để phóng to ảnh"
+                className="block rounded-lg overflow-hidden cursor-zoom-in"
+              >
+                <Image
+                  src={imgSrc}
+                  alt={`Demo ${i + 1}`}
+                  width={44}
+                  height={44}
+                  unoptimized
+                  className="w-11 h-11 rounded-lg object-cover border border-[#DECBB8] hover:border-[#8A4624] transition"
+                />
+              </button>
               <button
                 type="button"
                 onClick={() =>
@@ -390,29 +404,57 @@ export function FacebookPostPreview({
       )}
 
       {/* Khung Demo Bài Đăng Đa Nền Tảng */}
-      <div
-        className={`mx-auto transition-all ${
-          isVerticalMockup
-            ? "max-w-[290px]"
-            : device === "MOBILE"
-              ? "max-w-[350px]"
-              : "max-w-[500px]"
-        }`}
+      <MockupLightboxProvider
+        onOpenImage={(src) => {
+          const foundIdx = previewMedia.indexOf(src);
+          setLightboxIndex(foundIdx >= 0 ? foundIdx : 0);
+        }}
       >
-        {selectedPlatform === "FACEBOOK" && (
-          <FacebookMockupCard
-            data={mockupData}
-            compactCaption={device === "MOBILE"}
-          />
-        )}
-        {selectedPlatform === "INSTAGRAM" && (
-          <InstagramMockupCard data={mockupData} variant={igVariant} />
-        )}
-        {selectedPlatform === "TIKTOK" && <TikTokMockupCard data={mockupData} />}
-        {selectedPlatform === "THREADS" && (
-          <ThreadsMockupCard data={mockupData} />
-        )}
-      </div>
+        <div
+          className={`mx-auto transition-all ${
+            isVerticalMockup
+              ? "max-w-[290px]"
+              : device === "MOBILE"
+                ? "max-w-[350px]"
+                : "max-w-[500px]"
+          }`}
+        >
+          {selectedPlatform === "FACEBOOK" && (
+            <FacebookMockupCard
+              data={mockupData}
+              compactCaption={device === "MOBILE"}
+            />
+          )}
+          {selectedPlatform === "INSTAGRAM" && (
+            <InstagramMockupCard data={mockupData} variant={igVariant} />
+          )}
+          {selectedPlatform === "TIKTOK" && <TikTokMockupCard data={mockupData} />}
+          {selectedPlatform === "THREADS" && (
+            <ThreadsMockupCard data={mockupData} />
+          )}
+        </div>
+      </MockupLightboxProvider>
+
+      {previewMedia.length > 0 && (
+        <div className="flex items-center justify-center">
+          <button
+            type="button"
+            onClick={() => setLightboxIndex(0)}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#7D563A] hover:text-[#4E311C] cursor-pointer"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+            Bấm trực tiếp vào ảnh demo để xem phóng to ({previewMedia.length} ảnh)
+          </button>
+        </div>
+      )}
+
+      <DemoImageLightbox
+        images={previewMedia}
+        activeIndex={lightboxIndex}
+        title={title || pageName}
+        onClose={() => setLightboxIndex(null)}
+        onChangeIndex={(nextIdx) => setLightboxIndex(nextIdx)}
+      />
 
       {attachedUrls.length > 0 && (
         <div className="rounded-xl px-3 py-1.5 bg-white/80 border border-[#E6DDD2] text-[11px] text-[#7D563A] truncate">

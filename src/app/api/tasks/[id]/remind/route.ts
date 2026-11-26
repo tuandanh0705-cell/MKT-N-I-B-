@@ -19,10 +19,22 @@ export async function POST(
     include: {
       project: { select: { slug: true, name: true } },
       assignee: { select: { id: true, name: true } },
+      assignees: {
+        include: { user: { select: { id: true, name: true } } },
+      },
     },
   });
 
-  if (!task || !task.assignee) {
+  const targetIds = Array.from(
+    new Set(
+      [
+        task?.assignee?.id,
+        ...(task?.assignees.map((a) => a.user.id) ?? []),
+      ].filter((uid): uid is string => Boolean(uid))
+    )
+  );
+
+  if (!task || targetIds.length === 0) {
     return NextResponse.json(
       { error: "Công việc chưa gán nhân sự để gửi nhắc nhở." },
       { status: 400 }
@@ -37,20 +49,25 @@ export async function POST(
   }
 
   const isLeaderRemind = user.role === "LEADER";
-  const notif = await createNotification({
-    userId: task.assignee.id,
-    type: "REMINDER",
-    title: isLeaderRemind
-      ? `🔔 Leader nhắc việc gấp: ${task.code}`
-      : `🔔 ${user.name} nhắc tiến độ: ${task.code}`,
-    message: `${user.name} nhắc bạn kiểm tra & cập nhật tiến độ đầu việc "${task.title}" (${task.project.name}) • Hạn: ${formatVnDateTime(task.dueAt)}.`,
-    linkUrl: `/my-work?taskId=${task.id}&openChat=1`,
-    sendEmailNow: isLeaderRemind,
-    actionLabel: "Mở thẻ công việc & phản hồi",
-  });
+  let anyEmailSent = false;
+  for (const uid of targetIds) {
+    const notif = await createNotification({
+      userId: uid,
+      type: "REMINDER",
+      title: isLeaderRemind
+        ? `🔔 Leader nhắc việc gấp: ${task.code}`
+        : `🔔 ${user.name} nhắc tiến độ: ${task.code}`,
+      message: `${user.name} nhắc bạn kiểm tra & cập nhật tiến độ đầu việc "${task.title}" (${task.project.name}) • Hạn: ${formatVnDateTime(task.dueAt)}.`,
+      linkUrl: `/my-work?taskId=${task.id}&openChat=1`,
+      sendEmailNow: isLeaderRemind,
+      actionLabel: "Mở thẻ công việc & phản hồi",
+    });
+    if (notif?.emailSent) anyEmailSent = true;
+  }
 
   return NextResponse.json({
     ok: true,
-    emailSent: notif?.emailSent ?? false,
+    remindedCount: targetIds.length,
+    emailSent: anyEmailSent,
   });
 }

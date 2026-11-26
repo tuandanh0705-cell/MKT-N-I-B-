@@ -12,6 +12,7 @@ import {
 import { FB_POST_LAYOUTS, FB_POST_LAYOUT_GROUPS } from "@/lib/constants";
 import { getPresetDateTimeLocal } from "@/lib/dates";
 import { MediaBriefItemsEditor } from "@/components/media-brief-items-editor";
+import { MultiAssigneePicker } from "@/components/multi-assignee-picker";
 import { FacebookPostPreview } from "@/components/facebook-post-preview";
 import {
   VIDEO_ORDER_KIND_META,
@@ -189,8 +190,8 @@ export function CreateTaskMediaHeaderFields({
 }
 
 interface CreateTaskMediaAssigneeRowProps {
-  assigneeId: string;
-  onChangeAssigneeId: (id: string) => void;
+  assigneeIds: string[];
+  onChangeAssigneeIds: (ids: string[]) => void;
   users: SimpleUser[];
   isVideoBrief: boolean;
   dueAt: string;
@@ -198,50 +199,36 @@ interface CreateTaskMediaAssigneeRowProps {
 }
 
 export function CreateTaskMediaAssigneeRow({
-  assigneeId,
-  onChangeAssigneeId,
+  assigneeIds,
+  onChangeAssigneeIds,
   users,
   isVideoBrief,
   dueAt,
   onChangeDueAt,
 }: CreateTaskMediaAssigneeRowProps) {
-  const activeUsers = users.filter((u) => u.isActive !== false);
   const mediaScopes = isVideoBrief
-    ? new Set(["MEDIA_VIDEO", "CONTENT_EDIT", "MEDIA_DESIGN", "CONTENT_DESIGN"])
-    : new Set(["MEDIA_DESIGN", "CONTENT_DESIGN", "MEDIA_VIDEO", "CONTENT_EDIT"]);
-  const mediaUsers = activeUsers.filter((u) => mediaScopes.has(u.departmentScope));
-  const otherUsers = activeUsers.filter((u) => !mediaScopes.has(u.departmentScope));
-
-  const renderUserOption = (u: SimpleUser) => (
-    <option key={u.id} value={u.id}>
-      {u.name}
-    </option>
-  );
+    ? ["MEDIA_VIDEO", "CONTENT_EDIT", "MEDIA_DESIGN", "CONTENT_DESIGN"]
+    : ["MEDIA_DESIGN", "CONTENT_DESIGN", "MEDIA_VIDEO", "CONTENT_EDIT"];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
       <div>
         <label className="block text-xs font-semibold text-slate-700 mb-1">
-          Giao cho Media *
+          Giao cho Media * (chọn 1 hoặc nhiều)
         </label>
-        <select
-          required
-          value={assigneeId}
-          onChange={(e) => onChangeAssigneeId(e.target.value)}
-          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white focus:border-blue-500 focus:outline-none"
-        >
-          <option value="">-- Chọn nhân sự Media nhận order --</option>
-          {mediaUsers.length > 0 && (
-            <optgroup label={isVideoBrief ? "🎬 Team Video / Dựng phim" : "🎨 Team Thiết kế / Media"}>
-              {mediaUsers.map(renderUserOption)}
-            </optgroup>
-          )}
-          {otherUsers.length > 0 && (
-            <optgroup label="👥 Thành viên khác">
-              {otherUsers.map(renderUserOption)}
-            </optgroup>
-          )}
-        </select>
+        <MultiAssigneePicker
+          users={users}
+          value={assigneeIds}
+          onChange={onChangeAssigneeIds}
+          placeholder="-- Chọn nhân sự Media nhận order --"
+          prioritizeScopes={mediaScopes}
+          prioritizeGroupLabel={
+            isVideoBrief
+              ? "🎬 Team Video / Dựng phim"
+              : "🎨 Team Thiết kế / Media"
+          }
+          otherGroupLabel="👥 Thành viên khác"
+        />
       </div>
 
       <div>

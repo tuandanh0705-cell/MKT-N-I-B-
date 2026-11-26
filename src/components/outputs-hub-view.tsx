@@ -17,11 +17,16 @@ import {
   type OutputsViewMode,
 } from "@/components/outputs-filter-bar";
 import { OutputsTableView } from "@/components/outputs-table-view";
-import { PirateAvatar } from "@/components/pirate-art";
+import { TaskAssigneesBadges } from "@/components/task-assignees-badges";
 import { TaskStatusBadge } from "@/components/status-badge";
 import { TaskDrawer, type DrawerTab } from "@/components/task-drawer";
 import { useToast } from "@/components/toast-provider";
 import { useGeminiQcRunner } from "@/hooks/use-gemini-qc";
+import {
+  formatTaskAssigneesLabel,
+  getTaskAssignees,
+  isUserAssignedToTask,
+} from "@/lib/task-assignees";
 import {
   ASSET_KIND_LABEL,
   TASK_STATUS_META,
@@ -262,7 +267,7 @@ export function OutputsHubView({
           (t.caption || "").toLowerCase().includes(q) ||
           (t.description || "").toLowerCase().includes(q) ||
           (t.publishChannel || "").toLowerCase().includes(q) ||
-          (t.assignee?.name || "").toLowerCase().includes(q) ||
+          getTaskAssignees(t).some((u) => u.name.toLowerCase().includes(q)) ||
           t.project.name.toLowerCase().includes(q) ||
           assetMatch;
         if (!matched) return false;
@@ -299,30 +304,33 @@ export function OutputsHubView({
     let unassignedTotal = 0;
 
     for (const t of scopedBaseTasks) {
-      if (!t.assignee?.id) {
+      const taskAssignees = getTaskAssignees(t);
+      if (taskAssignees.length === 0) {
         unassignedTotal += 1;
         continue;
       }
-      const entry = map.get(t.assignee.id) ?? {
-        total: 0,
-        withOutput: 0,
-        needsReview: 0,
-        contentCount: 0,
-        imageCount: 0,
-        videoCount: 0,
-        linkCount: 0,
-      };
       const analyzed = analyzeTaskOutputs(t);
-      entry.total += 1;
-      if (analyzed.hasSubmittedOutput) entry.withOutput += 1;
-      if (t.status === "WAITING_APPROVAL" || t.status === "BRIEF_REVIEW") {
-        entry.needsReview += 1;
+      for (const u of taskAssignees) {
+        const entry = map.get(u.id) ?? {
+          total: 0,
+          withOutput: 0,
+          needsReview: 0,
+          contentCount: 0,
+          imageCount: 0,
+          videoCount: 0,
+          linkCount: 0,
+        };
+        entry.total += 1;
+        if (analyzed.hasSubmittedOutput) entry.withOutput += 1;
+        if (t.status === "WAITING_APPROVAL" || t.status === "BRIEF_REVIEW") {
+          entry.needsReview += 1;
+        }
+        if (analyzed.category === "CONTENT") entry.contentCount += 1;
+        if (analyzed.category === "IMAGE") entry.imageCount += 1;
+        if (analyzed.category === "VIDEO") entry.videoCount += 1;
+        entry.linkCount += analyzed.deliverableAssets.length;
+        map.set(u.id, entry);
       }
-      if (analyzed.category === "CONTENT") entry.contentCount += 1;
-      if (analyzed.category === "IMAGE") entry.imageCount += 1;
-      if (analyzed.category === "VIDEO") entry.videoCount += 1;
-      entry.linkCount += analyzed.deliverableAssets.length;
-      map.set(t.assignee.id, entry);
     }
 
     return { map, unassignedTotal };
@@ -332,9 +340,11 @@ export function OutputsHubView({
     if (!isLeader) return scopedBaseTasks;
     if (selectedMemberId === "ALL") return scopedBaseTasks;
     if (selectedMemberId === "UNASSIGNED") {
-      return scopedBaseTasks.filter((t) => !t.assignee?.id);
+      return scopedBaseTasks.filter((t) => getTaskAssignees(t).length === 0);
     }
-    return scopedBaseTasks.filter((t) => t.assignee?.id === selectedMemberId);
+    return scopedBaseTasks.filter((t) =>
+      isUserAssignedToTask(t, selectedMemberId)
+    );
   }, [scopedBaseTasks, selectedMemberId, isLeader]);
 
   const summaryCounts = useMemo(() => {
@@ -561,7 +571,7 @@ export function OutputsHubView({
         )
         .join(" | ");
       return [
-        t.assignee?.name || "Chưa gán",
+        formatTaskAssigneesLabel(t, "Chưa gán"),
         t.code,
         t.title,
         t.project.name,
@@ -787,17 +797,8 @@ export function OutputsHubView({
                   </div>
 
                   <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <PirateAvatar
-                        name={t.assignee?.name || "Chưa gán"}
-                        color={t.assignee?.avatarColor || "#64748b"}
-                        scope={t.assignee?.departmentScope}
-                        pirateCharacter={t.assignee?.pirateCharacter}
-                        size="sm"
-                      />
-                      <span className="text-xs font-bold text-slate-700 truncate">
-                        {t.assignee?.name || "Chưa gán"}
-                      </span>
+                    <div className="flex items-center gap-1.5 min-w-0 text-xs">
+                      <TaskAssigneesBadges task={t} size="sm" />
                     </div>
 
                     <button

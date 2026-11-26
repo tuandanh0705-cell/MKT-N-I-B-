@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { getChatUnreadCountForUser } from "@/lib/chat";
+import {
+  dispatchDueChatReminders,
+  getChatUnreadCountForUser,
+} from "@/lib/chat";
 import { buildTaskVisibilityWhere } from "@/lib/permissions";
 
 export async function GET() {
@@ -9,6 +12,8 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   }
+
+  await dispatchDueChatReminders().catch(() => 0);
 
   const [notifications, chatUnreadCount, pendingReviewsCount] = await Promise.all([
     prisma.notification.findMany({

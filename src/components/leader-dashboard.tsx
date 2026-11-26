@@ -18,13 +18,12 @@ import { useToast } from "@/components/toast-provider";
 import { parseSavedAiQcResult } from "@/lib/gemini-shared";
 import type { LeaderLearningOverview } from "@/lib/knowledge-data";
 import { TaskCard } from "@/components/task-card";
+import { TaskAssigneesBadges } from "@/components/task-assignees-badges";
 import { TaskStatusBadge } from "@/components/status-badge";
 import { CreateTaskModal } from "@/components/create-task-modal";
 import { TaskDrawer } from "@/components/task-drawer";
-import {
-  DenDenMushiIcon,
-  PirateAvatar,
-} from "@/components/pirate-art";
+import { getTaskAssignees, isUserAssignedToTask } from "@/lib/task-assignees";
+import { DenDenMushiIcon, PirateAvatar } from "@/components/pirate-art";
 import {
   Pirate3DCrewCardGrid,
   Pirate3DCrewStage,
@@ -172,7 +171,10 @@ export function LeaderDashboard({
       if (selectedProjectId !== "ALL" && t.project.id !== selectedProjectId) {
         return false;
       }
-      if (selectedAssigneeId !== "ALL" && t.assignee?.id !== selectedAssigneeId) {
+      if (
+        selectedAssigneeId !== "ALL" &&
+        !isUserAssignedToTask(t, selectedAssigneeId)
+      ) {
         return false;
       }
       if (quickMode === "OPEN") {
@@ -193,7 +195,7 @@ export function LeaderDashboard({
           t.title.toLowerCase().includes(q) ||
           t.code.toLowerCase().includes(q) ||
           t.project.name.toLowerCase().includes(q) ||
-          (t.assignee?.name.toLowerCase().includes(q) ?? false);
+          getTaskAssignees(t).some((u) => u.name.toLowerCase().includes(q));
         if (!hit) return false;
       }
       return true;
@@ -642,20 +644,11 @@ export function LeaderDashboard({
                         </span>
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap text-xs font-semibold text-slate-700">
-                        {t.assignee ? (
-                          <div className="inline-flex items-center gap-2">
-                            <PirateAvatar
-                              name={t.assignee.name}
-                              color={t.assignee.avatarColor}
-                              scope={t.assignee.departmentScope}
-                              pirateCharacter={t.assignee.pirateCharacter}
-                              size="sm"
-                            />
-                            <span>{t.assignee.name}</span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 italic">Chưa phân công</span>
-                        )}
+                        <TaskAssigneesBadges
+                          task={t}
+                          size="sm"
+                          emptyLabel="Chưa phân công"
+                        />
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">

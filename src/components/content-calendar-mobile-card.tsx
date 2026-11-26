@@ -8,6 +8,7 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
+import { MultiAssigneePicker } from "@/components/multi-assignee-picker";
 import { PlatformLogo } from "@/components/platform-logo";
 import {
   deriveDefaultFormat,
@@ -16,6 +17,7 @@ import {
   getPostFormatMeta,
 } from "@/lib/content-plan";
 import { getVnDateString } from "@/lib/dates";
+import { getTaskAssigneeIds } from "@/lib/task-assignees";
 import type { SimpleUser, TaskItem } from "@/types/crm";
 import type { UserRole } from "@/generated/prisma/client";
 
@@ -239,23 +241,20 @@ export function ContentCalendarMobileCard({
           <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
             Người phụ trách (PIC)
           </label>
-          <select
-            value={t.assignee?.id || ""}
+          <MultiAssigneePicker
+            users={users}
+            value={getTaskAssigneeIds(t)}
             disabled={rowBusy}
-            onChange={(e) =>
+            compact
+            popoverAlign="right"
+            placeholder="Chưa gán"
+            onChange={(nextIds) =>
               onPatchTaskInline(t.id, {
-                assigneeId: e.target.value || null,
+                assigneeIds: nextIds,
+                assigneeId: nextIds[0] || null,
               })
             }
-            className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold"
-          >
-            <option value="">Chưa gán</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
+          />
         </div>
       </div>
 

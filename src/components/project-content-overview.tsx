@@ -11,11 +11,17 @@ import {
   Pencil,
   Plus,
   Save,
+  Settings2,
   TableProperties,
   X,
 } from "lucide-react";
+import { PlatformLogo } from "@/components/platform-logo";
 import {
+  getContentRouteMeta,
+  getPostFormatMeta,
+  getProjectContentOptions,
   normalizeProjectOverview,
+  type ProjectContentOptionKind,
   type ProjectOverviewData,
 } from "@/lib/content-plan";
 import { useToast } from "@/components/toast-provider";
@@ -28,6 +34,7 @@ export function ProjectContentOverviewPanel({
   onProjectUpdated,
   onJumpTab,
   onNewPost,
+  onOpenOptionsModal,
 }: {
   project: SimpleProject;
   tasks: TaskItem[];
@@ -35,12 +42,14 @@ export function ProjectContentOverviewPanel({
   onProjectUpdated: (updated: Partial<SimpleProject>) => void;
   onJumpTab: (tab: "MATRIX" | "CONTENT_CALENDAR") => void;
   onNewPost: () => void;
+  onOpenOptionsModal?: (tab: ProjectContentOptionKind) => void;
 }) {
   const { showToast } = useToast();
   const initialOverview = normalizeProjectOverview(
     project.overviewJson,
     project.description
   );
+  const projectOptions = getProjectContentOptions(project.overviewJson);
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -416,6 +425,114 @@ export function ProjectContentOverviewPanel({
               )}
             </div>
           )}
+        {/* Bộ Option riêng của dự án (Tuyến nội dung / Nền tảng / Format) */}
+        <div className="pt-3 border-t border-slate-100 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+              <Settings2 className="w-3.5 h-3.5 text-indigo-600" />
+              Bộ Option riêng của dự án {project.name}
+            </div>
+            {onOpenOptionsModal && (
+              <button
+                type="button"
+                onClick={() => onOpenOptionsModal("ROUTES")}
+                className="rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                Tự điền / Đổi Option
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-700">
+                  Tuyến nội dung ({projectOptions.routes.length})
+                </span>
+                {onOpenOptionsModal && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenOptionsModal("ROUTES")}
+                    className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    Sửa
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {projectOptions.routes.map((r) => {
+                  const meta = getContentRouteMeta(r);
+                  return (
+                    <span
+                      key={r}
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${meta.badgeClass}`}
+                    >
+                      {r}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-700">
+                  Nền tảng ({projectOptions.platforms.length})
+                </span>
+                {onOpenOptionsModal && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenOptionsModal("PLATFORMS")}
+                    className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    Sửa
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {projectOptions.platforms.map((p) => (
+                  <span
+                    key={p}
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700"
+                  >
+                    <PlatformLogo platform={p} size="xs" />
+                    {p}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-700">
+                  Format ({projectOptions.formats.length})
+                </span>
+                {onOpenOptionsModal && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenOptionsModal("FORMATS")}
+                    className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    Sửa
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {projectOptions.formats.map((f) => {
+                  const meta = getPostFormatMeta(f);
+                  return (
+                    <span
+                      key={f}
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${meta.badgeClass}`}
+                    >
+                      {f}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

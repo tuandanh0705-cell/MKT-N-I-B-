@@ -28,6 +28,7 @@ import { getVnDateString } from "@/lib/dates";
 import { parseSavedAiQcResult } from "@/lib/gemini-shared";
 import { TASK_NATURE_META } from "@/lib/report-grouping";
 import { normalizeSubtasks } from "@/lib/subtasks";
+import { formatTaskAssigneesLabel, getTaskAssignees } from "@/lib/task-assignees";
 import { canUserDeleteTask } from "@/lib/task-delete";
 import type { SimpleUser, TaskItem } from "@/types/crm";
 import type { UserRole } from "@/generated/prisma/client";
@@ -392,9 +393,17 @@ export function MyWorkTaskRow({
 
             <TaskStatusBadge status={t.status} />
 
-            {isRequestedTab && t.assignee && (
+            {isRequestedTab && getTaskAssignees(t).length > 0 && (
               <span className="text-[11px] font-semibold text-sky-700">
-                → {t.assignee.name}
+                → {formatTaskAssigneesLabel(t)}
+              </span>
+            )}
+            {!isRequestedTab && getTaskAssignees(t).length > 1 && (
+              <span
+                title={`Cùng thực hiện: ${formatTaskAssigneesLabel(t)}`}
+                className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-800"
+              >
+                👥 {getTaskAssignees(t).length} người
               </span>
             )}
           </div>

@@ -12,7 +12,9 @@ import {
   Image as ImageIcon,
   Sparkles,
   X,
+  ZoomIn,
 } from "lucide-react";
+import { DemoImageLightbox } from "@/components/demo-image-lightbox";
 import { PirateAvatar } from "@/components/pirate-art";
 import { PlatformLogo } from "@/components/platform-logo";
 import { TaskStatusBadge } from "@/components/status-badge";
@@ -22,6 +24,7 @@ import { VideoScriptBriefViewer } from "@/components/video-script-brief-viewer";
 import { useToast } from "@/components/toast-provider";
 import { ASSET_KIND_LABEL } from "@/lib/constants";
 import { formatVnDateTime } from "@/lib/dates";
+import { formatTaskAssigneesLabel, getTaskAssignees } from "@/lib/task-assignees";
 import {
   OUTPUT_CATEGORY_META,
   analyzeTaskOutputs,
@@ -178,6 +181,7 @@ function OutputInspectorInner({
 
   const [tab, setTab] = useState<"CONTENT" | "MEDIA" | "FB_PREVIEW">(defaultTab);
   const [selectedPreviewIdx, setSelectedPreviewIdx] = useState(0);
+  const [mediaLightboxIdx, setMediaLightboxIdx] = useState<number | null>(null);
   const [copiedCaption, setCopiedCaption] = useState(false);
 
   const activePreview =
@@ -231,14 +235,33 @@ function OutputInspectorInner({
 
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200">
               <div className="inline-flex items-center gap-1.5 font-semibold">
-                <PirateAvatar
-                  name={task.assignee?.name || "Chưa gán"}
-                  color={task.assignee?.avatarColor || "#64748b"}
-                  scope={task.assignee?.departmentScope}
-                  pirateCharacter={task.assignee?.pirateCharacter}
-                  size="sm"
-                />
-                <span>{task.assignee?.name || "Chưa phân công"}</span>
+                {getTaskAssignees(task).length > 0 ? (
+                  <div className="flex items-center -space-x-1.5">
+                    {getTaskAssignees(task)
+                      .slice(0, 3)
+                      .map((u) => (
+                        <span
+                          key={u.id}
+                          className="rounded-full ring-1 ring-slate-900 inline-flex"
+                        >
+                          <PirateAvatar
+                            name={u.name}
+                            color={u.avatarColor}
+                            scope={u.departmentScope}
+                            pirateCharacter={u.pirateCharacter}
+                            size="sm"
+                          />
+                        </span>
+                      ))}
+                  </div>
+                ) : (
+                  <PirateAvatar
+                    name="Chưa gán"
+                    color="#64748b"
+                    size="sm"
+                  />
+                )}
+                <span>{formatTaskAssigneesLabel(task, "Chưa phân công")}</span>
               </div>
 
               <span className="inline-flex items-center gap-1 rounded-md bg-white/10 px-2 py-0.5 font-semibold">
@@ -418,13 +441,39 @@ function OutputInspectorInner({
               <div className="space-y-4">
                 {activePreview ? (
                   <div className="space-y-2.5">
-                    <div className="relative h-72 sm:h-80 w-full rounded-2xl border border-slate-200 bg-slate-100 overflow-hidden">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setMediaLightboxIdx(selectedPreviewIdx)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setMediaLightboxIdx(selectedPreviewIdx);
+                        }
+                      }}
+                      title="Bấm để phóng to xem ảnh giữa màn hình"
+                      className="group relative h-72 sm:h-80 w-full rounded-2xl border border-slate-200 bg-slate-100 overflow-hidden cursor-zoom-in"
+                    >
                       <SafeAssetImage
                         src={activePreview.previewUrl}
                         alt={activePreview.asset.label}
                         href={activePreview.asset.url}
                       />
+                      <span className="pointer-events-none absolute bottom-2.5 right-2.5 z-10 inline-flex items-center gap-1 rounded-full bg-black/65 backdrop-blur-xs text-white px-2.5 py-1 text-[11px] font-bold opacity-85 group-hover:opacity-100 transition">
+                        <ZoomIn className="w-3.5 h-3.5" />
+                        Phóng to
+                      </span>
                     </div>
+                    <DemoImageLightbox
+                      images={analyzed.imagePreviews.map((p) => p.previewUrl)}
+                      activeIndex={mediaLightboxIdx}
+                      title={task.title}
+                      onClose={() => setMediaLightboxIdx(null)}
+                      onChangeIndex={(nextIdx) => {
+                        setMediaLightboxIdx(nextIdx);
+                        setSelectedPreviewIdx(nextIdx);
+                      }}
+                    />
                     <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                       <div className="text-xs font-bold text-slate-800">
                         {ASSET_KIND_LABEL[activePreview.asset.kind] || activePreview.asset.kind}:{" "}

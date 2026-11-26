@@ -7,19 +7,22 @@ import {
   Edit3,
   Layers,
   Plus,
+  Settings2,
   Trash2,
   X,
 } from "lucide-react";
+import { CustomizableOptionSelect } from "@/components/customizable-option-select";
 import {
-  CONTENT_ROUTE_OPTIONS,
-  POST_FORMAT_OPTIONS,
   getContentRouteMeta,
   getContentStatusDisplay,
   getPostFormatMeta,
+  getProjectContentOptions,
   inferRouteAndFormatFromText,
   normalizeContentMatrix,
+  normalizeRouteSelectValue,
   type ContentMatrixData,
   type ContentMatrixIdea,
+  type ProjectContentOptionKind,
 } from "@/lib/content-plan";
 import { useToast } from "@/components/toast-provider";
 import type { SimpleProject, TaskItem } from "@/types/crm";
@@ -30,6 +33,8 @@ export function ProjectContentMatrixPanel({
   onProjectUpdated,
   onCreatePostFromIdea,
   onOpenExistingPost,
+  onAddProjectOption,
+  onOpenOptionsModal,
 }: {
   project: SimpleProject;
   tasks: TaskItem[];
@@ -42,11 +47,22 @@ export function ProjectContentMatrixPanel({
     matrixIdeaId: string;
   }) => void;
   onOpenExistingPost: (task: TaskItem) => void;
+  onAddProjectOption?: (
+    kind: ProjectContentOptionKind,
+    newValue: string
+  ) => Promise<boolean>;
+  onOpenOptionsModal?: (tab: ProjectContentOptionKind) => void;
 }) {
   const { showToast } = useToast();
+  const projectOptions = getProjectContentOptions(project.overviewJson);
+  const [prevMatrixJson, setPrevMatrixJson] = useState(project.contentMatrixJson);
   const [matrix, setMatrix] = useState<ContentMatrixData>(() =>
     normalizeContentMatrix(project.contentMatrixJson)
   );
+  if (prevMatrixJson !== project.contentMatrixJson) {
+    setPrevMatrixJson(project.contentMatrixJson);
+    setMatrix(normalizeContentMatrix(project.contentMatrixJson));
+  }
   const [saving, setSaving] = useState(false);
 
   // Thêm Topic mới
@@ -61,14 +77,20 @@ export function ProjectContentMatrixPanel({
     depthKey: string;
   } | null>(null);
   const [ideaTextDraft, setIdeaTextDraft] = useState("");
-  const [ideaRouteDraft, setIdeaRouteDraft] = useState("EDUCATE");
-  const [ideaFormatDraft, setIdeaFormatDraft] = useState("Ảnh");
+  const [ideaRouteDraft, setIdeaRouteDraft] = useState(
+    projectOptions.routes[0] || ""
+  );
+  const [ideaFormatDraft, setIdeaFormatDraft] = useState(
+    projectOptions.formats[0] || "Ảnh"
+  );
 
   // Sửa 1 idea có sẵn
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editIdeaText, setEditIdeaText] = useState("");
   const [editIdeaRoute, setEditIdeaRoute] = useState("");
-  const [editIdeaFormat, setEditIdeaFormat] = useState("Ảnh");
+  const [editIdeaFormat, setEditIdeaFormat] = useState(
+    projectOptions.formats[0] || "Ảnh"
+  );
 
   async function persistMatrix(nextMatrix: ContentMatrixData, toastMsg?: string) {
     setMatrix(nextMatrix);
@@ -244,14 +266,26 @@ export function ProjectContentMatrixPanel({
               </button>
             </form>
           ) : (
-            <button
-              type="button"
-              onClick={() => setAddingTopic(true)}
-              className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-2 text-xs font-bold inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Thêm Topic
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {onOpenOptionsModal && (
+                <button
+                  type="button"
+                  onClick={() => onOpenOptionsModal("ROUTES")}
+                  className="rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 px-3 py-2 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Settings2 className="w-3.5 h-3.5" />
+                  Tùy chỉnh Option
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setAddingTopic(true)}
+                className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-2 text-xs font-bold inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Thêm Topic
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -395,29 +429,34 @@ export function ProjectContentMatrixPanel({
                                 className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
                               />
                               <div className="grid grid-cols-2 gap-1.5">
-                                <select
-                                  value={editIdeaRoute}
-                                  onChange={(e) => setEditIdeaRoute(e.target.value)}
-                                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
-                                >
-                                  <option value="">-- Tuyến --</option>
-                                  {CONTENT_ROUTE_OPTIONS.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                      {opt.label}
-                                    </option>
-                                  ))}
-                                </select>
-                                <select
+                                <CustomizableOptionSelect
+                                  value={normalizeRouteSelectValue(
+                                    editIdeaRoute,
+                                    projectOptions.routes
+                                  )}
+                                  options={projectOptions.routes}
+                                  emptyLabel="-- Tuyến --"
+                                  placeholder="Tuyến mới..."
+                                  selectClassName="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                                  onChange={setEditIdeaRoute}
+                                  onAddOption={
+                                    onAddProjectOption
+                                      ? (val) => onAddProjectOption("ROUTES", val)
+                                      : undefined
+                                  }
+                                />
+                                <CustomizableOptionSelect
                                   value={editIdeaFormat}
-                                  onChange={(e) => setEditIdeaFormat(e.target.value)}
-                                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
-                                >
-                                  {POST_FORMAT_OPTIONS.map((f) => (
-                                    <option key={f} value={f}>
-                                      {f}
-                                    </option>
-                                  ))}
-                                </select>
+                                  options={projectOptions.formats}
+                                  placeholder="Format mới..."
+                                  selectClassName="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                                  onChange={setEditIdeaFormat}
+                                  onAddOption={
+                                    onAddProjectOption
+                                      ? (val) => onAddProjectOption("FORMATS", val)
+                                      : undefined
+                                  }
+                                />
                               </div>
                               <div className="flex justify-end gap-1.5">
                                 <button
@@ -548,29 +587,34 @@ export function ProjectContentMatrixPanel({
                             className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:border-emerald-600"
                           />
                           <div className="grid grid-cols-2 gap-1.5">
-                            <select
-                              value={ideaRouteDraft}
-                              onChange={(e) => setIdeaRouteDraft(e.target.value)}
-                              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
-                            >
-                              <option value="">-- Tuyến --</option>
-                              {CONTENT_ROUTE_OPTIONS.map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </select>
-                            <select
+                            <CustomizableOptionSelect
+                              value={normalizeRouteSelectValue(
+                                ideaRouteDraft,
+                                projectOptions.routes
+                              )}
+                              options={projectOptions.routes}
+                              emptyLabel="-- Tuyến --"
+                              placeholder="Tuyến mới..."
+                              selectClassName="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                              onChange={setIdeaRouteDraft}
+                              onAddOption={
+                                onAddProjectOption
+                                  ? (val) => onAddProjectOption("ROUTES", val)
+                                  : undefined
+                              }
+                            />
+                            <CustomizableOptionSelect
                               value={ideaFormatDraft}
-                              onChange={(e) => setIdeaFormatDraft(e.target.value)}
-                              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
-                            >
-                              {POST_FORMAT_OPTIONS.map((f) => (
-                                <option key={f} value={f}>
-                                  {f}
-                                </option>
-                              ))}
-                            </select>
+                              options={projectOptions.formats}
+                              placeholder="Format mới..."
+                              selectClassName="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
+                              onChange={setIdeaFormatDraft}
+                              onAddOption={
+                                onAddProjectOption
+                                  ? (val) => onAddProjectOption("FORMATS", val)
+                                  : undefined
+                              }
+                            />
                           </div>
                           <div className="flex justify-end gap-1.5">
                             <button

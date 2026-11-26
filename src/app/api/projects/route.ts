@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { buildProjectVisibilityWhere, canAccessProject } from "@/lib/permissions";
 import { isMediaProductionUser } from "@/lib/constants";
+import { normalizeContentMatrix, sanitizeOptionList } from "@/lib/content-plan";
 
 function normalizeMasterLinkUrl(
   raw: unknown
@@ -182,7 +183,9 @@ export async function PATCH(request: Request) {
         body.campaignWeeks === undefined &&
         body.contentPillarsJson === undefined &&
         body.overviewJson === undefined &&
-        body.contentMatrixJson === undefined;
+        body.contentMatrixJson === undefined &&
+        body.contentOptions === undefined &&
+        body.optionRenames === undefined;
 
       const allowed =
         (editingOnlyMasterLink &&
@@ -257,11 +260,126 @@ export async function PATCH(request: Request) {
         .filter(Boolean)
         .slice(0, 12);
     }
-    if (body.overviewJson !== undefined) {
-      data.overviewJson = body.overviewJson;
+    if (body.overviewJson !== undefined || body.contentOptions !== undefined) {
+      const existingProj = await prisma.project.findUnique({
+        where: { id },
+        select: { overviewJson: true },
+      });
+      const existingObj =
+        existingProj?.overviewJson &&
+        typeof existingProj.overviewJson === "object" &&
+        !Array.isArray(existingProj.overviewJson)
+          ? { ...(existingProj.overviewJson as Record<string, unknown>) }
+          : {};
+
+      const mergedOverview: Record<string, unknown> =
+        body.overviewJson !== undefined &&
+        body.overviewJson &&
+        typeof body.overviewJson === "object" &&
+        !Array.isArray(body.overviewJson)
+          ? {
+              ...existingObj,
+              ...(body.overviewJson as Record<string, unknown>),
+            }
+          : existingObj;
+
+      if (
+        body.contentOptions &&
+        typeof body.contentOptions === "object" &&
+        !Array.isArray(body.contentOptions)
+      ) {
+        const opts = body.contentOptions as Record<string, unknown>;
+        for (const key of [
+          "routeOptions",
+          "platformOptions",
+          "formatOptions",
+        ] as const) {
+          if (opts[key] === null) {
+            delete mergedOverview[key];
+          } else if (Array.isArray(opts[key])) {
+            const sanitized = sanitizeOptionList(opts[key]);
+            if (sanitized.length > 0) {
+              mergedOverview[key] = sanitized;
+            } else {
+              delete mergedOverview[key];
+            }
+          }
+        }
+      }
+
+      data.overviewJson = mergedOverview;
     }
     if (body.contentMatrixJson !== undefined) {
       data.contentMatrixJson = body.contentMatrixJson;
+    }
+
+    let renamedTasksCount = 0;
+    const validRenames: Array<{
+      field: "contentAngle" | "platform" | "postFormat";
+      from: string;
+      to: string;
+    }> = [];
+    if (Array.isArray(body.optionRenames)) {
+      for (const item of body.optionRenames) {
+        if (!item || typeof item !== "object") continue;
+        const r = item as Record<string, unknown>;
+        const field = r.field;
+        const from = String(r.from ?? "").trim();
+        const to = String(r.to ?? "").trim();
+        if (
+          (field === "contentAngle" ||
+            field === "platform" ||
+            field === "postFormat") &&
+          from &&
+          to &&
+          from !== to
+        ) {
+          validRenames.push({ field, from, to });
+        }
+      }
+    }
+
+    if (validRenames.length > 0 && body.contentMatrixJson === undefined) {
+      const existingProjMatrix = await prisma.project.findUnique({
+        where: { id },
+        select: { contentMatrixJson: true },
+      });
+      if (existingProjMatrix?.contentMatrixJson) {
+        const matrix = normalizeContentMatrix(existingProjMatrix.contentMatrixJson);
+        let matrixChanged = false;
+        const nextIdeas = matrix.ideas.map((idea) => {
+          let nextRoute = idea.route;
+          let nextFormat = idea.format;
+          for (const rn of validRenames) {
+            if (
+              rn.field === "contentAngle" &&
+              nextRoute &&
+              (nextRoute.toLowerCase() === rn.from.toLowerCase() ||
+                (rn.from.toUpperCase() === "CASE STUDY" &&
+                  nextRoute.toUpperCase() === "CASE") ||
+                (rn.from.toUpperCase() === "BÁN HÀNG / PR" &&
+                  nextRoute.toUpperCase() === "BÁN HÀNG"))
+            ) {
+              nextRoute = rn.to;
+              matrixChanged = true;
+            }
+            if (
+              rn.field === "postFormat" &&
+              nextFormat &&
+              nextFormat.toLowerCase() === rn.from.toLowerCase()
+            ) {
+              nextFormat = rn.to;
+              matrixChanged = true;
+            }
+          }
+          return nextRoute === idea.route && nextFormat === idea.format
+            ? idea
+            : { ...idea, route: nextRoute, format: nextFormat };
+        });
+        if (matrixChanged) {
+          data.contentMatrixJson = { ...matrix, ideas: nextIdeas };
+        }
+      }
     }
 
     const updated = await prisma.project.update({
@@ -269,7 +387,44 @@ export async function PATCH(request: Request) {
       data,
     });
 
-    return NextResponse.json({ project: updated });
+    for (const rn of validRenames) {
+      if (rn.field === "contentAngle") {
+        const matchValues = [rn.from];
+        if (rn.from.toUpperCase() === "CASE STUDY") matchValues.push("CASE");
+        if (rn.from.toUpperCase() === "BÁN HÀNG / PR") matchValues.push("BÁN HÀNG");
+        const res = await prisma.task.updateMany({
+          where: {
+            projectId: id,
+            deletedAt: null,
+            contentAngle: { in: matchValues },
+          },
+          data: { contentAngle: rn.to },
+        });
+        renamedTasksCount += res.count;
+      } else if (rn.field === "platform") {
+        const res = await prisma.task.updateMany({
+          where: {
+            projectId: id,
+            deletedAt: null,
+            platform: rn.from,
+          },
+          data: { platform: rn.to },
+        });
+        renamedTasksCount += res.count;
+      } else if (rn.field === "postFormat") {
+        const res = await prisma.task.updateMany({
+          where: {
+            projectId: id,
+            deletedAt: null,
+            postFormat: rn.from,
+          },
+          data: { postFormat: rn.to },
+        });
+        renamedTasksCount += res.count;
+      }
+    }
+
+    return NextResponse.json({ project: updated, renamedTasksCount });
   } catch (err) {
     console.error("Update project error:", err);
     return NextResponse.json(

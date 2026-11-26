@@ -2,7 +2,7 @@
 
 import { Calendar, ExternalLink, RotateCcw } from "lucide-react";
 import { TaskStatusBadge } from "@/components/status-badge";
-import { PirateAvatar } from "@/components/pirate-art";
+import { TaskAssigneesBadges } from "@/components/task-assignees-badges";
 import { PlatformLogo } from "@/components/platform-logo";
 import { TASK_TYPE_META, isTaskOverdue } from "@/lib/constants";
 import { getPlatformChannelMeta } from "@/lib/platform-meta";
@@ -103,22 +103,11 @@ export function TaskCard({
 
       <div className="pt-2.5 border-t border-amber-100 flex items-center justify-between gap-2 text-xs text-slate-500">
         <div className="flex items-center gap-2 min-w-0">
-          {task.assignee ? (
-            <>
-              <PirateAvatar
-                name={task.assignee.name}
-                color={task.assignee.avatarColor}
-                scope={task.assignee.departmentScope}
-                pirateCharacter={task.assignee.pirateCharacter}
-                size="sm"
-              />
-              <span className="truncate font-semibold text-slate-700">
-                {task.assignee.name}
-              </span>
-            </>
-          ) : (
-            <span className="text-slate-400 italic">Chưa phân công</span>
-          )}
+          <TaskAssigneesBadges
+            task={task}
+            size="sm"
+            emptyLabel="Chưa phân công"
+          />
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">

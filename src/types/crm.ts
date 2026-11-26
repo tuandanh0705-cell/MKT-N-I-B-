@@ -91,6 +91,21 @@ export interface TaskCommentItem {
   };
 }
 
+export interface TaskAssigneeUser {
+  id: string;
+  name: string;
+  title: string;
+  avatarColor: string;
+  pirateCharacter?: string | null;
+  departmentScope: DepartmentScope;
+}
+
+export interface TaskAssigneeEntry {
+  userId?: string;
+  assignedAt?: string | Date;
+  user: TaskAssigneeUser;
+}
+
 export interface TaskItem {
   id: string;
   code: string;
@@ -154,14 +169,8 @@ export interface TaskItem {
     name: string;
     color: string;
   };
-  assignee: {
-    id: string;
-    name: string;
-    title: string;
-    avatarColor: string;
-    pirateCharacter?: string | null;
-    departmentScope: DepartmentScope;
-  } | null;
+  assignee: TaskAssigneeUser | null;
+  assignees?: TaskAssigneeEntry[];
   requester: {
     id: string;
     name: string;
@@ -319,6 +328,11 @@ export interface EquipmentBookingItem {
   } | null;
 }
 
+export interface ResourceLinkEntry {
+  label: string;
+  url: string;
+}
+
 export interface WorkspaceResourceItem {
   id: string;
   scope: ResourceScope;
@@ -326,6 +340,7 @@ export interface WorkspaceResourceItem {
   category: ResourceCategory;
   title: string;
   url: string;
+  linksJson?: unknown;
   description: string | null;
   tags: string | null;
   createdAt: string | Date;
@@ -476,6 +491,43 @@ export interface ChatParticipantUser {
   departmentScope: DepartmentScope;
 }
 
+export interface ChatMessageReplyPreview {
+  id: string;
+  content: string;
+  senderName: string;
+  isAnonymous: boolean;
+  attachmentUrl: string | null;
+  isDeleted: boolean;
+}
+
+export type ChatReminderRepeatRule = "NONE" | "DAILY" | "WEEKLY";
+
+export interface ChatReminderMeta {
+  reminderId: string;
+  title: string;
+  remindAt: string;
+  repeatRule: ChatReminderRepeatRule;
+}
+
+export interface ChatReminderItem {
+  id: string;
+  roomId: string;
+  title: string;
+  remindAt: string;
+  repeatRule: ChatReminderRepeatRule;
+  isCompleted: boolean;
+  completedAt: string | null;
+  notifiedAt: string | null;
+  createdAt: string;
+  createdBy: {
+    id: string;
+    name: string;
+    avatarColor: string;
+    pirateCharacter?: string | null;
+  } | null;
+  isMine: boolean;
+}
+
 export interface ChatMessageItem {
   id: string;
   roomId: string;
@@ -483,6 +535,10 @@ export interface ChatMessageItem {
   isAnonymous: boolean;
   anonymousAlias: string | null;
   attachmentUrl: string | null;
+  replyToId?: string | null;
+  replyTo?: ChatMessageReplyPreview | null;
+  forwardedFrom?: string | null;
+  reminder?: ChatReminderMeta | null;
   isDeleted: boolean;
   isMine: boolean;
   createdAt: string;

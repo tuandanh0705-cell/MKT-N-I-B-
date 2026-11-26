@@ -67,6 +67,10 @@ export async function GET(request: Request) {
         isMediaOrder: true,
         project: { select: { id: true, slug: true, name: true, color: true } },
         assignee: { select: { name: true } },
+        assignees: {
+          orderBy: { assignedAt: "asc" },
+          select: { user: { select: { name: true } } },
+        },
       },
     }),
     prisma.workspaceResource.findMany({

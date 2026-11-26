@@ -12,6 +12,7 @@ import { TASK_TYPE_META, getProjectCodePrefix } from "@/lib/constants";
 import { normalizeSubtasks } from "@/lib/subtasks";
 import { normalizeMediaBriefItems } from "@/lib/media-brief";
 import { TASK_CARD_INCLUDE } from "@/lib/task-queries";
+import { parseAssigneeIdsFromBody } from "@/lib/task-assignees";
 import type { Prisma, TaskPriority, TaskStatus, TaskType } from "@/generated/prisma/client";
 
 export async function GET(request: Request) {
@@ -30,11 +31,17 @@ export async function GET(request: Request) {
   const extraFilters: Prisma.TaskWhereInput[] = [];
   if (status) extraFilters.push({ status });
   if (assigneeId && user.role === "LEADER") {
-    extraFilters.push({ assigneeId });
+    extraFilters.push({
+      OR: [{ assigneeId }, { assignees: { some: { userId: assigneeId } } }],
+    });
   }
   if (onlyMine) {
     extraFilters.push({
-      OR: [{ assigneeId: user.id }, { requesterId: user.id }],
+      OR: [
+        { assigneeId: user.id },
+        { assignees: { some: { userId: user.id } } },
+        { requesterId: user.id },
+      ],
     });
   }
   if (waitingReview) {
@@ -122,7 +129,8 @@ export async function POST(request: Request) {
       ? rawPlannedDate
       : null;
 
-    const assigneeId = body.assigneeId ? String(body.assigneeId) : null;
+    const parsedAssigneeIds = parseAssigneeIdsFromBody(body) ?? [];
+    const assigneeId = parsedAssigneeIds[0] ?? null;
     let parentTaskId: string | null = null;
     if (body.parentTaskId) {
       const parentCheck = await prisma.task.findFirst({
@@ -200,6 +208,12 @@ export async function POST(request: Request) {
         projectId,
         requesterId: user.id,
         assigneeId,
+        assignees:
+          parsedAssigneeIds.length > 0
+            ? {
+                create: parsedAssigneeIds.map((uid) => ({ userId: uid })),
+              }
+            : undefined,
         parentTaskId,
         assets: briefLinkUrl
           ? {
@@ -227,15 +241,17 @@ export async function POST(request: Request) {
       summary: `${user.name} đã tạo đầu việc "${created.title}" (${created.code}) trong ${project.name}.`,
     });
 
-    // Thông báo cho người được giao việc (mở thẳng tới thẻ việc trong Nhật Ký Hải Trình)
-    if (assigneeId && assigneeId !== user.id) {
+    // Thông báo cho tất cả người được giao việc (mở thẳng tới thẻ việc trong Nhật Ký Hải Trình)
+    const assignedSet = new Set(parsedAssigneeIds);
+    for (const targetUid of assignedSet) {
+      if (targetUid === user.id) continue;
       await createNotification({
-        userId: assigneeId,
+        userId: targetUid,
         type: "TASK_ASSIGNED",
         title: `${isMediaOrder ? "📦 Order Media mới" : "📋 Việc mới được giao"}: ${created.code}`,
         message: `${user.name} vừa giao "${created.title}" (Dự án: ${project.name})${
-          timing.warningMessage ? ` • Lưu ý: ${timing.warningMessage}` : ""
-        }.`,
+          assignedSet.size > 1 ? ` • Cùng thực hiện: ${assignedSet.size} người` : ""
+        }${timing.warningMessage ? ` • Lưu ý: ${timing.warningMessage}` : ""}.`,
         linkUrl: `/my-work?taskId=${created.id}`,
         sendEmailNow: created.priority === "URGENT" || isMediaOrder,
         actionLabel: "Mở việc & xếp lịch làm",
@@ -253,7 +269,7 @@ export async function POST(request: Request) {
         select: { id: true },
       });
       for (const leader of leaders) {
-        if (leader.id === user.id || leader.id === assigneeId) continue;
+        if (leader.id === user.id || assignedSet.has(leader.id)) continue;
         await createNotification({
           userId: leader.id,
           type: "TASK_ASSIGNED",

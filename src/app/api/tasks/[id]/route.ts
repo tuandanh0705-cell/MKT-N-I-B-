@@ -9,6 +9,7 @@ import { normalizeSubtasks } from "@/lib/subtasks";
 import { normalizeMediaBriefItems } from "@/lib/media-brief";
 import { taskRequiresLeaderApproval } from "@/lib/constants";
 import { TASK_DETAIL_INCLUDE } from "@/lib/task-queries";
+import { parseAssigneeIdsFromBody } from "@/lib/task-assignees";
 import type {
   ActivityAction,
   AssetKind,
@@ -71,7 +72,10 @@ export async function PATCH(
 
   const existing = await prisma.task.findUnique({
     where: { id },
-    include: { project: { select: { id: true, slug: true, name: true } } },
+    include: {
+      project: { select: { id: true, slug: true, name: true } },
+      assignees: { select: { userId: true } },
+    },
   });
   if (!existing) {
     return NextResponse.json({ error: "Không tìm thấy công việc." }, { status: 404 });
@@ -157,25 +161,46 @@ export async function PATCH(
       updateData.projectId = String(body.projectId);
     }
 
-    const nextAssigneeId =
-      body.assigneeId !== undefined
-        ? body.assigneeId
-          ? String(body.assigneeId)
-          : null
-        : existing.assigneeId;
+    const existingAssigneeIds = new Set<string>(
+      [
+        existing.assigneeId,
+        ...existing.assignees.map((a) => a.userId),
+      ].filter((uid): uid is string => Boolean(uid))
+    );
 
-    if (body.assigneeId !== undefined) {
-      updateData.assigneeId = nextAssigneeId;
-      if (nextAssigneeId && nextAssigneeId !== existing.assigneeId && nextAssigneeId !== user.id) {
-        await createNotification({
-          userId: nextAssigneeId,
-          type: "TASK_ASSIGNED",
-          title: `📋 Được giao việc ${existing.code}`,
-          message: `${user.name} đã chuyển giao "${existing.title}" (${existing.project.name}) cho bạn.`,
-          linkUrl: `/my-work?taskId=${id}`,
-          sendEmailNow: true,
-          actionLabel: "Mở việc & xếp lịch làm",
-        });
+    const incomingAssigneeIds = parseAssigneeIdsFromBody(body);
+    let assigneesChanged = false;
+    let nextAssigneeSyncIds: string[] | undefined;
+
+    if (incomingAssigneeIds !== undefined) {
+      const nextPrimaryId = incomingAssigneeIds[0] ?? null;
+      updateData.assigneeId = nextPrimaryId;
+      nextAssigneeSyncIds = incomingAssigneeIds;
+
+      const nextSet = new Set(incomingAssigneeIds);
+      if (
+        nextSet.size !== existingAssigneeIds.size ||
+        incomingAssigneeIds.some((uid) => !existingAssigneeIds.has(uid))
+      ) {
+        assigneesChanged = true;
+      }
+
+      for (const uid of incomingAssigneeIds) {
+        if (!existingAssigneeIds.has(uid) && uid !== user.id) {
+          await createNotification({
+            userId: uid,
+            type: "TASK_ASSIGNED",
+            title: `📋 Được giao việc ${existing.code}`,
+            message: `${user.name} đã giao "${existing.title}" (${existing.project.name}) cho bạn${
+              incomingAssigneeIds.length > 1
+                ? ` (cùng ${incomingAssigneeIds.length} người thực hiện)`
+                : ""
+            }.`,
+            linkUrl: `/my-work?taskId=${id}`,
+            sendEmailNow: true,
+            actionLabel: "Mở việc & xếp lịch làm",
+          });
+        }
       }
     }
 
@@ -354,9 +379,10 @@ export async function PATCH(
       updateData.status = "IN_PROGRESS";
       updateData.reviewerId = user.id;
 
-      if (existing.assigneeId && existing.assigneeId !== user.id) {
+      for (const uid of existingAssigneeIds) {
+        if (uid === user.id) continue;
         await createNotification({
-          userId: existing.assigneeId,
+          userId: uid,
           type: "APPROVED",
           title: `Brief đã duyệt — Bắt đầu làm ${existing.code}`,
           message: `Leader đã duyệt Brief "${existing.title}" (${existing.project.name}). Bạn có thể tiến hành sản xuất.`,
@@ -422,7 +448,7 @@ export async function PATCH(
       updateData.reviewerId = user.id;
 
       const recipients = new Set(
-        [existing.assigneeId, existing.requesterId].filter(
+        [...existingAssigneeIds, existing.requesterId].filter(
           (uid): uid is string => Boolean(uid) && uid !== user.id
         )
       );
@@ -432,10 +458,9 @@ export async function PATCH(
           type: "APPROVED",
           title: `⭐ Đã duyệt Final: ${existing.code}`,
           message: `Leader đã duyệt Final "${existing.title}" (${existing.project.name}). Sẵn sàng lên lịch đăng / hoàn tất!`,
-          linkUrl:
-            rid === existing.assigneeId
-              ? `/my-work?taskId=${id}`
-              : `/projects/${existing.project.slug}?taskId=${id}`,
+          linkUrl: existingAssigneeIds.has(rid)
+            ? `/my-work?taskId=${id}`
+            : `/projects/${existing.project.slug}?taskId=${id}`,
           sendEmailNow: true,
           actionLabel: "Mở đầu việc đã duyệt",
         });
@@ -499,7 +524,7 @@ export async function PATCH(
       });
 
       const recipients = new Set(
-        [existing.assigneeId, existing.requesterId].filter(
+        [...existingAssigneeIds, existing.requesterId].filter(
           (uid): uid is string => Boolean(uid) && uid !== user.id
         )
       );
@@ -509,10 +534,9 @@ export async function PATCH(
           type: "REVISION_REQUESTED",
           title: `🔧 Cần sửa (${nextRevCount}/${existing.maxRevisions}): ${existing.code}`,
           message: `Leader phản hồi "${existing.title}": ${feedbackNote}`,
-          linkUrl:
-            rid === existing.assigneeId
-              ? `/my-work?taskId=${id}&openChat=1`
-              : `/projects/${existing.project.slug}?taskId=${id}&openChat=1`,
+          linkUrl: existingAssigneeIds.has(rid)
+            ? `/my-work?taskId=${id}&openChat=1`
+            : `/projects/${existing.project.slug}?taskId=${id}&openChat=1`,
           sendEmailNow: true,
           actionLabel: "Xem feedback & sửa ngay",
         });
@@ -609,7 +633,13 @@ export async function PATCH(
               ? "STATUS_CHANGE"
               : "UPDATE";
 
-    if (diffs.length > 0 || action || body.newAsset || body.deleteAssetId) {
+    if (
+      diffs.length > 0 ||
+      assigneesChanged ||
+      action ||
+      body.newAsset ||
+      body.deleteAssetId
+    ) {
       const nextTitle =
         typeof updateData.title === "string"
           ? updateData.title
@@ -620,7 +650,9 @@ export async function PATCH(
           ? `${user.name} gắn link ${body.newAsset.label || "tư liệu"} mới.`
           : body.deleteAssetId
             ? `${user.name} gỡ một link đính kèm.`
-            : `${user.name} chỉnh sửa ${diffs.map((d) => d.label).join(", ")}.`;
+            : diffs.length > 0
+              ? `${user.name} chỉnh sửa ${diffs.map((d) => d.label).join(", ")}.`
+              : `${user.name} cập nhật danh sách Người thực hiện.`;
 
       await recordActivity({
         entityType: "TASK",
@@ -631,6 +663,17 @@ export async function PATCH(
         summary,
         changes: diffs,
       });
+    }
+
+    if (nextAssigneeSyncIds !== undefined) {
+      const baseTs = Date.now();
+      updateData.assignees = {
+        deleteMany: {},
+        create: nextAssigneeSyncIds.map((uid, idx) => ({
+          userId: uid,
+          assignedAt: new Date(baseTs + idx),
+        })),
+      };
     }
 
     const updated = await prisma.task.update({

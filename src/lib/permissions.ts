@@ -22,7 +22,11 @@ export function buildProjectVisibilityWhere(
         tasks: {
           some: {
             deletedAt: null,
-            OR: [{ assigneeId: user.id }, { requesterId: user.id }],
+            OR: [
+              { assigneeId: user.id },
+              { assignees: { some: { userId: user.id } } },
+              { requesterId: user.id },
+            ],
           },
         },
       },
@@ -52,6 +56,7 @@ export function buildTaskVisibilityWhere(
     deletedAt: null,
     OR: [
       { assigneeId: user.id },
+      { assignees: { some: { userId: user.id } } },
       { requesterId: user.id },
       {
         project: {

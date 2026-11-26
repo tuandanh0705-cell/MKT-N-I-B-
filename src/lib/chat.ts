@@ -1,6 +1,15 @@
 import { prisma } from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
+import { formatVnDateTime } from "@/lib/dates";
 import type { ChatRoomType, DepartmentScope } from "@/generated/prisma/client";
-import type { ChatMessageItem, ChatRoomSummary } from "@/types/crm";
+import type {
+  ChatMessageItem,
+  ChatMessageReplyPreview,
+  ChatReminderItem,
+  ChatReminderMeta,
+  ChatReminderRepeatRule,
+  ChatRoomSummary,
+} from "@/types/crm";
 
 export const ANONYMOUS_ALIASES = [
   "🎭 Hải Tặc Bí Ẩn",
@@ -31,6 +40,33 @@ export interface RawChatUser {
   departmentScope: DepartmentScope;
 }
 
+export const CHAT_MESSAGE_INCLUDE = {
+  sender: { select: CHAT_USER_SELECT },
+  replyTo: {
+    select: {
+      id: true,
+      senderId: true,
+      content: true,
+      isAnonymous: true,
+      anonymousAlias: true,
+      attachmentUrl: true,
+      isDeleted: true,
+      sender: { select: { name: true } },
+    },
+  },
+} as const;
+
+export interface RawChatReplyTo {
+  id: string;
+  senderId: string;
+  content: string;
+  isAnonymous: boolean;
+  anonymousAlias: string | null;
+  attachmentUrl: string | null;
+  isDeleted: boolean;
+  sender: { name: string };
+}
+
 export interface RawChatMessage {
   id: string;
   roomId: string;
@@ -39,9 +75,26 @@ export interface RawChatMessage {
   isAnonymous: boolean;
   anonymousAlias: string | null;
   attachmentUrl: string | null;
+  replyToId?: string | null;
+  replyTo?: RawChatReplyTo | null;
+  forwardedFrom?: string | null;
+  reminderJson?: unknown;
   isDeleted: boolean;
   createdAt: Date;
   sender: RawChatUser;
+}
+
+export function parseChatReminderMeta(raw: unknown): ChatReminderMeta | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+  const reminderId = String(obj.reminderId ?? "").trim();
+  const title = String(obj.title ?? "").trim();
+  const remindAt = String(obj.remindAt ?? "").trim();
+  if (!reminderId || !title || !remindAt) return null;
+  const repeatRaw = String(obj.repeatRule ?? "NONE").toUpperCase();
+  const repeatRule: ChatReminderRepeatRule =
+    repeatRaw === "DAILY" || repeatRaw === "WEEKLY" ? repeatRaw : "NONE";
+  return { reminderId, title, remindAt, repeatRule };
 }
 
 export interface RawChatRoomForSerialization {
@@ -83,6 +136,27 @@ export function serializeChatMessage(
         msg.senderId === options.forceAnonymousSenderId
     );
 
+  let replyTo: ChatMessageReplyPreview | null = null;
+  if (!msg.isDeleted && msg.replyTo) {
+    const r = msg.replyTo;
+    const replyEffectiveAnon =
+      r.isAnonymous ||
+      Boolean(
+        options?.forceAnonymousSenderId &&
+          r.senderId === options.forceAnonymousSenderId
+      );
+    replyTo = {
+      id: r.id,
+      content: r.isDeleted ? "Tin nhắn đã được thu hồi" : r.content,
+      senderName: replyEffectiveAnon
+        ? r.anonymousAlias || options?.fallbackAlias || ANONYMOUS_ALIASES[0]
+        : r.sender.name,
+      isAnonymous: replyEffectiveAnon,
+      attachmentUrl: r.isDeleted ? null : r.attachmentUrl,
+      isDeleted: r.isDeleted,
+    };
+  }
+
   return {
     id: msg.id,
     roomId: msg.roomId,
@@ -92,6 +166,10 @@ export function serializeChatMessage(
       ? msg.anonymousAlias || options?.fallbackAlias || ANONYMOUS_ALIASES[0]
       : null,
     attachmentUrl: msg.isDeleted ? null : msg.attachmentUrl,
+    replyToId: msg.isDeleted ? null : msg.replyToId ?? null,
+    replyTo,
+    forwardedFrom: msg.isDeleted ? null : msg.forwardedFrom ?? null,
+    reminder: msg.isDeleted ? null : parseChatReminderMeta(msg.reminderJson),
     isDeleted: msg.isDeleted,
     isMine: msg.senderId === viewerUserId,
     createdAt: msg.createdAt.toISOString(),
@@ -563,4 +641,171 @@ export async function getChatUnreadCountForUser(userId: string): Promise<number>
       AND m."createdAt" > cp."lastReadAt"
   `;
   return Number(rows[0]?.total ?? 0);
+}
+
+export const CHAT_REMINDER_INCLUDE = {
+  createdBy: {
+    select: {
+      id: true,
+      name: true,
+      avatarColor: true,
+      pirateCharacter: true,
+    },
+  },
+} as const;
+
+export interface RawChatReminder {
+  id: string;
+  roomId: string;
+  createdById: string;
+  title: string;
+  remindAt: Date;
+  repeatRule: string;
+  isCompleted: boolean;
+  completedAt: Date | null;
+  notifiedAt: Date | null;
+  createdAt: Date;
+  createdBy: {
+    id: string;
+    name: string;
+    avatarColor: string;
+    pirateCharacter: string | null;
+  };
+}
+
+export function serializeChatReminder(
+  rem: RawChatReminder,
+  viewerUserId: string,
+  room?: {
+    isAnonymousThread?: boolean;
+    createdById?: string;
+    anonymousAlias?: string | null;
+  } | null
+): ChatReminderItem {
+  const shouldMaskCreator = Boolean(
+    room?.isAnonymousThread &&
+      room.createdById &&
+      rem.createdById === room.createdById &&
+      viewerUserId !== room.createdById
+  );
+  const repeatRaw = String(rem.repeatRule ?? "NONE").toUpperCase();
+  const repeatRule: ChatReminderRepeatRule =
+    repeatRaw === "DAILY" || repeatRaw === "WEEKLY" ? repeatRaw : "NONE";
+
+  return {
+    id: rem.id,
+    roomId: rem.roomId,
+    title: rem.title,
+    remindAt: rem.remindAt.toISOString(),
+    repeatRule,
+    isCompleted: rem.isCompleted,
+    completedAt: rem.completedAt ? rem.completedAt.toISOString() : null,
+    notifiedAt: rem.notifiedAt ? rem.notifiedAt.toISOString() : null,
+    createdAt: rem.createdAt.toISOString(),
+    isMine: rem.createdById === viewerUserId,
+    createdBy: shouldMaskCreator
+      ? {
+          id: ANONYMOUS_SENDER_USER_ID,
+          name: room?.anonymousAlias || ANONYMOUS_ALIASES[0],
+          avatarColor: "#312e81",
+          pirateCharacter: null,
+        }
+      : {
+          id: rem.createdBy.id,
+          name: rem.createdBy.name,
+          avatarColor: rem.createdBy.avatarColor,
+          pirateCharacter: rem.createdBy.pirateCharacter,
+        },
+  };
+}
+
+let lastReminderDispatchAt = 0;
+
+/**
+ * Kiểm tra & gửi thông báo cho các Nhắc hẹn trong phòng chat vừa tới giờ.
+ * Có throttle 20s trong process và khóa claim nguyên tử để tránh gửi trùng lặp.
+ */
+export async function dispatchDueChatReminders(force = false): Promise<number> {
+  const nowMs = Date.now();
+  if (!force && nowMs - lastReminderDispatchAt < 20_000) {
+    return 0;
+  }
+  lastReminderDispatchAt = nowMs;
+
+  const now = new Date();
+  const dueReminders = await prisma.chatReminder.findMany({
+    where: {
+      isCompleted: false,
+      notifiedAt: null,
+      remindAt: { lte: now },
+    },
+    take: 15,
+    include: {
+      room: {
+        select: {
+          id: true,
+          type: true,
+          name: true,
+          isAnonymousThread: true,
+          anonymousAlias: true,
+          participants: { select: { userId: true } },
+        },
+      },
+    },
+  });
+
+  let dispatched = 0;
+  for (const rem of dueReminders) {
+    const stepMs =
+      rem.repeatRule === "DAILY"
+        ? 24 * 60 * 60 * 1000
+        : rem.repeatRule === "WEEKLY"
+          ? 7 * 24 * 60 * 60 * 1000
+          : 0;
+
+    let nextRemindAt: Date | null = null;
+    if (stepMs > 0) {
+      let candidate = rem.remindAt.getTime() + stepMs;
+      while (candidate <= now.getTime()) {
+        candidate += stepMs;
+      }
+      nextRemindAt = new Date(candidate);
+    }
+
+    // Khóa nguyên tử: chỉ tiến trình claim được (notifiedAt: null + đúng remindAt) mới gửi thông báo
+    const claim = await prisma.chatReminder.updateMany({
+      where: {
+        id: rem.id,
+        notifiedAt: null,
+        isCompleted: false,
+        remindAt: rem.remindAt,
+      },
+      data: nextRemindAt
+        ? { remindAt: nextRemindAt, notifiedAt: null }
+        : { notifiedAt: now },
+    });
+    if (claim.count === 0) continue;
+
+    const roomLabel = rem.room.isAnonymousThread
+      ? rem.room.anonymousAlias || "Phòng ẩn danh"
+      : rem.room.type === "GROUP"
+        ? rem.room.name || "nhóm chat"
+        : "cuộc trò chuyện";
+
+    await Promise.all(
+      rem.room.participants.map((p) =>
+        createNotification({
+          userId: p.userId,
+          type: "REMINDER",
+          title: `⏰ Đến giờ nhắc hẹn: ${rem.title}`,
+          message: `Nhắc hẹn trong ${roomLabel} lúc ${formatVnDateTime(rem.remindAt)}.`,
+          linkUrl: `/chat?room=${rem.roomId}`,
+          actionLabel: "Mở phòng chat",
+        })
+      )
+    );
+    dispatched += 1;
+  }
+
+  return dispatched;
 }

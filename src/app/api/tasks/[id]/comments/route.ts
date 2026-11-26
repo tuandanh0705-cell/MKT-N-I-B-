@@ -152,6 +152,7 @@ export async function POST(
             title: true,
             status: true,
             assigneeId: true,
+            assignees: { select: { userId: true } },
             requesterId: true,
             reviewerId: true,
             project: { select: { slug: true } },
@@ -173,6 +174,7 @@ export async function POST(
       const targets = new Set<string>();
       for (const uid of [
         task.assigneeId,
+        ...task.assignees.map((a) => a.userId),
         task.requesterId,
         task.reviewerId,
         ...priorCommenters.map((c) => c.authorId),

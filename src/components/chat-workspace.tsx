@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
+  AlarmClock,
   AtSign,
   Eye,
   EyeOff,
@@ -10,6 +11,7 @@ import {
   Link2,
   MessageCircle,
   Plus,
+  Quote,
   Send,
   ShieldCheck,
   Smile,
@@ -20,6 +22,8 @@ import { DenDenMushiIcon } from "@/components/pirate-art";
 import { ChatRoomsSidebar } from "@/components/chat-rooms-sidebar";
 import { ChatMessageStream } from "@/components/chat-message-stream";
 import { ChatEmojiStickerPicker } from "@/components/chat-emoji-sticker-picker";
+import { ChatForwardMessageModal } from "@/components/chat-forward-modal";
+import { ChatRemindersModal } from "@/components/chat-reminders-modal";
 import {
   ChatAnonymousDirectModal,
   ChatCreateGroupModal,
@@ -27,10 +31,17 @@ import {
   ChatImageLightbox,
 } from "@/components/chat-modals";
 import { useToast } from "@/components/toast-provider";
-import { formatStickerMessageContent } from "@/lib/chat-stickers";
+import {
+  formatStickerMessageContent,
+  getStickerNameFromContent,
+  isImageOrStickerAttachment,
+  isStickerMessage,
+} from "@/lib/chat-stickers";
 import type {
   ChatMessageItem,
+  ChatMessageReplyPreview,
   ChatParticipantUser,
+  ChatReminderItem,
   ChatRoomSummary,
   ChatStickerItem,
 } from "@/types/crm";
@@ -60,6 +71,7 @@ interface ChatWorkspaceProps {
   initialRooms: ChatRoomSummary[];
   initialRoomId: string | null;
   initialMessages: ChatMessageItem[];
+  initialReminders?: ChatReminderItem[];
   initialMobileShowChat?: boolean;
 }
 
@@ -101,6 +113,7 @@ export function ChatWorkspace({
   initialRooms,
   initialRoomId,
   initialMessages,
+  initialReminders = [],
   initialMobileShowChat = false,
 }: ChatWorkspaceProps) {
   const { showToast } = useToast();
@@ -150,14 +163,37 @@ export function ChatWorkspace({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerTab, setPickerTab] = useState<"EMOJI" | "STICKER">("EMOJI");
 
+  const [replyingTo, setReplyingTo] = useState<ChatMessageItem | null>(null);
+  const [forwardingMessage, setForwardingMessage] =
+    useState<ChatMessageItem | null>(null);
+  const [reminders, setReminders] = useState<ChatReminderItem[]>(initialReminders);
+  const [remindersModal, setRemindersModal] = useState<{
+    open: boolean;
+    mode: "LIST" | "CREATE";
+    prefillTitle?: string;
+  }>({ open: false, mode: "CREATE" });
+  const [highlightedMessageId, setHighlightedMessageId] = useState<
+    string | null
+  >(null);
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const activeRoomIdRef = useRef<string | null>(activeRoomId);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const mobileChatInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roomCacheRef = useRef<Map<string, ChatMessageItem[]>>(
     new Map(initialRoomId ? [[initialRoomId, initialMessages]] : [])
   );
+  const reminderCacheRef = useRef<Map<string, ChatReminderItem[]>>(
+    new Map(initialRoomId ? [[initialRoomId, initialReminders]] : [])
+  );
   const pollTickRef = useRef<number>(0);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     activeRoomIdRef.current = activeRoomId;
@@ -374,11 +410,29 @@ export function ChatWorkspace({
     scrollToBottom(false);
   }, [activeRoomId, scrollToBottom]);
 
+  const fetchRoomReminders = useCallback(async (roomId: string) => {
+    try {
+      const res = await fetch(`/api/chat/rooms/${roomId}/reminders`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const list: ChatReminderItem[] = data.reminders || [];
+      reminderCacheRef.current.set(roomId, list);
+      if (activeRoomIdRef.current === roomId) {
+        setReminders(list);
+      }
+    } catch {
+      // Bỏ qua lỗi mạng thoáng qua khi tải nhắc hẹn
+    }
+  }, []);
+
   const handleSelectRoom = useCallback(
     async (roomId: string, roomListSnapshot?: ChatRoomSummary[]) => {
       activeRoomIdRef.current = roomId;
       setActiveRoomId(roomId);
       setMobileShowChat(true);
+      setReplyingTo(null);
+      setReminders(reminderCacheRef.current.get(roomId) ?? []);
+      void fetchRoomReminders(roomId);
       const source = roomListSnapshot ?? rooms;
       const target = source.find((r) => r.id === roomId);
       const lockedAnon = Boolean(
@@ -457,7 +511,13 @@ export function ChatWorkspace({
         setLoadingRoom(false);
       }
     },
-    [rooms, broadcastTotalUnread, scrollToBottom, updateRoomMessages]
+    [
+      rooms,
+      broadcastTotalUnread,
+      scrollToBottom,
+      updateRoomMessages,
+      fetchRoomReminders,
+    ]
   );
 
   useEffect(() => {
@@ -548,6 +608,9 @@ export function ChatWorkspace({
         // Chỉ refresh danh sách phòng mỗi 3 nhịp, khi có tin mới, hoặc khi vừa quay lại tab
         if (forceRooms || hasNewIncoming || pollTickRef.current % 3 === 0) {
           await refreshRoomsList(currentId);
+          if (currentId) {
+            void fetchRoomReminders(currentId);
+          }
         }
       } catch {
         // Bỏ qua lỗi mạng thoáng qua khi polling
@@ -593,7 +656,12 @@ export function ChatWorkspace({
       document.removeEventListener("visibilitychange", onFocusOrVisible);
       window.removeEventListener("keydown", onUserTypingOrSending);
     };
-  }, [broadcastTotalUnread, scrollToBottom, updateRoomMessages]);
+  }, [
+    broadcastTotalUnread,
+    scrollToBottom,
+    updateRoomMessages,
+    fetchRoomReminders,
+  ]);
 
   async function handleStartDirectChat(targetUserId: string) {
     try {
@@ -756,6 +824,25 @@ export function ChatWorkspace({
     }
 
     const targetRoomId = activeRoom.id;
+    const replySnapshot =
+      replyingTo && replyingTo.roomId === targetRoomId && !replyingTo.pending
+        ? replyingTo
+        : null;
+    const optimisticReplyTo: ChatMessageReplyPreview | null = replySnapshot
+      ? {
+          id: replySnapshot.id,
+          content: replySnapshot.content,
+          senderName: replySnapshot.isAnonymous
+            ? replySnapshot.anonymousAlias || "🎭 Hải Tặc Bí Ẩn"
+            : replySnapshot.isMine
+              ? currentUser.name
+              : replySnapshot.sender?.name || "Đồng đội",
+          isAnonymous: replySnapshot.isAnonymous,
+          attachmentUrl: replySnapshot.attachmentUrl,
+          isDeleted: replySnapshot.isDeleted,
+        }
+      : null;
+
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const optimisticMsg: ChatMessageItem = {
       id: tempId,
@@ -764,6 +851,8 @@ export function ChatWorkspace({
       isAnonymous: useAnon,
       anonymousAlias: chosenAlias,
       attachmentUrl: cleanUrl || null,
+      replyToId: replySnapshot?.id ?? null,
+      replyTo: optimisticReplyTo,
       isDeleted: false,
       isMine: true,
       pending: true,
@@ -782,6 +871,7 @@ export function ChatWorkspace({
 
     // Optimistic UI: hiện bong bóng ngay lập tức (<10ms) & giải phóng ô nhập để gửi liên tiếp
     updateRoomMessages(targetRoomId, (prev) => [...prev, optimisticMsg]);
+    if (replySnapshot) setReplyingTo(null);
     if (!options?.keepComposer) {
       setDraft("");
       setAttachmentUrl("");
@@ -816,6 +906,7 @@ export function ChatWorkspace({
           attachmentUrl: cleanUrl || null,
           isAnonymous: useAnon,
           anonymousAlias: chosenAlias,
+          replyToId: replySnapshot?.id ?? null,
         }),
       });
       const data = await res.json();
@@ -823,6 +914,7 @@ export function ChatWorkspace({
         updateRoomMessages(targetRoomId, (prev) =>
           prev.filter((m) => m.id !== tempId)
         );
+        if (replySnapshot) setReplyingTo((cur) => cur ?? replySnapshot);
         if (!options?.keepComposer) {
           setDraft((cur) => (cur ? cur : cleanText));
           if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
@@ -872,6 +964,7 @@ export function ChatWorkspace({
       updateRoomMessages(targetRoomId, (prev) =>
         prev.filter((m) => m.id !== tempId)
       );
+      if (replySnapshot) setReplyingTo((cur) => cur ?? replySnapshot);
       if (!options?.keepComposer) {
         setDraft((cur) => (cur ? cur : cleanText));
         if (cleanUrl) setAttachmentUrl((cur) => (cur ? cur : cleanUrl));
@@ -896,6 +989,7 @@ export function ChatWorkspace({
 
   async function handleRecallMessage(messageId: string) {
     const targetRoomId = activeRoomIdRef.current;
+    setReplyingTo((cur) => (cur?.id === messageId ? null : cur));
     // Optimistic recall
     if (targetRoomId) {
       updateRoomMessages(targetRoomId, (prev) =>
@@ -916,6 +1010,141 @@ export function ChatWorkspace({
       showToast(data.error || "Không thể thu hồi tin nhắn.", "error");
       if (targetRoomId) void handleSelectRoom(targetRoomId);
     }
+  }
+
+  function handleReplyMessage(msg: ChatMessageItem) {
+    setReplyingTo(msg);
+    requestAnimationFrame(() => {
+      getActiveInputEl()?.focus();
+    });
+  }
+
+  function handleCreateReminderFromMessage(msg: ChatMessageItem) {
+    const rawText = isStickerMessage(msg.content, msg.attachmentUrl)
+      ? getStickerNameFromContent(msg.content)
+      : msg.content;
+    setRemindersModal({
+      open: true,
+      mode: "CREATE",
+      prefillTitle: rawText.trim().slice(0, 200),
+    });
+  }
+
+  function handleJumpToMessage(messageId: string) {
+    const safeId =
+      typeof CSS !== "undefined" && typeof CSS.escape === "function"
+        ? CSS.escape(messageId)
+        : messageId.replace(/"/g, '\\"');
+    const el = document.querySelector(`[data-msg-id="${safeId}"]`);
+    if (!el) {
+      showToast("Tin nhắn gốc nằm ngoài lịch sử gần nhất đang hiển thị.", "info");
+      return;
+    }
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedMessageId(messageId);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => {
+      setHighlightedMessageId((cur) => (cur === messageId ? null : cur));
+    }, 1800);
+  }
+
+  async function handleToggleReminderComplete(
+    reminderId: string,
+    isCompleted: boolean
+  ) {
+    const roomId = activeRoomIdRef.current;
+    if (!roomId) return;
+
+    const prevList = reminderCacheRef.current.get(roomId) ?? reminders;
+    const optimistic = prevList.map((r) =>
+      r.id === reminderId
+        ? {
+            ...r,
+            isCompleted,
+            completedAt: isCompleted ? new Date().toISOString() : null,
+          }
+        : r
+    );
+    reminderCacheRef.current.set(roomId, optimistic);
+    setReminders(optimistic);
+
+    try {
+      const res = await fetch(`/api/chat/rooms/${roomId}/reminders`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reminderId, isCompleted }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        reminderCacheRef.current.set(roomId, prevList);
+        setReminders(prevList);
+        showToast(data.error || "Không cập nhật được nhắc hẹn.", "error");
+        return;
+      }
+      const next = (reminderCacheRef.current.get(roomId) ?? optimistic).map(
+        (r) => (r.id === reminderId ? data.reminder : r)
+      );
+      reminderCacheRef.current.set(roomId, next);
+      if (activeRoomIdRef.current === roomId) setReminders(next);
+      showToast(
+        isCompleted ? "Đã đánh dấu hoàn thành nhắc hẹn." : "Đã mở lại nhắc hẹn.",
+        "info"
+      );
+    } catch {
+      reminderCacheRef.current.set(roomId, prevList);
+      setReminders(prevList);
+      showToast("Lỗi kết nối khi cập nhật nhắc hẹn.", "error");
+    }
+  }
+
+  function handleForwarded(payload: {
+    forwardedCount: number;
+    targetRoomIds: string[];
+    createdRooms: ChatRoomSummary[];
+    messagesByRoom: Record<string, ChatMessageItem[]>;
+  }) {
+    const sortRoomsList = (list: ChatRoomSummary[]) =>
+      [...list].sort((a, b) => {
+        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+        return (
+          new Date(b.lastMessageAt).getTime() -
+          new Date(a.lastMessageAt).getTime()
+        );
+      });
+
+    for (const [roomId, newMsgs] of Object.entries(payload.messagesByRoom)) {
+      if (!newMsgs || newMsgs.length === 0) continue;
+      if (roomCacheRef.current.has(roomId) || activeRoomIdRef.current === roomId) {
+        updateRoomMessages(roomId, (prev) => {
+          const existing = new Set(prev.map((m) => m.id));
+          const toAdd = newMsgs.filter((m) => !existing.has(m.id));
+          return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+        });
+        if (activeRoomIdRef.current === roomId) {
+          scrollToBottom(true);
+        }
+      }
+    }
+
+    setRooms((prev) => {
+      const merged = [...prev];
+      for (const created of payload.createdRooms || []) {
+        if (!merged.some((r) => r.id === created.id)) {
+          merged.unshift(created);
+        }
+      }
+      const updated = merged.map((r) => {
+        const added = payload.messagesByRoom[r.id];
+        if (!added || added.length === 0) return r;
+        const lastMsg = added[added.length - 1];
+        return {
+          ...r,
+          lastMessage: lastMsg,
+          lastMessageAt: lastMsg.createdAt,
+        };
+      });
+      return sortRoomsList(updated);
+    });
   }
 
   const filteredRooms = useMemo(() => {
@@ -1030,6 +1259,8 @@ export function ChatWorkspace({
               <ChatMessageStream
                 activeRoom={activeRoom}
                 displayedMessages={displayedMessages}
+                reminders={reminders}
+                highlightedMessageId={highlightedMessageId}
                 hasAnyMessages={messages.length > 0}
                 loadingRoom={loadingRoom}
                 msgSearchOpen={msgSearchOpen}
@@ -1051,6 +1282,14 @@ export function ChatWorkspace({
                 onMsgSearchQueryChange={setMsgSearchQuery}
                 onOpenGroupSettings={() => setSettingsOpen(true)}
                 onRecallMessage={handleRecallMessage}
+                onReplyMessage={handleReplyMessage}
+                onForwardMessage={(msg) => setForwardingMessage(msg)}
+                onCreateReminderFromMessage={handleCreateReminderFromMessage}
+                onOpenReminders={(mode) =>
+                  setRemindersModal({ open: true, mode, prefillTitle: "" })
+                }
+                onToggleReminderComplete={handleToggleReminderComplete}
+                onJumpToMessage={handleJumpToMessage}
                 onOpenLightbox={setLightboxImageUrl}
               />
 
@@ -1172,6 +1411,22 @@ export function ChatWorkspace({
                     >
                       <Link2 className="w-3.5 h-3.5" />
                       <span>Gắn Link</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRemindersModal({
+                          open: true,
+                          mode: "CREATE",
+                          prefillTitle: "",
+                        })
+                      }
+                      title="Tạo nhắc hẹn trong cuộc trò chuyện"
+                      className="rounded-full px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-amber-800 hover:bg-amber-50 cursor-pointer shrink-0"
+                    >
+                      <AlarmClock className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Nhắc hẹn</span>
                     </button>
                   </div>
 
@@ -1359,6 +1614,22 @@ export function ChatWorkspace({
                       type="button"
                       onClick={() => {
                         setMobileToolsOpen(false);
+                        setRemindersModal({
+                          open: true,
+                          mode: "CREATE",
+                          prefillTitle: "",
+                        });
+                      }}
+                      className="rounded-full px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1.5 border bg-amber-50 border-amber-300 text-amber-900 shrink-0 cursor-pointer"
+                    >
+                      <AlarmClock className="w-3.5 h-3.5 text-amber-600" />
+                      Tạo nhắc hẹn
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileToolsOpen(false);
                         mobileChatInputRef.current?.blur();
                         setPickerTab("STICKER");
                         setPickerOpen(true);
@@ -1367,6 +1638,50 @@ export function ChatWorkspace({
                     >
                       <Sparkles className="w-3.5 h-3.5" />
                       Kho Sticker
+                    </button>
+                  </div>
+                )}
+
+                {/* Thanh xem trước tin nhắn đang trả lời (Reply bar) */}
+                {replyingTo && (
+                  <div className="mb-2 flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50/80 px-2.5 py-1.5 text-xs">
+                    <div className="w-1 self-stretch rounded-full bg-sky-500 shrink-0" />
+                    <Quote className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-extrabold text-sky-900 truncate">
+                        Đang trả lời{" "}
+                        {replyingTo.isAnonymous
+                          ? replyingTo.anonymousAlias || "🎭 Hải Tặc Bí Ẩn"
+                          : replyingTo.isMine
+                            ? "chính bạn"
+                            : replyingTo.sender?.name || "Đồng đội"}
+                      </div>
+                      <div className="text-[11px] text-slate-600 truncate">
+                        {isStickerMessage(
+                          replyingTo.content,
+                          replyingTo.attachmentUrl
+                        )
+                          ? `[Sticker] ${getStickerNameFromContent(replyingTo.content)}`
+                          : replyingTo.content || "📎 Đính kèm"}
+                      </div>
+                    </div>
+                    {replyingTo.attachmentUrl &&
+                      isImageOrStickerAttachment(replyingTo.attachmentUrl) && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={replyingTo.attachmentUrl}
+                          alt=""
+                          className="w-8 h-8 rounded-md object-cover border border-sky-200 shrink-0"
+                        />
+                      )}
+                    <button
+                      type="button"
+                      onClick={() => setReplyingTo(null)}
+                      className="p-1 rounded-lg text-slate-400 hover:bg-white hover:text-slate-700 cursor-pointer shrink-0"
+                      title="Hủy trả lời"
+                      aria-label="Hủy trả lời"
+                    >
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 )}
@@ -1694,6 +2009,85 @@ export function ChatWorkspace({
           }
         }}
       />
+
+      <ChatForwardMessageModal
+        message={forwardingMessage}
+        rooms={rooms}
+        teammates={teammates}
+        onClose={() => setForwardingMessage(null)}
+        onForwarded={handleForwarded}
+      />
+
+      {activeRoom && (
+        <ChatRemindersModal
+          open={remindersModal.open}
+          roomId={activeRoom.id}
+          roomTitle={getRoomDisplayTitle(activeRoom)}
+          initialView={remindersModal.mode}
+          prefillTitle={remindersModal.prefillTitle}
+          reminders={reminders}
+          currentUserRole={currentUser.role}
+          isRoomAdmin={Boolean(
+            activeRoom.participants.find((p) => p.userId === currentUser.id)
+              ?.isAdmin
+          )}
+          onClose={() =>
+            setRemindersModal((prev) => ({ ...prev, open: false }))
+          }
+          onReminderCreated={(createdRem, createdMsg) => {
+            const roomId = activeRoom.id;
+            const nextRems = [
+              createdRem,
+              ...(reminderCacheRef.current.get(roomId) ?? reminders).filter(
+                (r) => r.id !== createdRem.id
+              ),
+            ];
+            reminderCacheRef.current.set(roomId, nextRems);
+            setReminders(nextRems);
+            updateRoomMessages(roomId, (prev) =>
+              prev.some((m) => m.id === createdMsg.id)
+                ? prev
+                : [...prev, createdMsg]
+            );
+            setRooms((prev) =>
+              [...prev]
+                .map((r) =>
+                  r.id === roomId
+                    ? {
+                        ...r,
+                        lastMessage: createdMsg,
+                        lastMessageAt: createdMsg.createdAt,
+                      }
+                    : r
+                )
+                .sort((a, b) => {
+                  if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+                  return (
+                    new Date(b.lastMessageAt).getTime() -
+                    new Date(a.lastMessageAt).getTime()
+                  );
+                })
+            );
+            scrollToBottom(true);
+          }}
+          onReminderUpdated={(updatedRem) => {
+            const roomId = activeRoom.id;
+            const nextRems = (
+              reminderCacheRef.current.get(roomId) ?? reminders
+            ).map((r) => (r.id === updatedRem.id ? updatedRem : r));
+            reminderCacheRef.current.set(roomId, nextRems);
+            setReminders(nextRems);
+          }}
+          onReminderDeleted={(deletedId) => {
+            const roomId = activeRoom.id;
+            const nextRems = (
+              reminderCacheRef.current.get(roomId) ?? reminders
+            ).filter((r) => r.id !== deletedId);
+            reminderCacheRef.current.set(roomId, nextRems);
+            setReminders(nextRems);
+          }}
+        />
+      )}
 
       <ChatImageLightbox
         imageUrl={lightboxImageUrl}

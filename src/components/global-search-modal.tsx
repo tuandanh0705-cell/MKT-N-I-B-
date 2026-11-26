@@ -29,6 +29,7 @@ interface SearchResultPayload {
     isMediaOrder: boolean;
     project: { id: string; slug: string; name: string; color: string };
     assignee: { name: string } | null;
+    assignees?: Array<{ user: { name: string } }>;
   }>;
   projects: Array<{
     id: string;
@@ -232,11 +233,21 @@ export function GlobalSearchModal({
       const targetHref = isMediaProduction
         ? `/my-work?taskId=${t.id}`
         : `/projects/${t.project.slug}?tab=${t.isMediaOrder ? "MEDIA_BRIEF" : "CONTENT_CALENDAR"}&taskId=${t.id}`;
+      const assigneeNames = Array.from(
+        new Set(
+          [
+            t.assignee?.name,
+            ...(t.assignees?.map((a) => a.user.name) ?? []),
+          ].filter((n): n is string => Boolean(n))
+        )
+      );
       list.push({
         id: `task-${t.id}`,
         group: "Bài viết & Đầu việc",
         title: `[${t.code}] ${t.title}`,
-        subtitle: `${t.project.name}${t.assignee ? ` • PIC: ${t.assignee.name}` : ""}`,
+        subtitle: `${t.project.name}${
+          assigneeNames.length > 0 ? ` • PIC: ${assigneeNames.join(", ")}` : ""
+        }`,
         badge: t.isMediaOrder ? "Media" : "Content",
         color: t.project.color,
         href: targetHref,

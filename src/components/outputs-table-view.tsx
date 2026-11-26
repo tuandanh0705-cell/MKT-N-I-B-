@@ -1,8 +1,8 @@
 "use client";
 
 import { Bot } from "lucide-react";
-import { PirateAvatar } from "@/components/pirate-art";
 import { PlatformLogo } from "@/components/platform-logo";
+import { TaskAssigneesBadges } from "@/components/task-assignees-badges";
 import { TaskStatusBadge } from "@/components/status-badge";
 import {
   OUTPUT_CATEGORY_META,
@@ -55,18 +55,7 @@ export function OutputsTableView({
             return (
               <tr key={t.id} className="hover:bg-sky-50/40">
                 <td className="py-3 px-4 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <PirateAvatar
-                      name={t.assignee?.name || "Chưa gán"}
-                      color={t.assignee?.avatarColor || "#64748b"}
-                      scope={t.assignee?.departmentScope}
-                      pirateCharacter={t.assignee?.pirateCharacter}
-                      size="sm"
-                    />
-                    <span className="font-bold text-slate-800">
-                      {t.assignee?.name || "Chưa gán"}
-                    </span>
-                  </div>
+                  <TaskAssigneesBadges task={t} size="sm" />
                 </td>
                 <td className="py-3 px-4 max-w-xs">
                   <div className="font-bold text-slate-900 line-clamp-1">

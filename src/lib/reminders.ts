@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendMktEmail } from "@/lib/mailer";
 import { sendWebPushToUser } from "@/lib/webpush";
 import { ensureDailyBirthdayCelebrations } from "@/lib/birthdays";
+import { dispatchDueChatReminders } from "@/lib/chat";
 import { getVnClock, getVnDayBounds, formatVnDateTime } from "@/lib/dates";
 
 export type ReminderSlot =
@@ -30,6 +31,7 @@ export async function runScheduledReminder(
   options: { force?: boolean } = {}
 ) {
   const now = new Date();
+  await dispatchDueChatReminders(true).catch(() => 0);
   const { dateStr, dayOfWeek } = getVnClock(now);
   const slot = requestedSlot ?? resolveSlotFromVnClock(now);
 
@@ -72,12 +74,21 @@ export async function runScheduledReminder(
       const dueTasks = await prisma.task.findMany({
         where: {
           deletedAt: null,
-          assigneeId: member.id,
-          status: { notIn: ["DRAFT", "PUBLISHED", "DONE"] },
-          OR: [
-            { dueAt: { lte: tomorrowEnd } },
-            { scheduledPublishAt: { lte: tomorrowEnd } },
+          AND: [
+            {
+              OR: [
+                { assigneeId: member.id },
+                { assignees: { some: { userId: member.id } } },
+              ],
+            },
+            {
+              OR: [
+                { dueAt: { lte: tomorrowEnd } },
+                { scheduledPublishAt: { lte: tomorrowEnd } },
+              ],
+            },
           ],
+          status: { notIn: ["DRAFT", "PUBLISHED", "DONE"] },
         },
         include: { project: { select: { name: true } } },
         orderBy: { dueAt: "asc" },
@@ -133,24 +144,33 @@ export async function runScheduledReminder(
         deletedAt: null,
         status: { in: ["IN_PROGRESS", "REVISION_NEEDED", "DRAFT"] },
         scheduledPublishAt: { lte: tomorrowEnd },
-        assigneeId: { not: null },
+        OR: [{ assigneeId: { not: null } }, { assignees: { some: {} } }],
       },
       include: {
         project: { select: { name: true } },
         assignee: { select: { id: true, name: true, email: true } },
+        assignees: {
+          include: { user: { select: { id: true, name: true, email: true } } },
+        },
       },
     });
 
-    const byUser = new Map<string, typeof pendingContent>();
+    const byUser = new Map<
+      string,
+      { user: { id: string; name: string; email: string }; tasks: typeof pendingContent }
+    >();
     for (const task of pendingContent) {
-      if (!task.assignee) continue;
-      const list = byUser.get(task.assignee.id) ?? [];
-      list.push(task);
-      byUser.set(task.assignee.id, list);
+      const assignedUsers = new Map<string, { id: string; name: string; email: string }>();
+      if (task.assignee) assignedUsers.set(task.assignee.id, task.assignee);
+      for (const a of task.assignees) assignedUsers.set(a.user.id, a.user);
+      for (const u of assignedUsers.values()) {
+        const entry = byUser.get(u.id) ?? { user: u, tasks: [] };
+        entry.tasks.push(task);
+        byUser.set(u.id, entry);
+      }
     }
 
-    for (const [, userTasks] of byUser) {
-      const user = userTasks[0].assignee!;
+    for (const [, { user, tasks: userTasks }] of byUser) {
       const mailRes = await sendMktEmail({
         to: user.email,
         subject: `[15:00 Nộp duyệt] Còn ${userTasks.length} bài sắp đăng chưa gửi Leader duyệt`,
@@ -251,24 +271,33 @@ export async function runScheduledReminder(
         isMediaOrder: true,
         status: { in: ["IN_PROGRESS", "REVISION_NEEDED"] },
         dueAt: { lte: todayEnd },
-        assigneeId: { not: null },
+        OR: [{ assigneeId: { not: null } }, { assignees: { some: {} } }],
       },
       include: {
         project: { select: { name: true } },
         assignee: { select: { id: true, name: true, email: true } },
+        assignees: {
+          include: { user: { select: { id: true, name: true, email: true } } },
+        },
       },
     });
 
-    const byMedia = new Map<string, typeof dueMediaToday>();
+    const byMedia = new Map<
+      string,
+      { user: { id: string; name: string; email: string }; tasks: typeof dueMediaToday }
+    >();
     for (const t of dueMediaToday) {
-      if (!t.assignee) continue;
-      const list = byMedia.get(t.assignee.id) ?? [];
-      list.push(t);
-      byMedia.set(t.assignee.id, list);
+      const assignedUsers = new Map<string, { id: string; name: string; email: string }>();
+      if (t.assignee) assignedUsers.set(t.assignee.id, t.assignee);
+      for (const a of t.assignees) assignedUsers.set(a.user.id, a.user);
+      for (const u of assignedUsers.values()) {
+        const entry = byMedia.get(u.id) ?? { user: u, tasks: [] };
+        entry.tasks.push(t);
+        byMedia.set(u.id, entry);
+      }
     }
 
-    for (const [, list] of byMedia) {
-      const user = list[0].assignee!;
+    for (const [, { user, tasks: list }] of byMedia) {
       const mailRes = await sendMktEmail({
         to: user.email,
         subject: `[17:30 Bàn giao Media] Còn ${list.length} order đến hạn hôm nay`,

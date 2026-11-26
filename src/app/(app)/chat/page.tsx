@@ -2,11 +2,15 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
+  CHAT_MESSAGE_INCLUDE,
+  CHAT_REMINDER_INCLUDE,
   CHAT_USER_SELECT,
   getUserChatRoomsWithMeta,
   serializeChatMessage,
+  serializeChatReminder,
 } from "@/lib/chat";
 import { ChatWorkspace } from "@/components/chat-workspace";
+import type { ChatReminderItem } from "@/types/crm";
 
 export default async function ChatPage({
   searchParams,
@@ -33,13 +37,14 @@ export default async function ChatPage({
       : rooms[0]?.id) ?? null;
 
   let initialMessages: ReturnType<typeof serializeChatMessage>[] = [];
+  let initialReminders: ChatReminderItem[] = [];
   if (initialRoomId) {
-    const [rawMessagesDesc, initialRoomRaw] = await Promise.all([
+    const [rawMessagesDesc, initialRoomRaw, rawReminders] = await Promise.all([
       prisma.chatMessage.findMany({
         where: { roomId: initialRoomId },
         orderBy: { createdAt: "desc" },
         take: 80,
-        include: { sender: { select: CHAT_USER_SELECT } },
+        include: CHAT_MESSAGE_INCLUDE,
       }),
       prisma.chatRoom.findUnique({
         where: { id: initialRoomId },
@@ -48,6 +53,12 @@ export default async function ChatPage({
           createdById: true,
           anonymousAlias: true,
         },
+      }),
+      prisma.chatReminder.findMany({
+        where: { roomId: initialRoomId },
+        orderBy: [{ isCompleted: "asc" }, { remindAt: "asc" }],
+        take: 30,
+        include: CHAT_REMINDER_INCLUDE,
       }),
       prisma.chatParticipant.update({
         where: {
@@ -68,6 +79,10 @@ export default async function ChatPage({
       .reverse()
       .map((m) => serializeChatMessage(m, user.id, msgSerializeOpts));
 
+    initialReminders = rawReminders.map((rem) =>
+      serializeChatReminder(rem, user.id, initialRoomRaw)
+    );
+
     const targetRoom = rooms.find((r) => r.id === initialRoomId);
     if (targetRoom) targetRoom.unreadCount = 0;
   }
@@ -86,6 +101,7 @@ export default async function ChatPage({
       initialRooms={rooms}
       initialRoomId={initialRoomId}
       initialMessages={initialMessages}
+      initialReminders={initialReminders}
       initialMobileShowChat={Boolean(resolvedParams.room)}
     />
   );

@@ -16,18 +16,22 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import { CustomizableOptionSelect } from "@/components/customizable-option-select";
 import { FacebookPostPreview } from "@/components/facebook-post-preview";
 import { GeminiQcPanel } from "@/components/gemini-qc-panel";
+import { MultiAssigneePicker } from "@/components/multi-assignee-picker";
 import { PlatformLogo } from "@/components/platform-logo";
 import { PublishChannelInput } from "@/components/publish-channel-input";
 import { TaskFeedbackChat } from "@/components/task-feedback-chat";
+import type { AppliedOptionRename } from "@/components/project-content-options-modal";
+import { getTaskAssigneeIds } from "@/lib/task-assignees";
 import {
-  CONTENT_PLATFORM_OPTIONS,
-  CONTENT_ROUTE_OPTIONS,
-  POST_FORMAT_OPTIONS,
   deriveDefaultFormat,
   getContentStatusDisplay,
+  getProjectContentOptions,
   normalizeProjectOverview,
+  normalizeRouteSelectValue,
+  type ProjectContentOptionKind,
 } from "@/lib/content-plan";
 import { normalizePlatformSelectValue } from "@/lib/platform-meta";
 import { FB_POST_LAYOUTS, FB_POST_LAYOUT_GROUPS } from "@/lib/constants";
@@ -72,6 +76,12 @@ interface ContentPostEditorModalProps {
   onOpenAiSettings?: () => void;
   onOpenStandardsModal?: () => void;
   onAiChecked?: (taskId: string, result: GeminiQcCheckResponse) => void;
+  onAddProjectOption?: (
+    kind: ProjectContentOptionKind,
+    newValue: string
+  ) => Promise<boolean>;
+  onOpenOptionsModal?: (tab: ProjectContentOptionKind) => void;
+  optionRenameBatch?: { id: number; renames: AppliedOptionRename[] } | null;
   onSaved: (task: TaskItem, matrixIdeaId?: string | null) => void;
 }
 
@@ -97,6 +107,9 @@ function ContentPostEditorInner({
   onOpenAiSettings,
   onOpenStandardsModal,
   onAiChecked,
+  onAddProjectOption,
+  onOpenOptionsModal,
+  optionRenameBatch,
   onSaved,
 }: ContentPostEditorModalProps) {
   const { showToast } = useToast();
@@ -104,29 +117,69 @@ function ContentPostEditorInner({
     project.overviewJson,
     project.description
   );
+  const projectOptions = getProjectContentOptions(project.overviewJson);
 
   const [title, setTitle] = useState(task?.title || prefill?.title || "");
   const [caption, setCaption] = useState(task?.caption || "");
   const [route, setRoute] = useState(
-    task?.contentAngle || prefill?.route || "EDUCATE"
+    task
+      ? normalizeRouteSelectValue(task.contentAngle, projectOptions.routes)
+      : normalizeRouteSelectValue(
+          prefill?.route ?? projectOptions.routes[0] ?? "",
+          projectOptions.routes
+        )
   );
   const [topic, setTopic] = useState(
     task?.contentPillar || prefill?.topic || ""
   );
   const [platform, setPlatform] = useState(
-    normalizePlatformSelectValue(task?.platform || "Fanpage")
+    task?.platform
+      ? normalizePlatformSelectValue(task.platform)
+      : projectOptions.platforms[0] || "Fanpage"
   );
   const [publishChannel, setPublishChannel] = useState(
     task?.publishChannel || ""
   );
   const [format, setFormat] = useState(
-    task ? deriveDefaultFormat(task) : prefill?.format || "Ảnh"
+    task
+      ? deriveDefaultFormat(task)
+      : prefill?.format || projectOptions.formats[0] || "Ảnh"
   );
+
+  const [prevRenameBatchId, setPrevRenameBatchId] = useState<number>(
+    optionRenameBatch?.id ?? 0
+  );
+  if (optionRenameBatch && optionRenameBatch.id !== prevRenameBatchId) {
+    setPrevRenameBatchId(optionRenameBatch.id);
+    for (const rn of optionRenameBatch.renames) {
+      if (
+        rn.field === "contentAngle" &&
+        route &&
+        (route.toLowerCase() === rn.from.toLowerCase() ||
+          (rn.from.toUpperCase() === "CASE STUDY" &&
+            route.toUpperCase() === "CASE") ||
+          (rn.from.toUpperCase() === "BÁN HÀNG / PR" &&
+            route.toUpperCase() === "BÁN HÀNG"))
+      ) {
+        setRoute(rn.to);
+      } else if (
+        rn.field === "platform" &&
+        platform.toLowerCase() === rn.from.toLowerCase()
+      ) {
+        setPlatform(rn.to);
+      } else if (
+        rn.field === "postFormat" &&
+        format.toLowerCase() === rn.from.toLowerCase()
+      ) {
+        setFormat(rn.to);
+      }
+    }
+  }
   const [fbLayout, setFbLayout] = useState(
     task?.fbPostLayout || "SINGLE_SQUARE"
   );
-  const [assigneeId, setAssigneeId] = useState(
-    task?.assignee?.id || currentUserId
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(() =>
+    task ? getTaskAssigneeIds(task) : currentUserId ? [currentUserId] : []
   );
   const [publishDate, setPublishDate] = useState(
     task?.scheduledPublishAt
@@ -299,7 +352,9 @@ function ContentPostEditorInner({
             publishChannel: publishChannel.trim() || null,
             taskType: "CONTENT_SOCIAL",
             isMediaOrder: false,
-            assigneeId: assigneeId || currentUserId,
+            assigneeIds:
+              assigneeIds.length > 0 ? assigneeIds : [currentUserId],
+            assigneeId: assigneeIds[0] || currentUserId,
             contentAngle: route || null,
             contentPillar: topic || null,
             postFormat: format,
@@ -346,7 +401,8 @@ function ContentPostEditorInner({
           caption,
           platform,
           publishChannel: publishChannel.trim() || null,
-          assigneeId: assigneeId || null,
+          assigneeIds,
+          assigneeId: assigneeIds[0] || null,
           contentAngle: route || null,
           contentPillar: topic || null,
           postFormat: format,
@@ -487,56 +543,66 @@ function ContentPostEditorInner({
                   className="w-full rounded-xl border border-slate-200 px-2.5 py-1.5"
                 />
               </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Tuyến nội dung
-                </label>
-                <select
-                  value={route}
-                  onChange={(e) => setRoute(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
-                >
-                  <option value="">-- Chưa chọn --</option>
-                  {CONTENT_ROUTE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="flex items-center gap-1.5 font-bold text-slate-700 mb-1">
-                  <PlatformLogo platform={platform} size="xs" />
-                  <span>Nền tảng</span>
-                </label>
-                <select
-                  value={platform}
-                  onChange={(e) => setPlatform(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
-                >
-                  {CONTENT_PLATFORM_OPTIONS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Format
-                </label>
-                <select
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
-                >
-                  {POST_FORMAT_OPTIONS.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <CustomizableOptionSelect
+                label={<span>Tuyến nội dung</span>}
+                value={route}
+                options={projectOptions.routes}
+                emptyLabel="-- Chưa chọn --"
+                placeholder="VD: REVIEW STUDIO..."
+                onChange={setRoute}
+                onAddOption={
+                  onAddProjectOption
+                    ? (val) => onAddProjectOption("ROUTES", val)
+                    : undefined
+                }
+                onOpenManager={
+                  onOpenOptionsModal
+                    ? () => onOpenOptionsModal("ROUTES")
+                    : undefined
+                }
+                managerTitle="Tùy chỉnh Tuyến nội dung của dự án này"
+              />
+              <CustomizableOptionSelect
+                label={
+                  <>
+                    <PlatformLogo platform={platform} size="xs" />
+                    <span>Nền tảng</span>
+                  </>
+                }
+                value={platform}
+                options={projectOptions.platforms}
+                placeholder="VD: LinkedIn, Email..."
+                onChange={setPlatform}
+                onAddOption={
+                  onAddProjectOption
+                    ? (val) => onAddProjectOption("PLATFORMS", val)
+                    : undefined
+                }
+                onOpenManager={
+                  onOpenOptionsModal
+                    ? () => onOpenOptionsModal("PLATFORMS")
+                    : undefined
+                }
+                managerTitle="Tùy chỉnh Nền tảng của dự án này"
+              />
+              <CustomizableOptionSelect
+                label={<span>Format</span>}
+                value={format}
+                options={projectOptions.formats}
+                placeholder="VD: Infographic, Slide..."
+                onChange={setFormat}
+                onAddOption={
+                  onAddProjectOption
+                    ? (val) => onAddProjectOption("FORMATS", val)
+                    : undefined
+                }
+                onOpenManager={
+                  onOpenOptionsModal
+                    ? () => onOpenOptionsModal("FORMATS")
+                    : undefined
+                }
+                managerTitle="Tùy chỉnh Format của dự án này"
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
@@ -635,18 +701,12 @@ function ContentPostEditorInner({
                 <label className="block font-bold text-slate-700 mb-1">
                   PIC (Người viết)
                 </label>
-                <select
-                  value={assigneeId}
-                  onChange={(e) => setAssigneeId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
-                >
-                  <option value="">-- Chưa gán --</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
+                <MultiAssigneePicker
+                  users={users}
+                  value={assigneeIds}
+                  onChange={setAssigneeIds}
+                  placeholder="-- Chưa gán --"
+                />
               </div>
               <div>
                 <label className="block font-bold text-slate-700 mb-1">

@@ -4,18 +4,26 @@ import type { Prisma } from "@/generated/prisma/client";
  * Prisma include dùng chung cho danh sách & thẻ công việc (Projects, Outputs, Media Orders, AI Check).
  * Tránh lặp lại hàng chục dòng `include` ở nhiều server component và API route.
  */
+export const TASK_ASSIGNEE_USER_SELECT = {
+  id: true,
+  name: true,
+  title: true,
+  avatarColor: true,
+  pirateCharacter: true,
+  departmentScope: true,
+} satisfies Prisma.UserSelect;
+
 export const TASK_CARD_INCLUDE = {
   project: {
     select: { id: true, slug: true, name: true, color: true },
   },
   assignee: {
-    select: {
-      id: true,
-      name: true,
-      title: true,
-      avatarColor: true,
-      pirateCharacter: true,
-      departmentScope: true,
+    select: TASK_ASSIGNEE_USER_SELECT,
+  },
+  assignees: {
+    orderBy: { assignedAt: "asc" },
+    include: {
+      user: { select: TASK_ASSIGNEE_USER_SELECT },
     },
   },
   requester: {
@@ -61,6 +69,7 @@ export const TASK_WITH_RECENT_COMMENTS_INCLUDE = {
 export const TASK_DETAIL_INCLUDE = {
   project: TASK_CARD_INCLUDE.project,
   assignee: TASK_CARD_INCLUDE.assignee,
+  assignees: TASK_CARD_INCLUDE.assignees,
   requester: TASK_CARD_INCLUDE.requester,
   reviewer: TASK_CARD_INCLUDE.reviewer,
   parentTask: {

@@ -6,7 +6,8 @@ import {
   canAccessProject,
 } from "@/lib/permissions";
 import { isMediaProductionUser } from "@/lib/constants";
-import type { ResourceCategory, ResourceScope } from "@/generated/prisma/client";
+import { parseResourceLinksInput } from "@/lib/resource-links";
+import type { Prisma, ResourceCategory, ResourceScope } from "@/generated/prisma/client";
 
 async function ensureStarterResources(userId: string) {
   const count = await prisma.workspaceResource.count();
@@ -136,18 +137,23 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const title = String(body.title ?? "").trim();
-    const url = String(body.url ?? "").trim();
     const scope = (body.scope as ResourceScope) || "PROJECT";
     const projectId =
       scope === "PROJECT" && body.projectId ? String(body.projectId) : null;
     const category = (body.category as ResourceCategory) || "OTHER";
 
-    if (!title || !url) {
+    if (!title) {
       return NextResponse.json(
-        { error: "Vui lòng nhập Tên tài nguyên và Đường dẫn Link." },
+        { error: "Vui lòng nhập Tên tài nguyên." },
         { status: 400 }
       );
     }
+
+    const parsedLinks = parseResourceLinksInput(body);
+    if (!parsedLinks.ok) {
+      return NextResponse.json({ error: parsedLinks.error }, { status: 400 });
+    }
+    const primaryUrl = parsedLinks.links[0].url;
 
     if (scope === "PROJECT") {
       if (!projectId) {
@@ -173,7 +179,8 @@ export async function POST(request: Request) {
         projectId,
         category,
         title,
-        url,
+        url: primaryUrl,
+        linksJson: parsedLinks.links as unknown as Prisma.InputJsonValue,
         description: body.description ? String(body.description).trim() : null,
         tags: body.tags ? String(body.tags).trim() : null,
         updatedById: user.id,
@@ -220,11 +227,23 @@ export async function PATCH(request: Request) {
       }
     }
 
+    let nextUrl = existing.url;
+    let nextLinksJson: Prisma.InputJsonValue | undefined;
+    if (body.links !== undefined || body.url !== undefined) {
+      const parsedLinks = parseResourceLinksInput(body);
+      if (!parsedLinks.ok) {
+        return NextResponse.json({ error: parsedLinks.error }, { status: 400 });
+      }
+      nextUrl = parsedLinks.links[0].url;
+      nextLinksJson = parsedLinks.links as unknown as Prisma.InputJsonValue;
+    }
+
     const updated = await prisma.workspaceResource.update({
       where: { id },
       data: {
         title: body.title ? String(body.title).trim() : existing.title,
-        url: body.url ? String(body.url).trim() : existing.url,
+        url: nextUrl,
+        ...(nextLinksJson !== undefined ? { linksJson: nextLinksJson } : {}),
         category: (body.category as ResourceCategory) || existing.category,
         description:
           body.description !== undefined

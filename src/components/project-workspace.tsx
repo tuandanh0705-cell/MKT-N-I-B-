@@ -25,6 +25,10 @@ import { TaskDrawer } from "@/components/task-drawer";
 import { ProjectContentOverviewPanel } from "@/components/project-content-overview";
 import { ProjectContentMatrixPanel } from "@/components/project-content-matrix";
 import { ProjectContentCalendarPanel } from "@/components/project-content-calendar";
+import {
+  ProjectContentOptionsModal,
+  type AppliedOptionRename,
+} from "@/components/project-content-options-modal";
 import { ProjectPublishCalendarPanel } from "@/components/project-publish-calendar";
 import { MediaBriefBoard } from "@/components/media-brief-board";
 import {
@@ -33,8 +37,10 @@ import {
 } from "@/components/content-post-editor-modal";
 import { useToast } from "@/components/toast-provider";
 import {
+  getProjectContentOptions,
   normalizeContentMatrix,
   isContentTaskItem,
+  type ProjectContentOptionKind,
 } from "@/lib/content-plan";
 import { buildProjectChannelSuggestions } from "@/lib/platform-meta";
 import type { GeminiConfigInfo } from "@/lib/gemini-shared";
@@ -131,6 +137,12 @@ export function ProjectWorkspace({
 
   const [aiConfig, setAiConfig] = useState<GeminiConfigInfo>(initialAiConfig);
   const [aiModalTab, setAiModalTab] = useState<AiAndStandardsTab | null>(null);
+  const [optionsModalTab, setOptionsModalTab] =
+    useState<ProjectContentOptionKind | null>(null);
+  const [optionRenameBatch, setOptionRenameBatch] = useState<{
+    id: number;
+    renames: AppliedOptionRename[];
+  } | null>(null);
   const [viewMode, setViewMode] = useState<ProjectViewTab>(normalizedTab);
   const [createOpen, setCreateOpen] = useState(false);
   const [matrixDefaults, setMatrixDefaults] = useState<{
@@ -252,6 +264,116 @@ export function ProjectWorkspace({
 
   function handleTaskDeleted(deletedId: string) {
     setTasks((prev) => prev.filter((t) => t.id !== deletedId));
+  }
+
+  async function handleAppendProjectOption(
+    kind: ProjectContentOptionKind,
+    rawNewValue: string
+  ): Promise<boolean> {
+    const cleaned = rawNewValue.replace(/\s+/g, " ").trim().slice(0, 60);
+    if (!cleaned) return false;
+
+    const current = getProjectContentOptions(project.overviewJson);
+    const list =
+      kind === "ROUTES"
+        ? current.routes
+        : kind === "PLATFORMS"
+          ? current.platforms
+          : current.formats;
+
+    if (list.some((item) => item.toLowerCase() === cleaned.toLowerCase())) {
+      return true;
+    }
+
+    const nextList = [...list, cleaned];
+    const key =
+      kind === "ROUTES"
+        ? "routeOptions"
+        : kind === "PLATFORMS"
+          ? "platformOptions"
+          : "formatOptions";
+
+    const res = await fetch("/api/projects", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: project.id,
+        contentOptions: {
+          [key]: nextList,
+        },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || "Không lưu được option mới cho dự án.", "error");
+      return false;
+    }
+
+    setProject((prev) => ({
+      ...prev,
+      overviewJson: data.project.overviewJson,
+    }));
+    const label =
+      kind === "ROUTES"
+        ? "Tuyến nội dung"
+        : kind === "PLATFORMS"
+          ? "Nền tảng"
+          : "Format";
+    showToast(`Đã thêm ${label} "${cleaned}" vào dự án ${project.name}!`);
+    return true;
+  }
+
+  function handleOptionsModalSaved(
+    patchProject: Partial<SimpleProject>,
+    appliedRenames: AppliedOptionRename[]
+  ) {
+    setProject((prev) => ({ ...prev, ...patchProject }));
+    if (appliedRenames.length > 0) {
+      const applyRenameToTask = (t: TaskItem): TaskItem => {
+        let nextAngle = t.contentAngle;
+        let nextPlatform = t.platform;
+        let nextFormat = t.postFormat;
+        let changed = false;
+        for (const rn of appliedRenames) {
+          if (
+            rn.field === "contentAngle" &&
+            nextAngle &&
+            (nextAngle.toLowerCase() === rn.from.toLowerCase() ||
+              (rn.from.toUpperCase() === "CASE STUDY" &&
+                nextAngle.toUpperCase() === "CASE") ||
+              (rn.from.toUpperCase() === "BÁN HÀNG / PR" &&
+                nextAngle.toUpperCase() === "BÁN HÀNG"))
+          ) {
+            nextAngle = rn.to;
+            changed = true;
+          } else if (
+            rn.field === "platform" &&
+            nextPlatform.toLowerCase() === rn.from.toLowerCase()
+          ) {
+            nextPlatform = rn.to;
+            changed = true;
+          } else if (
+            rn.field === "postFormat" &&
+            nextFormat &&
+            nextFormat.toLowerCase() === rn.from.toLowerCase()
+          ) {
+            nextFormat = rn.to;
+            changed = true;
+          }
+        }
+        return changed
+          ? {
+              ...t,
+              contentAngle: nextAngle,
+              platform: nextPlatform,
+              postFormat: nextFormat,
+            }
+          : t;
+      };
+      setTasks((prev) => prev.map(applyRenameToTask));
+      setContentEditorTask((prev) => (prev ? applyRenameToTask(prev) : prev));
+      setOptionRenameBatch({ id: Date.now(), renames: appliedRenames });
+    }
   }
 
   async function handleContentPostSaved(
@@ -671,6 +793,7 @@ export function ProjectWorkspace({
             setContentEditorPrefill(null);
             setContentEditorOpen(true);
           }}
+          onOpenOptionsModal={(tab) => setOptionsModalTab(tab)}
         />
       )}
 
@@ -692,6 +815,8 @@ export function ProjectWorkspace({
             setContentEditorPrefill(null);
             setContentEditorOpen(true);
           }}
+          onAddProjectOption={handleAppendProjectOption}
+          onOpenOptionsModal={(tab) => setOptionsModalTab(tab)}
         />
       )}
 
@@ -729,6 +854,8 @@ export function ProjectWorkspace({
             });
             setCreateOpen(true);
           }}
+          onAddProjectOption={handleAppendProjectOption}
+          onOpenOptionsModal={(tab) => setOptionsModalTab(tab)}
         />
       )}
 
@@ -803,7 +930,18 @@ export function ProjectWorkspace({
             )
           );
         }}
+        onAddProjectOption={handleAppendProjectOption}
+        onOpenOptionsModal={(tab) => setOptionsModalTab(tab)}
+        optionRenameBatch={optionRenameBatch}
         onSaved={handleContentPostSaved}
+      />
+
+      <ProjectContentOptionsModal
+        open={optionsModalTab !== null}
+        project={project}
+        initialTab={optionsModalTab ?? "ROUTES"}
+        onClose={() => setOptionsModalTab(null)}
+        onSaved={handleOptionsModalSaved}
       />
 
       {currentUserRole === "LEADER" && (

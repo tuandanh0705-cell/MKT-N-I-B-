@@ -20,6 +20,7 @@ import {
   type VideoOrderKind,
 } from "@/lib/media-brief";
 import { canUserDeleteTask, softDeleteTasksByIds } from "@/lib/task-delete";
+import { getTaskAssignees } from "@/lib/task-assignees";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { MediaBriefRow, formatVnShortDate } from "@/components/media-brief-row";
 import { useToast } from "@/components/toast-provider";
@@ -199,7 +200,7 @@ export function MediaBriefBoard({
           const hit =
             t.title.toLowerCase().includes(q) ||
             t.code.toLowerCase().includes(q) ||
-            (t.assignee?.name.toLowerCase().includes(q) ?? false);
+            getTaskAssignees(t).some((u) => u.name.toLowerCase().includes(q));
           if (!hit) return false;
         }
         return true;

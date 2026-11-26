@@ -5,15 +5,17 @@ import {
   PenLine,
   Plus,
   Search,
+  Settings2,
   Trash2,
   X,
 } from "lucide-react";
-import { CONTENT_ROUTE_OPTIONS } from "@/lib/content-plan";
+import type { ProjectContentOptionKind } from "@/lib/content-plan";
 
 interface ContentCalendarToolbarProps {
   filteredCount: number;
   users: Array<{ id: string; name: string }>;
   availableMonths: string[];
+  routeOptions: string[];
   searchQuery: string;
   onChangeSearchQuery: (v: string) => void;
   monthFilter: string;
@@ -41,12 +43,14 @@ interface ContentCalendarToolbarProps {
   onBulkImport: () => void;
   onToggleQuickAdd: () => void;
   onOpenNewEditor: () => void;
+  onOpenOptionsModal?: (tab: ProjectContentOptionKind) => void;
 }
 
 export function ContentCalendarToolbar({
   filteredCount,
   users,
   availableMonths,
+  routeOptions,
   searchQuery,
   onChangeSearchQuery,
   monthFilter,
@@ -74,6 +78,7 @@ export function ContentCalendarToolbar({
   onBulkImport,
   onToggleQuickAdd,
   onOpenNewEditor,
+  onOpenOptionsModal,
 }: ContentCalendarToolbarProps) {
   return (
     <div className="bg-white rounded-2xl border-2 border-sky-200/80 p-4 space-y-3">
@@ -85,6 +90,17 @@ export function ContentCalendarToolbar({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {onOpenOptionsModal && (
+            <button
+              type="button"
+              onClick={() => onOpenOptionsModal("ROUTES")}
+              title="Tự điền / chỉnh sửa danh sách Tuyến, Nền tảng, Format riêng cho dự án này"
+              className="rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 px-3 py-2 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+              Tùy chỉnh Option
+            </button>
+          )}
           <button
             type="button"
             onClick={onToggleDeleteMode}
@@ -209,9 +225,9 @@ export function ContentCalendarToolbar({
           className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
         >
           <option value="ALL">Tất cả Tuyến</option>
-          {CONTENT_ROUTE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.label}>
-              {opt.label}
+          {routeOptions.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
             </option>
           ))}
         </select>

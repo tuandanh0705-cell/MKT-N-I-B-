@@ -17,8 +17,8 @@ import {
   Sparkles,
   Wand2,
 } from "lucide-react";
-import { PirateAvatar } from "@/components/pirate-art";
 import { PlatformLogo } from "@/components/platform-logo";
+import { TaskAssigneesBadges } from "@/components/task-assignees-badges";
 import { TaskStatusBadge } from "@/components/status-badge";
 import { ASSET_KIND_LABEL } from "@/lib/constants";
 import { formatVnDateTime } from "@/lib/dates";
@@ -122,17 +122,12 @@ export function OutputsCardItem({
       <div className="space-y-3">
         {/* Top Row: Member, Project, Saved AI Score, Status */}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <PirateAvatar
-              name={t.assignee?.name || "Chưa gán"}
-              color={t.assignee?.avatarColor || "#64748b"}
-              scope={t.assignee?.departmentScope}
-              pirateCharacter={t.assignee?.pirateCharacter}
+          <div className="flex items-center gap-2 min-w-0 text-xs">
+            <TaskAssigneesBadges
+              task={t}
               size="sm"
+              emptyLabel="Chưa phân công"
             />
-            <span className="text-xs font-extrabold text-slate-900 truncate">
-              {t.assignee?.name || "Chưa phân công"}
-            </span>
             <span className="text-slate-300">•</span>
             <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 truncate">
               <span

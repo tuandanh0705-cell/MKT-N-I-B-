@@ -5,19 +5,20 @@ import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { ContentCalendarMobileCard } from "@/components/content-calendar-mobile-card";
 import { ContentCalendarRow } from "@/components/content-calendar-row";
 import { ContentCalendarToolbar } from "@/components/content-calendar-toolbar";
+import { CustomizableOptionSelect } from "@/components/customizable-option-select";
 import { OutputInspectorModal } from "@/components/output-inspector-modal";
 import { PlatformLogo } from "@/components/platform-logo";
 import { useToast } from "@/components/toast-provider";
 import { useGeminiQcRunner } from "@/hooks/use-gemini-qc";
 import {
-  CONTENT_PLATFORM_OPTIONS,
-  CONTENT_ROUTE_OPTIONS,
-  POST_FORMAT_OPTIONS,
-  getContentRouteMeta,
+  getProjectContentOptions,
   isContentTaskItem,
+  normalizeRouteSelectValue,
   parseGoogleSheetTimelineTsv,
+  type ProjectContentOptionKind,
 } from "@/lib/content-plan";
 import { getVnDateString } from "@/lib/dates";
+import { isUserAssignedToTask } from "@/lib/task-assignees";
 import { canUserDeleteTask, softDeleteTasksByIds } from "@/lib/task-delete";
 import type {
   ProjectChannelSuggestions,
@@ -40,6 +41,8 @@ export function ProjectContentCalendarPanel({
   onTaskDeleted,
   onTasksAdded,
   onRequestMediaOrder,
+  onAddProjectOption,
+  onOpenOptionsModal,
 }: {
   project: SimpleProject;
   tasks: TaskItem[];
@@ -53,9 +56,18 @@ export function ProjectContentCalendarPanel({
   onTaskDeleted?: (taskId: string) => void;
   onTasksAdded: (added: TaskItem[]) => void;
   onRequestMediaOrder: (sourceTask: TaskItem) => void;
+  onAddProjectOption?: (
+    kind: ProjectContentOptionKind,
+    newValue: string
+  ) => Promise<boolean>;
+  onOpenOptionsModal?: (tab: ProjectContentOptionKind) => void;
 }) {
   const { showToast } = useToast();
   const todayStr = getVnDateString();
+  const projectOptions = useMemo(
+    () => getProjectContentOptions(project.overviewJson),
+    [project.overviewJson]
+  );
 
   const [searchQuery, setSearchQuery] = useState("");
   const [monthFilter, setMonthFilter] = useState("ALL");
@@ -73,10 +85,12 @@ export function ProjectContentCalendarPanel({
 
   const [quickOpen, setQuickOpen] = useState(false);
   const [qDate, setQDate] = useState(todayStr);
-  const [qRoute, setQRoute] = useState("EDUCATE");
+  const [qRoute, setQRoute] = useState(projectOptions.routes[0] || "");
   const [qTitle, setQTitle] = useState("");
-  const [qPlatform, setQPlatform] = useState("Fanpage");
-  const [qFormat, setQFormat] = useState("Ảnh");
+  const [qPlatform, setQPlatform] = useState(
+    projectOptions.platforms[0] || "Fanpage"
+  );
+  const [qFormat, setQFormat] = useState(projectOptions.formats[0] || "Ảnh");
   const [qPicId, setQPicId] = useState(currentUserId);
   const [creatingQuick, setCreatingQuick] = useState(false);
 
@@ -171,6 +185,22 @@ export function ProjectContentCalendarPanel({
     return map;
   }, [tasks, contentPosts]);
 
+  const filterRouteOptions = useMemo(() => {
+    const out = [...projectOptions.routes];
+    const seen = new Set(out.map((r) => r.toLowerCase()));
+    for (const post of contentPosts) {
+      const normalized = normalizeRouteSelectValue(
+        post.contentAngle,
+        projectOptions.routes
+      );
+      if (normalized && !seen.has(normalized.toLowerCase())) {
+        seen.add(normalized.toLowerCase());
+        out.push(normalized);
+      }
+    }
+    return out;
+  }, [projectOptions.routes, contentPosts]);
+
   const filteredPosts = useMemo(() => {
     return contentPosts.filter((t) => {
       if (monthFilter === "UNSCHEDULED") {
@@ -181,12 +211,16 @@ export function ProjectContentCalendarPanel({
         if (m !== monthFilter) return false;
       }
       if (picFilter === "MINE") {
-        if (t.assignee?.id !== currentUserId) return false;
-      } else if (picFilter !== "ALL" && t.assignee?.id !== picFilter) {
+        if (!isUserAssignedToTask(t, currentUserId)) return false;
+      } else if (picFilter !== "ALL" && !isUserAssignedToTask(t, picFilter)) {
         return false;
       }
       if (routeFilter !== "ALL") {
-        if (getContentRouteMeta(t.contentAngle).label !== routeFilter)
+        const normalized = normalizeRouteSelectValue(
+          t.contentAngle,
+          projectOptions.routes
+        );
+        if (normalized.toLowerCase() !== routeFilter.toLowerCase())
           return false;
       }
       if (statusFilter !== "ALL") {
@@ -212,6 +246,7 @@ export function ProjectContentCalendarPanel({
     monthFilter,
     picFilter,
     routeFilter,
+    projectOptions.routes,
     statusFilter,
     searchQuery,
     currentUserId,
@@ -354,6 +389,7 @@ export function ProjectContentCalendarPanel({
         filteredCount={filteredPosts.length}
         users={users}
         availableMonths={availableMonths}
+        routeOptions={filterRouteOptions}
         searchQuery={searchQuery}
         onChangeSearchQuery={setSearchQuery}
         monthFilter={monthFilter}
@@ -393,6 +429,7 @@ export function ProjectContentCalendarPanel({
         onBulkImport={handleBulkImport}
         onToggleQuickAdd={() => setQuickOpen((v) => !v)}
         onOpenNewEditor={() => onOpenEditor(null)}
+        onOpenOptionsModal={onOpenOptionsModal}
       />
 
       {/* Chế độ xem Thẻ gọn trên Mobile (không phải vuốt ngang 11 cột) */}
@@ -418,32 +455,47 @@ export function ProjectContentCalendarPanel({
                 onChange={(e) => setQDate(e.target.value)}
                 className="rounded-xl border border-sky-300 bg-white px-2.5 py-1.5 text-xs"
               />
-              <select
+              <CustomizableOptionSelect
+                value={qRoute}
+                options={projectOptions.routes}
+                emptyLabel="-- Tuyến --"
+                placeholder="Tên tuyến mới..."
+                selectClassName="w-full rounded-xl border border-sky-300 bg-white px-2 py-1.5 text-xs"
+                onChange={setQRoute}
+                onAddOption={
+                  onAddProjectOption
+                    ? (val) => onAddProjectOption("ROUTES", val)
+                    : undefined
+                }
+              />
+              <CustomizableOptionSelect
                 value={qPlatform}
-                onChange={(e) => setQPlatform(e.target.value)}
-                className="rounded-xl border border-sky-300 bg-white px-2 py-1.5 text-xs"
-              >
-                {CONTENT_PLATFORM_OPTIONS.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-              <select
+                options={projectOptions.platforms}
+                placeholder="Nền tảng mới..."
+                selectClassName="w-full rounded-xl border border-sky-300 bg-white px-2 py-1.5 text-xs"
+                onChange={setQPlatform}
+                onAddOption={
+                  onAddProjectOption
+                    ? (val) => onAddProjectOption("PLATFORMS", val)
+                    : undefined
+                }
+              />
+              <CustomizableOptionSelect
                 value={qFormat}
-                onChange={(e) => setQFormat(e.target.value)}
-                className="rounded-xl border border-sky-300 bg-white px-2 py-1.5 text-xs"
-              >
-                {POST_FORMAT_OPTIONS.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
+                options={projectOptions.formats}
+                placeholder="Format mới..."
+                selectClassName="w-full rounded-xl border border-sky-300 bg-white px-2 py-1.5 text-xs"
+                onChange={setQFormat}
+                onAddOption={
+                  onAddProjectOption
+                    ? (val) => onAddProjectOption("FORMATS", val)
+                    : undefined
+                }
+              />
               <select
                 value={qPicId}
                 onChange={(e) => setQPicId(e.target.value)}
-                className="rounded-xl border border-sky-300 bg-white px-2 py-1.5 text-xs"
+                className="col-span-2 rounded-xl border border-sky-300 bg-white px-2 py-1.5 text-xs"
               >
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
@@ -573,17 +625,20 @@ export function ProjectContentCalendarPanel({
                   />
                 </td>
                 <td className="p-2">
-                  <select
+                  <CustomizableOptionSelect
                     value={qRoute}
-                    onChange={(e) => setQRoute(e.target.value)}
-                    className="rounded-lg border border-sky-300 bg-white px-2 py-1 text-xs"
-                  >
-                    {CONTENT_ROUTE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                    options={projectOptions.routes}
+                    emptyLabel="-- Tuyến --"
+                    placeholder="Tên tuyến mới..."
+                    selectClassName="rounded-lg border border-sky-300 bg-white px-2 py-1 text-xs max-w-[135px]"
+                    inputClassName="w-28 rounded-lg border-2 border-blue-400 bg-white px-2 py-1 text-xs focus:outline-none"
+                    onChange={setQRoute}
+                    onAddOption={
+                      onAddProjectOption
+                        ? (val) => onAddProjectOption("ROUTES", val)
+                        : undefined
+                    }
+                  />
                 </td>
                 <td className="p-2">
                   <input
@@ -606,34 +661,38 @@ export function ProjectContentCalendarPanel({
                 <td className="p-2">
                   <div className="flex items-center gap-1.5">
                     <PlatformLogo platform={qPlatform} size="xs" />
-                    <select
+                    <CustomizableOptionSelect
                       value={qPlatform}
-                      onChange={(e) => setQPlatform(e.target.value)}
-                      className="rounded-lg border border-sky-300 bg-white px-2 py-1 text-xs"
-                    >
-                      {CONTENT_PLATFORM_OPTIONS.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
+                      options={projectOptions.platforms}
+                      placeholder="Nền tảng mới..."
+                      selectClassName="rounded-lg border border-sky-300 bg-white px-2 py-1 text-xs max-w-[115px]"
+                      inputClassName="w-24 rounded-lg border-2 border-blue-400 bg-white px-2 py-1 text-xs focus:outline-none"
+                      onChange={setQPlatform}
+                      onAddOption={
+                        onAddProjectOption
+                          ? (val) => onAddProjectOption("PLATFORMS", val)
+                          : undefined
+                      }
+                    />
                   </div>
                 </td>
                 <td className="p-2 text-[11px] text-slate-500">
                   Lưu xong bấm vào đây để viết bài &amp; AI Check
                 </td>
                 <td className="p-2">
-                  <select
+                  <CustomizableOptionSelect
                     value={qFormat}
-                    onChange={(e) => setQFormat(e.target.value)}
-                    className="rounded-lg border border-sky-300 bg-white px-2 py-1 text-xs"
-                  >
-                    {POST_FORMAT_OPTIONS.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
+                    options={projectOptions.formats}
+                    placeholder="Format mới..."
+                    selectClassName="rounded-lg border border-sky-300 bg-white px-2 py-1 text-xs max-w-[115px]"
+                    inputClassName="w-24 rounded-lg border-2 border-blue-400 bg-white px-2 py-1 text-xs focus:outline-none"
+                    onChange={setQFormat}
+                    onAddOption={
+                      onAddProjectOption
+                        ? (val) => onAddProjectOption("FORMATS", val)
+                        : undefined
+                    }
+                  />
                 </td>
                 <td className="p-2 text-[11px] text-slate-500" colSpan={3}>
                   Tạo bản nháp mới &amp; gắn Deadline sau khi lưu
@@ -682,6 +741,9 @@ export function ProjectContentCalendarPanel({
                   task={t}
                   projectSlug={project.slug}
                   users={users}
+                  routeOptions={projectOptions.routes}
+                  platformOptions={projectOptions.platforms}
+                  formatOptions={projectOptions.formats}
                   linkedMediaOrders={linkedMediaByParentId.get(t.id) ?? []}
                   channelSuggestions={channelSuggestions}
                   todayStr={todayStr}
@@ -699,6 +761,7 @@ export function ProjectContentCalendarPanel({
                   onToggleSelectDelete={toggleSelectDelete}
                   onRequestDeleteSingle={(id) => setDeleteConfirmIds([id])}
                   onPatchTaskInline={patchTaskInline}
+                  onAddProjectOption={onAddProjectOption}
                   onOpenEditor={(target) => onOpenEditor(target)}
                   onOpenMediaOrder={(id) => onOpenTaskDrawer?.(id)}
                   onInspectAiScore={(id) => setInspectTaskId(id)}

@@ -46,7 +46,7 @@ export function normalizePlatformKind(platform?: string | null): PlatformKind {
   if (lower.includes("fanpage") || lower.includes("facebook") || lower === "fb") {
     return "FANPAGE";
   }
-  return "FANPAGE";
+  return "OTHER";
 }
 
 export function normalizePlatformSelectValue(platform?: string | null): string {
@@ -160,6 +160,19 @@ export function getPlatformChannelMeta(
         suggestionBucket: "fanpages",
         badgeClass: "bg-blue-50 text-blue-900 border-blue-200",
       };
+    case "OTHER": {
+      const customLabel = (platform || "").trim() || "Kênh khác";
+      return {
+        kind: "OTHER",
+        displayLabel: customLabel,
+        channelFieldLabel: `Kênh ${customLabel}`,
+        channelShortLabel: customLabel,
+        channelPlaceholder: `VD: Tên kênh / link ${customLabel}...`,
+        emptyChannelLabel: `Chưa gắn ${customLabel}`,
+        suggestionBucket: "others",
+        badgeClass: "bg-teal-50 text-teal-800 border-teal-200",
+      };
+    }
     default:
       return {
         kind: "FANPAGE",

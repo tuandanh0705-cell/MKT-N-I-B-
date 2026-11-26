@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import Image from "next/image";
 import {
   Bookmark,
@@ -21,7 +21,26 @@ import {
   ThumbsUp,
   Users,
   X,
+  ZoomIn,
 } from "lucide-react";
+
+const MockupLightboxContext = createContext<((src: string) => void) | null>(
+  null
+);
+
+export function MockupLightboxProvider({
+  onOpenImage,
+  children,
+}: {
+  onOpenImage: (src: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <MockupLightboxContext.Provider value={onOpenImage}>
+      {children}
+    </MockupLightboxContext.Provider>
+  );
+}
 import { FB_POST_LAYOUTS } from "@/lib/constants";
 import { extractAssetPreviewImageUrl } from "@/lib/output-helpers";
 
@@ -194,12 +213,38 @@ function MockupVisualTile({
   safeRightPad?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
+  const onOpenLightbox = useContext(MockupLightboxContext);
   const showImage = Boolean(src && !failed);
+  const canZoom = Boolean(showImage && src && onOpenLightbox);
   const posClass = /\b(absolute|fixed)\b/.test(className) ? "" : "relative";
 
   return (
     <div
-      className={`${posClass} overflow-hidden select-none ${className}`}
+      role={canZoom ? "button" : undefined}
+      tabIndex={canZoom ? 0 : undefined}
+      title={canZoom ? "Bấm để phóng to xem ảnh chi tiết" : undefined}
+      onClick={
+        canZoom && src
+          ? (e) => {
+              e.stopPropagation();
+              onOpenLightbox?.(src);
+            }
+          : undefined
+      }
+      onKeyDown={
+        canZoom && src
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenLightbox?.(src);
+              }
+            }
+          : undefined
+      }
+      className={`${posClass} overflow-hidden select-none ${
+        canZoom ? "cursor-zoom-in group" : ""
+      } ${className}`}
       style={
         !showImage
           ? {
@@ -217,7 +262,9 @@ function MockupVisualTile({
           fill
           unoptimized
           onError={() => setFailed(true)}
-          className="object-cover"
+          className={`object-cover transition-transform duration-200 ${
+            canZoom ? "group-hover:scale-[1.02]" : ""
+          }`}
         />
       ) : (
         <div
@@ -293,6 +340,13 @@ function MockupVisualTile({
         <div className="absolute inset-0 bg-black/55 flex items-center justify-center text-white text-2xl font-black">
           +{overlayPlus}
         </div>
+      )}
+
+      {canZoom && (
+        <span className="pointer-events-none absolute bottom-1.5 right-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-black/60 backdrop-blur-xs text-white px-2 py-1 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
+          <ZoomIn className="w-3 h-3" />
+          <span className="hidden sm:inline">Phóng to</span>
+        </span>
       )}
     </div>
   );

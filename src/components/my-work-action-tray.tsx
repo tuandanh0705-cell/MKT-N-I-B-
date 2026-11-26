@@ -13,13 +13,14 @@ import {
   Pin,
   Wrench,
 } from "lucide-react";
-import { PirateAvatar } from "@/components/pirate-art";
+import { TaskAssigneesBadges } from "@/components/task-assignees-badges";
 import { TaskStatusBadge } from "@/components/status-badge";
 import { isCompletedTaskStatus } from "@/components/my-work-task-row";
 import { isTaskOverdue } from "@/lib/constants";
 import { getVnDateString } from "@/lib/dates";
 import { TASK_NATURE_META } from "@/lib/report-grouping";
 import { normalizeSubtasks } from "@/lib/subtasks";
+import { formatTaskAssigneesLabel, getTaskAssignees } from "@/lib/task-assignees";
 import type { TaskItem } from "@/types/crm";
 
 function formatShortDue(input: string | Date | null | undefined, todayDate: string): string {
@@ -495,17 +496,12 @@ export function MyWorkDelegatedTracker({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2.5 text-[11px] text-slate-600">
-                    {t.assignee ? (
-                      <span className="inline-flex items-center gap-1.5 font-bold text-slate-800">
-                        <PirateAvatar
-                          name={t.assignee.name}
-                          color={t.assignee.avatarColor}
-                          scope={t.assignee.departmentScope}
-                          pirateCharacter={t.assignee.pirateCharacter}
-                          size="sm"
-                        />
-                        <span>Giao cho: {t.assignee.name}</span>
-                      </span>
+                    {getTaskAssignees(t).length > 0 ? (
+                      <TaskAssigneesBadges
+                        task={t}
+                        size="sm"
+                        prefix="Giao cho:"
+                      />
                     ) : (
                       <span className="rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 font-bold text-amber-800">
                         ⚠️ Chưa gán người làm
@@ -558,12 +554,12 @@ export function MyWorkDelegatedTracker({
                     Feedback {commentCount > 0 ? `(${commentCount})` : ""}
                   </button>
 
-                  {!done && t.assignee && (
+                  {!done && getTaskAssignees(t).length > 0 && (
                     <button
                       type="button"
                       disabled={remindingTaskId === t.id}
                       onClick={() => onRemindTask(t)}
-                      title={`Nhắc ${t.assignee.name} cập nhật tiến độ`}
+                      title={`Nhắc ${formatTaskAssigneesLabel(t)} cập nhật tiến độ`}
                       className="rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 disabled:opacity-50 text-sky-800 px-2.5 py-1.5 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
                     >
                       <Bell className="w-3.5 h-3.5" />

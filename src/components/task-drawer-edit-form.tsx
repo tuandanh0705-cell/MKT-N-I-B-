@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { MultiAssigneePicker } from "@/components/multi-assignee-picker";
 import { PlatformLogo } from "@/components/platform-logo";
 import { PublishChannelInput } from "@/components/publish-channel-input";
 import { CONTENT_PLATFORM_OPTIONS } from "@/lib/content-plan";
 import { TASK_TYPE_META } from "@/lib/constants";
 import { toVnDateTimeLocalValue } from "@/lib/dates";
 import { normalizePlatformSelectValue } from "@/lib/platform-meta";
+import { getTaskAssigneeIds } from "@/lib/task-assignees";
 import type { SimpleUser, TaskItem } from "@/types/crm";
 import type { TaskPriority, TaskType } from "@/generated/prisma/client";
 
@@ -35,7 +37,9 @@ export function TaskDrawerEditForm({
   );
   const [editTaskType, setEditTaskType] = useState<TaskType>(task.taskType);
   const [editPriority, setEditPriority] = useState<TaskPriority>(task.priority);
-  const [editAssigneeId, setEditAssigneeId] = useState(task.assignee?.id || "");
+  const [editAssigneeIds, setEditAssigneeIds] = useState<string[]>(() =>
+    getTaskAssigneeIds(task)
+  );
   const [editQuantity, setEditQuantity] = useState(task.quantity || 1);
   const [editDueAt, setEditDueAt] = useState(toVnDateTimeLocalValue(task.dueAt));
   const [editScheduleAt, setEditScheduleAt] = useState(
@@ -53,7 +57,8 @@ export function TaskDrawerEditForm({
         taskType: editTaskType,
         isMediaOrder: TASK_TYPE_META[editTaskType]?.isMediaOrderDefault ?? false,
         priority: editPriority,
-        assigneeId: editAssigneeId || null,
+        assigneeIds: editAssigneeIds,
+        assigneeId: editAssigneeIds[0] || null,
         quantity: editQuantity,
         dueAt: editDueAt ? new Date(editDueAt).toISOString() : null,
         scheduledPublishAt: editScheduleAt
@@ -168,20 +173,14 @@ export function TaskDrawerEditForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">
-            Người thực hiện
+            Người thực hiện (chọn 1 hoặc nhiều)
           </label>
-          <select
-            value={editAssigneeId}
-            onChange={(e) => setEditAssigneeId(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs"
-          >
-            <option value="">-- Chưa gán --</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
+          <MultiAssigneePicker
+            users={users}
+            value={editAssigneeIds}
+            onChange={setEditAssigneeIds}
+            placeholder="-- Chưa gán --"
+          />
         </div>
 
         <div>

@@ -10,6 +10,20 @@ export interface ProjectOverviewData {
   forbiddenNotes: string;
   planSheetUrl: string;
   hashtagsDefault: string;
+  routeOptions?: string[];
+  platformOptions?: string[];
+  formatOptions?: string[];
+}
+
+export type ProjectContentOptionKind = "ROUTES" | "PLATFORMS" | "FORMATS";
+
+export interface ProjectContentOptions {
+  routes: string[];
+  platforms: string[];
+  formats: string[];
+  hasCustomRoutes: boolean;
+  hasCustomPlatforms: boolean;
+  hasCustomFormats: boolean;
 }
 
 export interface MatrixDepthRow {
@@ -137,6 +151,110 @@ export const CONTENT_PLATFORM_OPTIONS = [
   "Shopee",
 ] as const;
 
+export const DEFAULT_PROJECT_ROUTES: string[] = CONTENT_ROUTE_OPTIONS.map(
+  (o) => o.label
+);
+export const DEFAULT_PROJECT_PLATFORMS: string[] = [...CONTENT_PLATFORM_OPTIONS];
+export const DEFAULT_PROJECT_FORMATS: string[] = [...POST_FORMAT_OPTIONS];
+
+const CUSTOM_ROUTE_BADGE_PALETTE = [
+  "bg-teal-50 text-teal-800 border-teal-200",
+  "bg-cyan-50 text-cyan-800 border-cyan-200",
+  "bg-fuchsia-50 text-fuchsia-800 border-fuchsia-200",
+  "bg-pink-50 text-pink-800 border-pink-200",
+  "bg-lime-50 text-lime-800 border-lime-200",
+  "bg-amber-50 text-amber-800 border-amber-200",
+  "bg-violet-50 text-violet-800 border-violet-200",
+  "bg-indigo-50 text-indigo-800 border-indigo-200",
+  "bg-emerald-50 text-emerald-800 border-emerald-200",
+  "bg-rose-50 text-rose-800 border-rose-200",
+] as const;
+
+function hashStringIndex(input: string, mod: number): number {
+  let h = 0;
+  for (let i = 0; i < input.length; i++) {
+    h = (h * 31 + input.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h) % mod;
+}
+
+export function sanitizeOptionList(raw: unknown, maxItems = 30): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    const cleaned = String(item ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 60);
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(cleaned);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
+export function getProjectContentOptions(
+  overviewJson: unknown
+): ProjectContentOptions {
+  const obj =
+    overviewJson && typeof overviewJson === "object" && !Array.isArray(overviewJson)
+      ? (overviewJson as Record<string, unknown>)
+      : {};
+  const customRoutes = sanitizeOptionList(obj.routeOptions);
+  const customPlatforms = sanitizeOptionList(obj.platformOptions);
+  const customFormats = sanitizeOptionList(obj.formatOptions);
+
+  return {
+    routes: customRoutes.length > 0 ? customRoutes : DEFAULT_PROJECT_ROUTES,
+    platforms:
+      customPlatforms.length > 0 ? customPlatforms : DEFAULT_PROJECT_PLATFORMS,
+    formats: customFormats.length > 0 ? customFormats : DEFAULT_PROJECT_FORMATS,
+    hasCustomRoutes: customRoutes.length > 0,
+    hasCustomPlatforms: customPlatforms.length > 0,
+    hasCustomFormats: customFormats.length > 0,
+  };
+}
+
+export function normalizeRouteSelectValue(
+  route: string | null | undefined,
+  routeOptions: string[]
+): string {
+  const raw = String(route ?? "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  const exact = routeOptions.find((opt) => opt.toLowerCase() === lower);
+  if (exact) return exact;
+
+  // Tương thích ngược với dữ liệu cũ lưu "CASE" hoặc "BÁN HÀNG"
+  if (lower === "case") {
+    const legacy = routeOptions.find((opt) => opt.toLowerCase() === "case study");
+    if (legacy) return legacy;
+  }
+  if (lower === "bán hàng") {
+    const legacy = routeOptions.find(
+      (opt) => opt.toLowerCase() === "bán hàng / pr"
+    );
+    if (legacy) return legacy;
+  }
+  return raw;
+}
+
+export function ensureOptionIncluded(
+  options: string[],
+  currentValue?: string | null
+): string[] {
+  const cleaned = String(currentValue ?? "").trim();
+  if (!cleaned) return options;
+  if (options.some((opt) => opt.toLowerCase() === cleaned.toLowerCase())) {
+    return options;
+  }
+  return [...options, cleaned];
+}
+
 export function getContentRouteMeta(route?: string | null): {
   label: string;
   badgeClass: string;
@@ -149,31 +267,35 @@ export function getContentRouteMeta(route?: string | null): {
     };
   }
   const upper = raw.toUpperCase();
-  if (upper.includes("EDUCAT")) return CONTENT_ROUTE_OPTIONS[0];
-  if (upper.includes("SO SÁNH") || upper.includes("SO SANH")) {
+  if (upper === "EDUCATE") return CONTENT_ROUTE_OPTIONS[0];
+  if (upper === "SO SÁNH" || upper === "SO SANH") {
     return CONTENT_ROUTE_OPTIONS[1];
   }
   if (
-    upper.includes("VẤN ĐỀ") ||
-    upper.includes("VAN DE") ||
-    upper.includes("VĐỀ") ||
-    upper.includes("GP")
+    upper === "VẤN ĐỀ - GP" ||
+    upper === "VAN DE - GP" ||
+    upper === "VĐỀ - GP"
   ) {
     return CONTENT_ROUTE_OPTIONS[2];
   }
-  if (upper.includes("SỰ KIỆN") || upper.includes("SU KIEN")) {
+  if (upper === "SỰ KIỆN" || upper === "SU KIEN") {
     return CONTENT_ROUTE_OPTIONS[3];
   }
-  if (upper.includes("CASE")) return CONTENT_ROUTE_OPTIONS[4];
-  if (upper.includes("BÁN") || upper.includes("PR") || upper.includes("SALE")) {
+  if (upper === "CASE" || upper === "CASE STUDY") {
+    return CONTENT_ROUTE_OPTIONS[4];
+  }
+  if (upper === "BÁN HÀNG" || upper === "BÁN HÀNG / PR") {
     return CONTENT_ROUTE_OPTIONS[5];
   }
-  if (upper.includes("QUAN ĐIỂM") || upper.includes("QUAN DIEM")) {
+  if (upper === "QUAN ĐIỂM" || upper === "QUAN DIEM") {
     return CONTENT_ROUTE_OPTIONS[6];
   }
   return {
     label: raw,
-    badgeClass: "bg-slate-100 text-slate-700 border-slate-300",
+    badgeClass:
+      CUSTOM_ROUTE_BADGE_PALETTE[
+        hashStringIndex(upper, CUSTOM_ROUTE_BADGE_PALETTE.length)
+      ],
   };
 }
 
@@ -301,6 +423,9 @@ export function normalizeProjectOverview(
     raw && typeof raw === "object" && !Array.isArray(raw)
       ? (raw as Record<string, unknown>)
       : {};
+  const routeOptions = sanitizeOptionList(obj.routeOptions);
+  const platformOptions = sanitizeOptionList(obj.platformOptions);
+  const formatOptions = sanitizeOptionList(obj.formatOptions);
   return {
     productSummary: String(obj.productSummary ?? fallbackDescription ?? ""),
     targetAudience: String(obj.targetAudience ?? ""),
@@ -310,6 +435,9 @@ export function normalizeProjectOverview(
     forbiddenNotes: String(obj.forbiddenNotes ?? ""),
     planSheetUrl: String(obj.planSheetUrl ?? ""),
     hashtagsDefault: String(obj.hashtagsDefault ?? ""),
+    ...(routeOptions.length > 0 ? { routeOptions } : {}),
+    ...(platformOptions.length > 0 ? { platformOptions } : {}),
+    ...(formatOptions.length > 0 ? { formatOptions } : {}),
   };
 }
 

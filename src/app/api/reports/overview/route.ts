@@ -67,6 +67,7 @@ export async function GET(request: Request) {
         title: true,
         projectId: true,
         assigneeId: true,
+        assignees: { select: { userId: true } },
         taskType: true,
         status: true,
         quantity: true,
@@ -204,7 +205,11 @@ export async function GET(request: Request) {
     const byMember = users
       .filter((u) => (isLeader ? true : u.id === currentUserId))
       .map((u) => {
-        const memberTasks = windowTasks.filter((t) => t.assigneeId === u.id);
+        const memberTasks = windowTasks.filter(
+          (t) =>
+            t.assigneeId === u.id ||
+            t.assignees.some((a) => a.userId === u.id)
+        );
         const doneTasks = memberTasks.filter((t) =>
           COMPLETED_STATUSES.has(t.status)
         );

@@ -1,18 +1,20 @@
 "use client";
 
 import { Bot, Camera, Check, ExternalLink, PenLine, Send, Trash2 } from "lucide-react";
+import { CustomizableOptionSelect } from "@/components/customizable-option-select";
+import { MultiAssigneePicker } from "@/components/multi-assignee-picker";
 import { PlatformLogo } from "@/components/platform-logo";
 import {
-  CONTENT_PLATFORM_OPTIONS,
-  CONTENT_ROUTE_OPTIONS,
-  POST_FORMAT_OPTIONS,
   deriveDefaultFormat,
   getContentRouteMeta,
   getContentStatusDisplay,
   getPostFormatMeta,
+  normalizeRouteSelectValue,
+  type ProjectContentOptionKind,
 } from "@/lib/content-plan";
 import { getVnDateString } from "@/lib/dates";
 import { normalizePlatformSelectValue } from "@/lib/platform-meta";
+import { getTaskAssigneeIds } from "@/lib/task-assignees";
 import type { GeminiQcCheckResponse } from "@/lib/gemini-shared";
 import type { ProjectChannelSuggestions, SimpleUser, TaskItem } from "@/types/crm";
 import type { UserRole } from "@/generated/prisma/client";
@@ -21,6 +23,9 @@ interface ContentCalendarRowProps {
   task: TaskItem;
   projectSlug: string;
   users: SimpleUser[];
+  routeOptions: string[];
+  platformOptions: string[];
+  formatOptions: string[];
   linkedMediaOrders?: TaskItem[];
   channelSuggestions?: ProjectChannelSuggestions | null;
   todayStr: string;
@@ -38,6 +43,10 @@ interface ContentCalendarRowProps {
     payload: Record<string, unknown>,
     toastMsg?: string
   ) => void;
+  onAddProjectOption?: (
+    kind: ProjectContentOptionKind,
+    newValue: string
+  ) => Promise<boolean>;
   onOpenEditor: (task: TaskItem) => void;
   onOpenMediaOrder?: (taskId: string) => void;
   onInspectAiScore: (taskId: string) => void;
@@ -49,6 +58,9 @@ export function ContentCalendarRow({
   task: t,
   projectSlug,
   users,
+  routeOptions,
+  platformOptions,
+  formatOptions,
   linkedMediaOrders = [],
   todayStr,
   currentUserRole,
@@ -61,6 +73,7 @@ export function ContentCalendarRow({
   onToggleSelectDelete,
   onRequestDeleteSingle,
   onPatchTaskInline,
+  onAddProjectOption,
   onOpenEditor,
   onOpenMediaOrder,
   onInspectAiScore,
@@ -72,7 +85,8 @@ export function ContentCalendarRow({
     : "";
   const mediaDueVal = t.mediaDueAt ? getVnDateString(new Date(t.mediaDueAt)) : "";
   const contentDueVal = t.dueAt ? getVnDateString(new Date(t.dueAt)) : "";
-  const routeMeta = getContentRouteMeta(t.contentAngle);
+  const normalizedRoute = normalizeRouteSelectValue(t.contentAngle, routeOptions);
+  const routeMeta = getContentRouteMeta(normalizedRoute);
   const formatVal = deriveDefaultFormat(t);
   const formatMeta = getPostFormatMeta(formatVal);
   const statusMeta = getContentStatusDisplay(t.status, t.isAired);
@@ -152,26 +166,28 @@ export function ContentCalendarRow({
       </td>
 
       {/* 2. Tuyến nội dung */}
-      <td className="py-2.5 px-2">
-        <select
-          value={t.contentAngle || ""}
+      <td className="py-2.5 px-2 min-w-[125px]">
+        <CustomizableOptionSelect
+          value={normalizedRoute}
+          options={routeOptions}
+          emptyLabel="-- Tuyến --"
+          placeholder="Tên tuyến mới..."
           disabled={rowBusy}
-          onChange={(e) =>
+          selectClassName={`rounded-full border px-2 py-1 text-[11px] font-bold cursor-pointer max-w-[140px] ${routeMeta.badgeClass}`}
+          inputClassName="w-28 rounded-lg border-2 border-blue-400 bg-white px-2 py-1 text-[11px] font-bold text-slate-900 focus:outline-none"
+          onChange={(val) =>
             onPatchTaskInline(
               t.id,
-              { contentAngle: e.target.value || null },
+              { contentAngle: val || null },
               "Đã đổi tuyến nội dung."
             )
           }
-          className={`rounded-full border px-2 py-1 text-[11px] font-bold cursor-pointer ${routeMeta.badgeClass}`}
-        >
-          <option value="">-- Tuyến --</option>
-          {CONTENT_ROUTE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          onAddOption={
+            onAddProjectOption
+              ? (val) => onAddProjectOption("ROUTES", val)
+              : undefined
+          }
+        />
       </td>
 
       {/* 3. Nội dung / Brief */}
@@ -193,24 +209,24 @@ export function ContentCalendarRow({
       </td>
 
       {/* 4. Nền tảng */}
-      <td className="py-2.5 px-2 min-w-[125px]">
+      <td className="py-2.5 px-2 min-w-[130px]">
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">
             <PlatformLogo platform={t.platform} size="xs" />
-            <select
+            <CustomizableOptionSelect
               value={normalizePlatformSelectValue(t.platform)}
+              options={platformOptions}
+              placeholder="Nền tảng mới..."
               disabled={rowBusy}
-              onChange={(e) =>
-                onPatchTaskInline(t.id, { platform: e.target.value })
+              selectClassName="rounded-lg border border-blue-200 bg-blue-50/70 text-blue-800 px-1.5 py-1 text-[11px] font-bold max-w-[115px]"
+              inputClassName="w-24 rounded-lg border-2 border-blue-400 bg-white px-2 py-1 text-[11px] font-bold text-slate-900 focus:outline-none"
+              onChange={(val) => onPatchTaskInline(t.id, { platform: val })}
+              onAddOption={
+                onAddProjectOption
+                  ? (val) => onAddProjectOption("PLATFORMS", val)
+                  : undefined
               }
-              className="rounded-lg border border-blue-200 bg-blue-50/70 text-blue-800 px-1.5 py-1 text-[11px] font-bold"
-            >
-              {CONTENT_PLATFORM_OPTIONS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           {t.publishChannel && (
             <div
@@ -284,21 +300,21 @@ export function ContentCalendarRow({
       </td>
 
       {/* 6. Format */}
-      <td className="py-2.5 px-2">
-        <select
+      <td className="py-2.5 px-2 min-w-[105px]">
+        <CustomizableOptionSelect
           value={formatVal}
+          options={formatOptions}
+          placeholder="Format mới..."
           disabled={rowBusy}
-          onChange={(e) =>
-            onPatchTaskInline(t.id, { postFormat: e.target.value })
+          selectClassName={`rounded-full border px-2 py-1 text-[11px] font-bold cursor-pointer max-w-[120px] ${formatMeta.badgeClass}`}
+          inputClassName="w-24 rounded-lg border-2 border-blue-400 bg-white px-2 py-1 text-[11px] font-bold text-slate-900 focus:outline-none"
+          onChange={(val) => onPatchTaskInline(t.id, { postFormat: val })}
+          onAddOption={
+            onAddProjectOption
+              ? (val) => onAddProjectOption("FORMATS", val)
+              : undefined
           }
-          className={`rounded-full border px-2 py-1 text-[11px] font-bold cursor-pointer ${formatMeta.badgeClass}`}
-        >
-          {POST_FORMAT_OPTIONS.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </select>
+        />
       </td>
 
       {/* 7. Tình trạng (Sau Format, trước Deadline) */}
@@ -437,25 +453,28 @@ export function ContentCalendarRow({
         ) : null}
       </td>
 
-      {/* 10. PIC */}
-      <td className="py-2.5 px-2">
-        <select
-          value={t.assignee?.id || ""}
+      {/* 10. PIC (hỗ trợ chọn 1 hoặc nhiều người) */}
+      <td className="py-2.5 px-2 min-w-[125px]">
+        <MultiAssigneePicker
+          users={users}
+          value={getTaskAssigneeIds(t)}
           disabled={rowBusy}
-          onChange={(e) =>
-            onPatchTaskInline(t.id, {
-              assigneeId: e.target.value || null,
-            })
+          compact
+          popoverAlign="right"
+          placeholder="Chưa gán"
+          onChange={(nextIds) =>
+            onPatchTaskInline(
+              t.id,
+              {
+                assigneeIds: nextIds,
+                assigneeId: nextIds[0] || null,
+              },
+              nextIds.length > 1
+                ? `Đã gán ${nextIds.length} người thực hiện.`
+                : "Đã cập nhật PIC."
+            )
           }
-          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold max-w-[115px]"
-        >
-          <option value="">Chưa gán</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name}
-            </option>
-          ))}
-        </select>
+        />
       </td>
 
       {/* 11. Thao tác (Đã bỏ AI Check theo tối ưu) */}

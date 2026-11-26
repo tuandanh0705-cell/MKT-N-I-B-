@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
   ANONYMOUS_ALIASES,
-  CHAT_USER_SELECT,
+  CHAT_MESSAGE_INCLUDE,
   findOrCreateAnonymousDirectRoom,
   serializeChatMessage,
   serializeChatRoomForViewer,
@@ -64,9 +64,7 @@ export async function GET(
         where: { roomId: id, createdAt: { gt: afterDate } },
         orderBy: { createdAt: "asc" },
         take: 60,
-        include: {
-          sender: { select: CHAT_USER_SELECT },
-        },
+        include: CHAT_MESSAGE_INCLUDE,
       }),
       prisma.chatMessage.findMany({
         where: { roomId: id, isDeleted: true },
@@ -98,9 +96,7 @@ export async function GET(
       where: { roomId: id },
       orderBy: { createdAt: "desc" },
       take: 80,
-      include: {
-        sender: { select: CHAT_USER_SELECT },
-      },
+      include: CHAT_MESSAGE_INCLUDE,
     }),
     markRead
       ? prisma.chatParticipant.update({
@@ -259,9 +255,7 @@ export async function POST(
           anonymousAlias: resolvedAlias,
           attachmentUrl,
         },
-        include: {
-          sender: { select: CHAT_USER_SELECT },
-        },
+        include: CHAT_MESSAGE_INCLUDE,
       });
 
       await Promise.all([
@@ -322,6 +316,19 @@ export async function POST(
       );
     }
 
+    let validReplyToId: string | null = null;
+    let replyTargetSenderId: string | null = null;
+    if (body.replyToId) {
+      const targetMsg = await prisma.chatMessage.findFirst({
+        where: { id: String(body.replyToId), roomId: id },
+        select: { id: true, senderId: true },
+      });
+      if (targetMsg) {
+        validReplyToId = targetMsg.id;
+        replyTargetSenderId = targetMsg.senderId;
+      }
+    }
+
     // Các trường hợp còn lại: Group chat, 1-1 công khai, hoặc đang chat trực tiếp trong phòng ẩn danh 1-1
     const created = await prisma.chatMessage.create({
       data: {
@@ -331,10 +338,9 @@ export async function POST(
         isAnonymous: wantAnonymous,
         anonymousAlias: resolvedAlias,
         attachmentUrl,
+        replyToId: validReplyToId,
       },
-      include: {
-        sender: { select: CHAT_USER_SELECT },
-      },
+      include: CHAT_MESSAGE_INCLUDE,
     });
 
     await Promise.all([
@@ -382,26 +388,46 @@ export async function POST(
               linkUrl: `/chat?room=${id}`,
             });
           }
-        } else if (content.includes("@")) {
-          const lower = content.toLowerCase();
-          const mentioned = room.participants.filter(
-            (p) =>
-              p.userId !== user.id &&
-              lower.includes(`@${p.user.name.toLowerCase()}`)
-          );
-          await Promise.all(
-            mentioned.map((target) =>
-              createNotification({
-                userId: target.userId,
-                type: "CHAT_MESSAGE",
-                title: wantAnonymous
-                  ? `🕵️ ${resolvedAlias} đã nhắc đến bạn trong ${room.name || "nhóm chat"}`
-                  : `📢 ${user.name} đã @tag bạn trong ${room.name || "nhóm chat"}`,
-                message: previewText,
-                linkUrl: `/chat?room=${id}`,
-              })
-            )
-          );
+        } else {
+          const notifiedUserIds = new Set<string>();
+          if (content.includes("@")) {
+            const lower = content.toLowerCase();
+            const mentioned = room.participants.filter(
+              (p) =>
+                p.userId !== user.id &&
+                lower.includes(`@${p.user.name.toLowerCase()}`)
+            );
+            for (const target of mentioned) notifiedUserIds.add(target.userId);
+            await Promise.all(
+              mentioned.map((target) =>
+                createNotification({
+                  userId: target.userId,
+                  type: "CHAT_MESSAGE",
+                  title: wantAnonymous
+                    ? `🕵️ ${resolvedAlias} đã nhắc đến bạn trong ${room.name || "nhóm chat"}`
+                    : `📢 ${user.name} đã @tag bạn trong ${room.name || "nhóm chat"}`,
+                  message: previewText,
+                  linkUrl: `/chat?room=${id}`,
+                })
+              )
+            );
+          }
+
+          if (
+            replyTargetSenderId &&
+            replyTargetSenderId !== user.id &&
+            !notifiedUserIds.has(replyTargetSenderId)
+          ) {
+            await createNotification({
+              userId: replyTargetSenderId,
+              type: "CHAT_MESSAGE",
+              title: wantAnonymous
+                ? `🕵️ ${resolvedAlias} đã trả lời tin nhắn của bạn trong ${room.name || "nhóm chat"}`
+                : `↩️ ${user.name} đã trả lời tin nhắn của bạn trong ${room.name || "nhóm chat"}`,
+              message: previewText,
+              linkUrl: `/chat?room=${id}`,
+            });
+          }
         }
       } catch (bgErr) {
         console.error("Background chat notify error:", bgErr);

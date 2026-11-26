@@ -27,10 +27,19 @@ export async function getOutputsWorkspaceData(user: AuthUser) {
           ? {
               deletedAt: null,
               dailyKpiKey: null,
-              assigneeId: user.id,
+              OR: [
+                { assigneeId: user.id },
+                { assignees: { some: { userId: user.id } } },
+              ],
               status: { in: ["APPROVED_FINAL", "PUBLISHED", "DONE"] },
             }
-          : { deletedAt: null, assigneeId: user.id },
+          : {
+              deletedAt: null,
+              OR: [
+                { assigneeId: user.id },
+                { assignees: { some: { userId: user.id } } },
+              ],
+            },
       orderBy: [{ submittedAt: "desc" }, { updatedAt: "desc" }],
       include: TASK_WITH_RECENT_COMMENTS_INCLUDE,
     }),

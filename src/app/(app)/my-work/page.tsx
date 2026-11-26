@@ -40,11 +40,18 @@ export default async function MyWorkPage({
         ? {
             deletedAt: null,
             dailyKpiKey: null,
-            assigneeId: user.id,
+            OR: [
+              { assigneeId: user.id },
+              { assignees: { some: { userId: user.id } } },
+            ],
           }
         : {
             deletedAt: null,
-            OR: [{ assigneeId: user.id }, { requesterId: user.id }],
+            OR: [
+              { assigneeId: user.id },
+              { assignees: { some: { userId: user.id } } },
+              { requesterId: user.id },
+            ],
           },
       orderBy: [{ dueAt: "asc" }, { scheduledPublishAt: "asc" }, { createdAt: "desc" }],
       include: TASK_CARD_INCLUDE,

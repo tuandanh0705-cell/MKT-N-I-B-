@@ -180,6 +180,26 @@ function renderSvgByKind(kind: PlatformKind) {
           />
         </svg>
       );
+    case "OTHER":
+      return (
+        <svg viewBox="0 0 24 24" className="w-full h-full" aria-hidden="true">
+          <circle cx="12" cy="12" r="12" fill="#0D9488" />
+          <path
+            d="M7.5 12h9M12 7.5v9"
+            stroke="#FFFFFF"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          <circle
+            cx="12"
+            cy="12"
+            r="6.2"
+            fill="none"
+            stroke="#CCFBF1"
+            strokeWidth="1.4"
+          />
+        </svg>
+      );
     default:
       // Facebook / Fanpage official style f mark
       return (

@@ -10,8 +10,10 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { TASK_TYPE_META, DEFAULT_CONTENT_PILLARS } from "@/lib/constants";
+import { getProjectContentOptions } from "@/lib/content-plan";
 import { getPresetDateTimeLocal } from "@/lib/dates";
 import { useToast } from "@/components/toast-provider";
+import { MultiAssigneePicker } from "@/components/multi-assignee-picker";
 import { PlatformLogo } from "@/components/platform-logo";
 import { PublishChannelInput } from "@/components/publish-channel-input";
 import {
@@ -139,8 +141,8 @@ export function CreateTaskModal({
     useState<VideoOrderKind>(defaultVideoKind);
   const [platform, setPlatform] = useState("Fanpage");
   const [publishChannel, setPublishChannel] = useState("");
-  const [assigneeId, setAssigneeId] = useState(
-    !initialIsMedia ? defaultAssigneeId || "" : ""
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(() =>
+    !initialIsMedia && defaultAssigneeId ? [defaultAssigneeId] : []
   );
   const [quantity, setQuantity] = useState(1);
   const [mediaBriefItems, setMediaBriefItems] = useState<MediaBriefItem[]>(() => [
@@ -208,11 +210,16 @@ export function CreateTaskModal({
     };
   }, [refDate]);
 
-  const assigneeLeaveWarning = refDate
-    ? leavesOnDate.find((l) => l.userId === assigneeId)
-    : undefined;
+  const assigneeLeaveWarnings = leavesOnDate.filter((l) =>
+    assigneeIds.includes(l.userId)
+  );
 
-  const selectedCapacity = capacity.find((c) => c.userId === assigneeId);
+  const selectedCapacities = capacity.filter((c) =>
+    assigneeIds.includes(c.userId)
+  );
+  const projectPlatformOptions = getProjectContentOptions(
+    activeProject?.overviewJson
+  ).platforms;
   const isMediaOrder =
     orderMode === "MEDIA" ||
     (TASK_TYPE_META[taskType]?.isMediaOrderDefault ?? false);
@@ -288,13 +295,13 @@ export function CreateTaskModal({
       if (!dueAt || dueAt === getPresetDateTimeLocal(0, 17, 30)) {
         applyDueAt(getPresetDateTimeLocal(2, 17, 30));
       }
-      if (assigneeId && assigneeId === currentUserId) {
-        setAssigneeId("");
+      if (assigneeIds.length === 1 && assigneeIds[0] === currentUserId) {
+        setAssigneeIds([]);
       }
     } else if (taskType === "MEDIA_IMAGE" || taskType === "MEDIA_VIDEO") {
       setTaskType("CONTENT_SOCIAL");
-      if (!assigneeId && defaultAssigneeId) {
-        setAssigneeId(defaultAssigneeId);
+      if (assigneeIds.length === 0 && defaultAssigneeId) {
+        setAssigneeIds([defaultAssigneeId]);
       }
     }
   }
@@ -308,6 +315,10 @@ export function CreateTaskModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (assigneeIds.length === 0) {
+      setError("Vui lòng chọn ít nhất 1 người thực hiện.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -357,7 +368,8 @@ export function CreateTaskModal({
           taskType,
           platform: effectivePlatform,
           publishChannel: publishChannel.trim() || null,
-          assigneeId: assigneeId || null,
+          assigneeIds,
+          assigneeId: assigneeIds[0] || null,
           priority,
           quantity: effectiveQuantity,
           isMediaOrder,
@@ -565,8 +577,8 @@ export function CreateTaskModal({
 
           {orderMode === "MEDIA" ? (
             <CreateTaskMediaAssigneeRow
-              assigneeId={assigneeId}
-              onChangeAssigneeId={setAssigneeId}
+              assigneeIds={assigneeIds}
+              onChangeAssigneeIds={setAssigneeIds}
               users={users}
               isVideoBrief={isVideoBrief}
               dueAt={dueAt}
@@ -577,23 +589,14 @@ export function CreateTaskModal({
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
                 <div className="sm:col-span-6">
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Giao cho *
+                    Giao cho * (chọn 1 hoặc nhiều người)
                   </label>
-                  <select
-                    required
-                    value={assigneeId}
-                    onChange={(e) => setAssigneeId(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white focus:border-blue-500 focus:outline-none"
-                  >
-                    <option value="">-- Chọn người thực hiện --</option>
-                    {users
-                      .filter((u) => u.isActive !== false)
-                      .map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                  </select>
+                  <MultiAssigneePicker
+                    users={users}
+                    value={assigneeIds}
+                    onChange={setAssigneeIds}
+                    placeholder="-- Chọn người thực hiện --"
+                  />
                 </div>
 
                 <div className="sm:col-span-3">
@@ -606,16 +609,18 @@ export function CreateTaskModal({
                     onChange={(e) => setPlatform(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-sm bg-white focus:border-blue-500 focus:outline-none"
                   >
-                    <option value="Fanpage">Fanpage</option>
-                    <option value="TikTok">TikTok</option>
-                    <option value="WEB">WEB</option>
-                    <option value="Facebook">Facebook</option>
-                    <option value="Group">Group</option>
-                    <option value="Instagram">Instagram</option>
-                    <option value="YouTube">YouTube</option>
-                    <option value="Threads">Threads</option>
-                    <option value="Zalo">Zalo</option>
-                    <option value="Ads Manager">Ads Manager</option>
+                    {projectPlatformOptions.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                    {!projectPlatformOptions.includes("Ads Manager") && (
+                      <option value="Ads Manager">Ads Manager</option>
+                    )}
+                    {!projectPlatformOptions.includes(platform) &&
+                      platform !== "Ads Manager" && (
+                        <option value={platform}>{platform}</option>
+                      )}
                   </select>
                 </div>
 
@@ -646,31 +651,36 @@ export function CreateTaskModal({
             </>
           )}
 
-          {selectedCapacity && (
-            <div
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium flex items-center justify-between ${
-                selectedCapacity.status === "FULL"
-                  ? "bg-rose-50 text-rose-700"
-                  : selectedCapacity.status === "NEAR_LIMIT"
-                    ? "bg-amber-50 text-amber-800"
-                    : "bg-slate-100 text-slate-700"
-              }`}
-            >
-              <span>
-                Công suất {selectedCapacity.name} ({selectedCapacity.periodLabel}):{" "}
-                <strong>
-                  {selectedCapacity.limit
-                    ? `${selectedCapacity.used}/${selectedCapacity.limit} ${selectedCapacity.unit}`
-                    : `${selectedCapacity.activeTasksCount} việc đang mở`}
-                </strong>
-              </span>
-              <span className="font-bold">
-                {selectedCapacity.status === "FULL"
-                  ? "ĐẦY SLOT"
-                  : selectedCapacity.status === "NEAR_LIMIT"
-                    ? "SẮP ĐẦY"
-                    : "CÒN TRỐNG"}
-              </span>
+          {selectedCapacities.length > 0 && (
+            <div className="space-y-1.5">
+              {selectedCapacities.map((cap) => (
+                <div
+                  key={cap.userId}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium flex items-center justify-between ${
+                    cap.status === "FULL"
+                      ? "bg-rose-50 text-rose-700"
+                      : cap.status === "NEAR_LIMIT"
+                        ? "bg-amber-50 text-amber-800"
+                        : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  <span>
+                    Công suất {cap.name} ({cap.periodLabel}):{" "}
+                    <strong>
+                      {cap.limit
+                        ? `${cap.used}/${cap.limit} ${cap.unit}`
+                        : `${cap.activeTasksCount} việc đang mở`}
+                    </strong>
+                  </span>
+                  <span className="font-bold">
+                    {cap.status === "FULL"
+                      ? "ĐẦY SLOT"
+                      : cap.status === "NEAR_LIMIT"
+                        ? "SẮP ĐẦY"
+                        : "CÒN TRỐNG"}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
 
@@ -717,14 +727,21 @@ export function CreateTaskModal({
             </div>
           )}
 
-          {assigneeLeaveWarning && (
-            <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 flex items-center gap-2 text-xs text-rose-800 font-medium">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>
-                Lưu ý lịch nghỉ: {assigneeLeaveWarning.user.name} có lịch{" "}
-                <strong>{assigneeLeaveWarning.startDate} → {assigneeLeaveWarning.endDate}</strong>{" "}
-                ({assigneeLeaveWarning.reason || "Đã báo nghỉ/bận"}).
-              </span>
+          {assigneeLeaveWarnings.length > 0 && (
+            <div className="space-y-1.5">
+              {assigneeLeaveWarnings.map((lv) => (
+                <div
+                  key={lv.id}
+                  className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 flex items-center gap-2 text-xs text-rose-800 font-medium"
+                >
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>
+                    Lưu ý lịch nghỉ: {lv.user.name} có lịch{" "}
+                    <strong>{lv.startDate} → {lv.endDate}</strong>{" "}
+                    ({lv.reason || "Đã báo nghỉ/bận"}).
+                  </span>
+                </div>
+              ))}
             </div>
           )}
 

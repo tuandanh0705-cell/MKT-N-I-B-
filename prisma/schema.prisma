@@ -222,6 +222,7 @@ model User {
 
   projectMemberships     ProjectMember[]
   assignedTasks          Task[]                  @relation("TaskAssignee")
+  coAssignedTasks        TaskAssignee[]          @relation("TaskCoAssignees")
   requestedTasks         Task[]                  @relation("TaskRequester")
   reviewedTasks          Task[]                  @relation("TaskReviewer")
   deletedTasks           Task[]                  @relation("TaskDeleter")
@@ -237,6 +238,7 @@ model User {
   chatMemberships        ChatParticipant[]
   chatMessages           ChatMessage[]           @relation("ChatMessageSender")
   chatStickers           ChatSticker[]           @relation("UserChatStickers")
+  createdChatReminders   ChatReminder[]          @relation("ChatReminderCreator")
   pushSubscriptions      PushSubscription[]
   activityLogs           ActivityLog[]           @relation("ActivityActor")
   quotes                 MotivationalQuote[]     @relation("QuoteAuthor")
@@ -372,6 +374,7 @@ model Task {
   childTasks          Task[]  @relation("TaskParentChild")
 
   assets       AssetLink[]
+  assignees    TaskAssignee[]
   comments     TaskComment[]
   checkins     DailyCheckin[]
   activityLogs ActivityLog[]
@@ -382,6 +385,18 @@ model Task {
   @@index([assigneeId, plannedDate])
   @@index([status, dueAt])
   @@index([parentTaskId])
+}
+
+model TaskAssignee {
+  taskId     String
+  userId     String
+  assignedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation("TaskCoAssignees", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
 }
 
 model AssetLink {
@@ -518,6 +533,7 @@ model ChatRoom {
   createdBy    User              @relation("ChatRoomCreator", fields: [createdById], references: [id], onDelete: Cascade)
   participants ChatParticipant[]
   messages     ChatMessage[]
+  reminders    ChatReminder[]
 
   @@index([type, lastMessageAt])
   @@index([type, isAnonymousThread, lastMessageAt])
@@ -546,13 +562,39 @@ model ChatMessage {
   isAnonymous    Boolean  @default(false)
   anonymousAlias String?
   attachmentUrl  String?
+  replyToId      String?
+  forwardedFrom  String?
+  reminderJson   Json?
   isDeleted      Boolean  @default(false)
   createdAt      DateTime @default(now())
 
-  room   ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  sender User     @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  room    ChatRoom      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender  User          @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo ChatMessage?  @relation("ChatMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies ChatMessage[] @relation("ChatMessageReply")
 
   @@index([roomId, createdAt])
+  @@index([replyToId])
+}
+
+model ChatReminder {
+  id          String    @id @default(cuid())
+  roomId      String
+  createdById String
+  title       String
+  remindAt    DateTime
+  repeatRule  String    @default("NONE")
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+  notifiedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("ChatReminderCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([roomId, isCompleted, remindAt])
+  @@index([isCompleted, notifiedAt, remindAt])
 }
 
 model ChatSticker {
@@ -684,6 +726,7 @@ model WorkspaceResource {
   category    ResourceCategory @default(OTHER)
   title       String
   url         String
+  linksJson   Json?
   description String?
   tags        String?
   updatedById String?

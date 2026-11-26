@@ -48,11 +48,12 @@ export async function getAnonymizedTeamCapacity(
   const activeTasks = await prisma.task.findMany({
     where: {
       deletedAt: null,
-      assigneeId: { not: null },
+      OR: [{ assigneeId: { not: null } }, { assignees: { some: {} } }],
       status: { notIn: ["DRAFT"] },
     },
     select: {
       assigneeId: true,
+      assignees: { select: { userId: true } },
       taskType: true,
       quantity: true,
       status: true,
@@ -62,7 +63,11 @@ export async function getAnonymizedTeamCapacity(
   });
 
   return users.map((user) => {
-    const userTasks = activeTasks.filter((t) => t.assigneeId === user.id);
+    const userTasks = activeTasks.filter(
+      (t) =>
+        t.assigneeId === user.id ||
+        t.assignees.some((a) => a.userId === user.id)
+    );
     const openCount = userTasks.filter(
       (t) => t.status !== "DONE" && t.status !== "PUBLISHED"
     ).length;

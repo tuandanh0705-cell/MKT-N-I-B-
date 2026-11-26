@@ -18,6 +18,7 @@ import {
   normalizeMediaBriefItems,
 } from "@/lib/media-brief";
 import { canUserDeleteTask } from "@/lib/task-delete";
+import { formatTaskAssigneesLabel, getTaskAssignees } from "@/lib/task-assignees";
 import type { TaskItem } from "@/types/crm";
 import type { TaskStatus, UserRole } from "@/generated/prisma/client";
 
@@ -329,9 +330,9 @@ export function MediaBriefRow({
               {t.publishChannel}
             </span>
           )}
-          {t.assignee && (
+          {getTaskAssignees(t).length > 0 && (
             <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">
-              PIC: {t.assignee.name}
+              PIC: {formatTaskAssigneesLabel(t)}
             </span>
           )}
           {briefItems.map((it, itemIdx) => {

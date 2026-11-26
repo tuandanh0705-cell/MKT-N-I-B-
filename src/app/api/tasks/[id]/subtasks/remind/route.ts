@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { canAccessTask } from "@/lib/permissions";
 import { createNotification } from "@/lib/notifications";
 import { normalizeSubtasks } from "@/lib/subtasks";
+import { TASK_CARD_INCLUDE } from "@/lib/task-queries";
 import type { Prisma } from "@/generated/prisma/client";
 
 export async function POST(
@@ -28,6 +29,7 @@ export async function POST(
     where: { id },
     include: {
       project: { select: { id: true, slug: true, name: true } },
+      assignees: { select: { userId: true } },
     },
   });
   if (!task || task.deletedAt) {
@@ -46,6 +48,9 @@ export async function POST(
       targetIds.add(explicitRecipientId);
     } else {
       if (task.assigneeId && task.assigneeId !== user.id) targetIds.add(task.assigneeId);
+      for (const a of task.assignees) {
+        if (a.userId !== user.id) targetIds.add(a.userId);
+      }
       if (task.requesterId && task.requesterId !== user.id) targetIds.add(task.requesterId);
       if (targetIds.size === 0) {
         const leaders = await prisma.user.findMany({
@@ -96,25 +101,7 @@ export async function POST(
       data: {
         subtasksJson: nextSubtasks as unknown as Prisma.InputJsonValue,
       },
-      include: {
-        project: { select: { id: true, slug: true, name: true, color: true } },
-        assignee: {
-          select: {
-            id: true,
-            name: true,
-            title: true,
-            avatarColor: true,
-            pirateCharacter: true,
-            departmentScope: true,
-          },
-        },
-        requester: {
-          select: { id: true, name: true, title: true, avatarColor: true, pirateCharacter: true },
-        },
-        reviewer: { select: { id: true, name: true } },
-        assets: { orderBy: { createdAt: "desc" } },
-        _count: { select: { comments: true } },
-      },
+      include: TASK_CARD_INCLUDE,
     });
 
     return NextResponse.json({

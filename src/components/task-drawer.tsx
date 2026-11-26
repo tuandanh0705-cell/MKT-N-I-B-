@@ -27,6 +27,8 @@ import { MediaBriefItemsEditor } from "@/components/media-brief-items-editor";
 import { VideoScriptBriefViewer } from "@/components/video-script-brief-viewer";
 import { PirateAvatar } from "@/components/pirate-art";
 import { PlatformLogo } from "@/components/platform-logo";
+import { TaskAssigneesBadges } from "@/components/task-assignees-badges";
+import { getTaskAssigneeIds, getTaskAssignees } from "@/lib/task-assignees";
 import {
   TaskPriorityBadge,
   TaskStatusBadge,
@@ -258,6 +260,7 @@ function TaskDrawerInner({
           taskType: task.taskType,
           platform: task.platform,
           publishChannel: task.publishChannel || null,
+          assigneeIds: getTaskAssigneeIds(task),
           assigneeId: task.assignee?.id || null,
           priority: task.priority,
           quantity: task.quantity,
@@ -409,7 +412,9 @@ function TaskDrawerInner({
                 </button>
               </>
             )}
-            {task && currentUserRole === "LEADER" && task.assignee && (
+            {task &&
+              currentUserRole === "LEADER" &&
+              getTaskAssignees(task).length > 0 && (
               <button
                 type="button"
                 onClick={handleSendUrgentReminder}
@@ -873,22 +878,34 @@ function TaskDrawerInner({
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-amber-50/60 rounded-xl p-3.5 border border-amber-200/80 text-xs">
                     <div>
-                      <div className="text-slate-400 mb-1">Người thực hiện</div>
-                      {task.assignee ? (
-                        <div className="flex items-center gap-2 font-semibold text-slate-800">
-                          <PirateAvatar
-                            name={task.assignee.name}
-                            color={task.assignee.avatarColor}
-                            scope={task.assignee.departmentScope}
-                            pirateCharacter={task.assignee.pirateCharacter}
-                            size="sm"
-                          />
-                          <span className="truncate">{task.assignee.name}</span>
+                      <div className="text-slate-400 mb-1">
+                        Người thực hiện
+                        {getTaskAssignees(task).length > 1 && (
+                          <span className="ml-1 text-[10px] font-bold text-blue-700">
+                            ({getTaskAssignees(task).length})
+                          </span>
+                        )}
+                      </div>
+                      {getTaskAssignees(task).length > 1 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {getTaskAssignees(task).map((u) => (
+                            <div
+                              key={u.id}
+                              className="inline-flex items-center gap-1 rounded-full bg-white border border-amber-200/90 pl-0.5 pr-2 py-0.5 font-semibold text-slate-800 max-w-full"
+                            >
+                              <PirateAvatar
+                                name={u.name}
+                                color={u.avatarColor}
+                                scope={u.departmentScope}
+                                pirateCharacter={u.pirateCharacter}
+                                size="sm"
+                              />
+                              <span className="truncate text-[11px]">{u.name}</span>
+                            </div>
+                          ))}
                         </div>
                       ) : (
-                        <div className="font-semibold text-slate-500 italic">
-                          Chưa gán
-                        </div>
+                        <TaskAssigneesBadges task={task} size="sm" />
                       )}
                     </div>
                     <div>
