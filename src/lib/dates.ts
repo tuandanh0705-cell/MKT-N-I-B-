@@ -15,6 +15,26 @@ export function getVnDateString(date: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Trả về chuỗi HH:mm (24h) theo múi giờ Việt Nam (UTC+7). */
+export function getVnTimeString(
+  date: Date | string | null | undefined,
+  fallback = "09:00"
+): string {
+  if (!date) return fallback;
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return fallback;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: VN_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const rawHour = parts.find((p) => p.type === "hour")?.value ?? "09";
+  const hour = rawHour === "24" ? "00" : rawHour;
+  const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return `${hour}:${minute}`;
+}
+
 /** Trả về giờ (0-23), phút (0-59) và thứ trong tuần (0=CN..6=T7) theo giờ VN. */
 export function getVnClock(date: Date = new Date()) {
   const vnString = date.toLocaleString("en-US", { timeZone: VN_TZ });

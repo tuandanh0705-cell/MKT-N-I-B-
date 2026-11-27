@@ -18,7 +18,7 @@ import {
   getContentStatusDisplay,
   getPostFormatMeta,
 } from "@/lib/content-plan";
-import { getVnDateString } from "@/lib/dates";
+import { getVnDateString, getVnTimeString } from "@/lib/dates";
 import { getTaskAssigneeIds } from "@/lib/task-assignees";
 import type { SimpleUser, TaskItem } from "@/types/crm";
 import type { UserRole } from "@/generated/prisma/client";
@@ -105,6 +105,9 @@ export function ContentCalendarMobileCard({
 }) {
   const pubDateVal = t.scheduledPublishAt
     ? getVnDateString(new Date(t.scheduledPublishAt))
+    : "";
+  const pubTimeVal = t.scheduledPublishAt
+    ? getVnTimeString(t.scheduledPublishAt, "09:00")
     : "";
   const routeMeta = getContentRouteMeta(t.contentAngle);
   const formatVal = deriveDefaultFormat(t);
@@ -249,9 +252,9 @@ export function ContentCalendarMobileCard({
 
       {/* Quick inline Date & PIC */}
       <div className="grid grid-cols-2 gap-2 pt-1">
-        <div>
-          <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
-            Ngày đăng {!pubDateVal && <span className="text-amber-600">(Chưa xếp)</span>}
+        <div className="space-y-1">
+          <label className="block text-[10px] font-semibold text-slate-500">
+            Ngày &amp; Giờ đăng {!pubDateVal && <span className="text-amber-600">(Chưa xếp)</span>}
           </label>
           <input
             type="date"
@@ -262,7 +265,7 @@ export function ContentCalendarMobileCard({
                 t.id,
                 {
                   scheduledPublishAt: e.target.value
-                    ? `${e.target.value}T09:00:00+07:00`
+                    ? `${e.target.value}T${pubTimeVal || "09:00"}:00+07:00`
                     : null,
                 },
                 "Đã cập nhật ngày đăng."
@@ -271,6 +274,25 @@ export function ContentCalendarMobileCard({
             className={`w-full rounded-lg border px-2 py-1 text-xs bg-white ${
               !pubDateVal ? "border-amber-300 bg-amber-50/40" : "border-slate-200"
             }`}
+          />
+          <input
+            type="time"
+            aria-label={`Giờ đăng ${t.code}`}
+            value={pubTimeVal}
+            disabled={rowBusy}
+            onChange={(e) => {
+              const nextTime = e.target.value;
+              if (!nextTime) return;
+              const targetDate = pubDateVal || todayStr;
+              onPatchTaskInline(
+                t.id,
+                {
+                  scheduledPublishAt: `${targetDate}T${nextTime}:00+07:00`,
+                },
+                `Đã cập nhật giờ đăng ${nextTime}.`
+              );
+            }}
+            className="w-full rounded-lg border border-slate-200 bg-slate-50/80 px-2 py-0.5 text-[11px] font-semibold text-slate-700"
           />
         </div>
         <div>

@@ -5,6 +5,7 @@ import {
   Bot,
   Camera,
   Check,
+  Clock,
   ExternalLink,
   GripVertical,
   PenLine,
@@ -22,7 +23,7 @@ import {
   normalizeRouteSelectValue,
   type ProjectContentOptionKind,
 } from "@/lib/content-plan";
-import { getVnDateString } from "@/lib/dates";
+import { getVnDateString, getVnTimeString } from "@/lib/dates";
 import { normalizePlatformSelectValue } from "@/lib/platform-meta";
 import { getTaskAssigneeIds } from "@/lib/task-assignees";
 import type { GeminiQcCheckResponse } from "@/lib/gemini-shared";
@@ -110,6 +111,9 @@ export function ContentCalendarRow({
 
   const pubDateVal = t.scheduledPublishAt
     ? getVnDateString(new Date(t.scheduledPublishAt))
+    : "";
+  const pubTimeVal = t.scheduledPublishAt
+    ? getVnTimeString(t.scheduledPublishAt, "09:00")
     : "";
   const mediaDueVal = t.mediaDueAt ? getVnDateString(new Date(t.mediaDueAt)) : "";
   const contentDueVal = t.dueAt ? getVnDateString(new Date(t.dueAt)) : "";
@@ -228,29 +232,56 @@ export function ContentCalendarRow({
         </td>
       )}
 
-      {/* 1. Ngày đăng */}
+      {/* 1. Ngày đăng + Giờ đăng bên dưới */}
       <td className="py-2.5 px-2 whitespace-nowrap">
-        <input
-          type="date"
-          value={pubDateVal}
-          disabled={rowBusy}
-          onChange={(e) =>
-            onPatchTaskInline(
-              t.id,
-              {
-                scheduledPublishAt: e.target.value
-                  ? `${e.target.value}T09:00:00+07:00`
-                  : null,
-              },
-              "Đã cập nhật ngày đăng."
-            )
-          }
-          className={`rounded-lg border px-1.5 py-1 text-xs font-semibold ${
-            isToday
-              ? "border-amber-400 bg-amber-50 text-amber-900"
-              : "border-slate-200 bg-white text-slate-800"
-          }`}
-        />
+        <div className="space-y-1">
+          <input
+            type="date"
+            aria-label={`Ngày đăng ${t.code}`}
+            value={pubDateVal}
+            disabled={rowBusy}
+            onChange={(e) => {
+              const nextDate = e.target.value;
+              const keepTime = pubTimeVal || "09:00";
+              onPatchTaskInline(
+                t.id,
+                {
+                  scheduledPublishAt: nextDate
+                    ? `${nextDate}T${keepTime}:00+07:00`
+                    : null,
+                },
+                "Đã cập nhật ngày đăng."
+              );
+            }}
+            className={`w-full rounded-lg border px-1.5 py-1 text-xs font-semibold ${
+              isToday
+                ? "border-amber-400 bg-amber-50 text-amber-900"
+                : "border-slate-200 bg-white text-slate-800"
+            }`}
+          />
+          <div className="flex items-center gap-1">
+            <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+            <input
+              type="time"
+              aria-label={`Giờ đăng ${t.code}`}
+              value={pubTimeVal}
+              disabled={rowBusy}
+              onChange={(e) => {
+                const nextTime = e.target.value;
+                if (!nextTime) return;
+                const targetDate = pubDateVal || todayStr;
+                onPatchTaskInline(
+                  t.id,
+                  {
+                    scheduledPublishAt: `${targetDate}T${nextTime}:00+07:00`,
+                  },
+                  `Đã cập nhật giờ đăng ${nextTime}.`
+                );
+              }}
+              className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-white focus:bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-700"
+            />
+          </div>
+        </div>
       </td>
 
       {/* 2. Tuyến nội dung */}

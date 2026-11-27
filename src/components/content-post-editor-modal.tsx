@@ -35,7 +35,7 @@ import {
 } from "@/lib/content-plan";
 import { normalizePlatformSelectValue } from "@/lib/platform-meta";
 import { FB_POST_LAYOUTS, FB_POST_LAYOUT_GROUPS } from "@/lib/constants";
-import { getVnDateString } from "@/lib/dates";
+import { getVnDateString, getVnTimeString } from "@/lib/dates";
 import { useToast } from "@/components/toast-provider";
 import {
   parseSavedAiQcResult,
@@ -187,6 +187,11 @@ function ContentPostEditorInner({
     task?.scheduledPublishAt
       ? getVnDateString(new Date(task.scheduledPublishAt))
       : prefill?.publishDate || getVnDateString()
+  );
+  const [publishTime, setPublishTime] = useState(
+    task?.scheduledPublishAt
+      ? getVnTimeString(task.scheduledPublishAt, "09:00")
+      : "09:00"
   );
   const [mediaDueDate, setMediaDueDate] = useState(
     task?.mediaDueAt ? getVnDateString(new Date(task.mediaDueAt)) : ""
@@ -367,7 +372,7 @@ function ContentPostEditorInner({
     setSaving(true);
     try {
       const scheduledPublishAt = publishDate
-        ? `${publishDate}T09:00:00+07:00`
+        ? `${publishDate}T${publishTime || "09:00"}:00+07:00`
         : null;
       const mediaDueAt = mediaDueDate
         ? `${mediaDueDate}T17:00:00+07:00`
@@ -585,15 +590,22 @@ function ContentPostEditorInner({
           {/* Cột Trái: Thông tin bài + Khung viết bài */}
           <div className="lg:col-span-7 space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Ngày đăng
+              <div className="space-y-1">
+                <label className="block font-bold text-slate-700">
+                  Ngày &amp; Giờ đăng
                 </label>
                 <input
                   type="date"
                   value={publishDate}
                   onChange={(e) => setPublishDate(e.target.value)}
                   className="w-full rounded-xl border border-slate-200 px-2.5 py-1.5"
+                />
+                <input
+                  type="time"
+                  aria-label="Giờ đăng bài viết"
+                  value={publishTime}
+                  onChange={(e) => setPublishTime(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1 text-xs font-semibold text-slate-700"
                 />
               </div>
               <CustomizableOptionSelect

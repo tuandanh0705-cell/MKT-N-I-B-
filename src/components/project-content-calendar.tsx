@@ -88,6 +88,7 @@ export function ProjectContentCalendarPanel({
 
   const [quickOpen, setQuickOpen] = useState(false);
   const [qDate, setQDate] = useState(todayStr);
+  const [qTime, setQTime] = useState("09:00");
   const [qRoute, setQRoute] = useState(projectOptions.routes[0] || "");
   const [qTitle, setQTitle] = useState("");
   const [qPlatform, setQPlatform] = useState(
@@ -446,7 +447,9 @@ export function ProjectContentCalendarPanel({
           contentAngle: qRoute || null,
           postFormat: qFormat,
           assigneeId: qPicId || currentUserId,
-          scheduledPublishAt: qDate ? `${qDate}T09:00:00+07:00` : null,
+          scheduledPublishAt: qDate
+            ? `${qDate}T${qTime || "09:00"}:00+07:00`
+            : null,
           status: "DRAFT",
         }),
       });
@@ -558,12 +561,21 @@ export function ProjectContentCalendarPanel({
               className="w-full rounded-xl border border-sky-300 bg-white px-3 py-2 text-xs"
             />
             <div className="grid grid-cols-2 gap-2">
-              <input
-                type="date"
-                value={qDate}
-                onChange={(e) => setQDate(e.target.value)}
-                className="rounded-xl border border-sky-300 bg-white px-2.5 py-1.5 text-xs"
-              />
+              <div className="space-y-1">
+                <input
+                  type="date"
+                  value={qDate}
+                  onChange={(e) => setQDate(e.target.value)}
+                  className="w-full rounded-xl border border-sky-300 bg-white px-2.5 py-1.5 text-xs"
+                />
+                <input
+                  type="time"
+                  aria-label="Giờ đăng bài mới"
+                  value={qTime}
+                  onChange={(e) => setQTime(e.target.value)}
+                  className="w-full rounded-xl border border-sky-200 bg-white px-2.5 py-1 text-xs text-slate-700"
+                />
+              </div>
               <CustomizableOptionSelect
                 value={qRoute}
                 options={projectOptions.routes}
@@ -710,7 +722,7 @@ export function ProjectContentCalendarPanel({
                   </div>
                 </th>
               )}
-              <th className="py-3 px-2 whitespace-nowrap">Ngày đăng</th>
+              <th className="py-3 px-2 whitespace-nowrap">Ngày / Giờ đăng</th>
               <th className="py-3 px-2 whitespace-nowrap">Tuyến</th>
               <th className="py-3 px-2 min-w-[165px]">Nội dung</th>
               <th className="py-3 px-2 whitespace-nowrap">Nền tảng</th>
@@ -739,12 +751,21 @@ export function ProjectContentCalendarPanel({
                 </td>
                 {deleteMode && <td className="p-2 text-center text-slate-300">—</td>}
                 <td className="p-2">
-                  <input
-                    type="date"
-                    value={qDate}
-                    onChange={(e) => setQDate(e.target.value)}
-                    className="rounded-lg border border-sky-300 bg-white px-2 py-1 text-xs"
-                  />
+                  <div className="space-y-1">
+                    <input
+                      type="date"
+                      value={qDate}
+                      onChange={(e) => setQDate(e.target.value)}
+                      className="w-full rounded-lg border border-sky-300 bg-white px-2 py-1 text-xs"
+                    />
+                    <input
+                      type="time"
+                      aria-label="Giờ đăng dòng mới"
+                      value={qTime}
+                      onChange={(e) => setQTime(e.target.value)}
+                      className="w-full rounded-lg border border-sky-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700"
+                    />
+                  </div>
                 </td>
                 <td className="p-2">
                   <CustomizableOptionSelect
