@@ -157,6 +157,7 @@ export function CreateTaskModal({
     getPresetDateTimeLocal(initialIsMedia ? 2 : 0, 17, 30)
   );
   const [briefLinkUrl, setBriefLinkUrl] = useState("");
+  const [draftDemoImages, setDraftDemoImages] = useState<string[]>([]);
   const [description, setDescription] = useState("");
 
   // Tùy chọn mở rộng (thu gọn mặc định trừ khi mở từ ô Content Matrix)
@@ -390,6 +391,16 @@ export function CreateTaskModal({
           description: effectiveDescription,
           caption,
           briefLinkUrl,
+          initialAssets:
+            draftDemoImages.length > 0
+              ? draftDemoImages.map((url, idx) => ({
+                  kind: "DEMO",
+                  label: url.startsWith("data:image/")
+                    ? `Ảnh demo bài viết #${idx + 1}`
+                    : "Ảnh / Thành phẩm bài viết",
+                  url,
+                }))
+              : undefined,
           parentTaskId: defaultParentTaskId || null,
           mediaBriefItemsJson: isMediaOrder ? mediaBriefItems : undefined,
         }),
@@ -409,6 +420,7 @@ export function CreateTaskModal({
       setDescription("");
       setCaption("");
       setBriefLinkUrl("");
+      setDraftDemoImages([]);
       setQuantity(1);
       setMediaBriefItems([
         createEmptyMediaBriefItem(
@@ -816,6 +828,8 @@ export function CreateTaskModal({
             projectName={activeProject?.name}
             projectColor={activeProject?.color}
             briefLinkUrl={briefLinkUrl}
+            draftDemoImages={draftDemoImages}
+            onDemoImagesChange={setDraftDemoImages}
             title={title}
           />
 

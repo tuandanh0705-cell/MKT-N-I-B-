@@ -29,6 +29,7 @@ import {
   OUTPUT_CATEGORY_META,
   analyzeTaskOutputs,
   getAssetDomainLabel,
+  getTaskPreviewMediaUrls,
 } from "@/lib/output-helpers";
 import type {
   GeminiConfigInfo,
@@ -64,7 +65,8 @@ function SafeAssetImage({
   alt: string;
   href: string;
 }) {
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = failedSrc === src;
 
   if (failed) {
     return (
@@ -92,7 +94,7 @@ function SafeAssetImage({
       alt={alt}
       fill
       unoptimized
-      onError={() => setFailed(true)}
+      onError={() => setFailedSrc(src)}
       className="object-contain bg-slate-950/5"
     />
   );
@@ -118,7 +120,7 @@ export function OutputInspectorModal({
   if (!open || !task) return null;
   return (
     <OutputInspectorInner
-      key={`${task.id}-${task.status}-${task.assets.length}-${(task.caption || "").length}`}
+      key={task.id}
       task={task}
       currentUserId={currentUserId}
       currentUserRole={currentUserRole}
@@ -171,13 +173,17 @@ function OutputInspectorInner({
   const { showToast } = useToast();
   const analyzed = analyzeTaskOutputs(task);
   const categoryMeta = OUTPUT_CATEGORY_META[analyzed.category];
+  const previewMediaUrls = getTaskPreviewMediaUrls(task);
 
   const defaultTab: "CONTENT" | "MEDIA" | "FB_PREVIEW" =
-    analyzed.imagePreviews.length > 0 ||
-    analyzed.category === "IMAGE" ||
-    analyzed.category === "VIDEO"
-      ? "MEDIA"
-      : "CONTENT";
+    analyzed.category === "CONTENT" &&
+    (analyzed.hasCaption || previewMediaUrls.length > 0)
+      ? "FB_PREVIEW"
+      : analyzed.imagePreviews.length > 0 ||
+          analyzed.category === "IMAGE" ||
+          analyzed.category === "VIDEO"
+        ? "MEDIA"
+        : "CONTENT";
 
   const [tab, setTab] = useState<"CONTENT" | "MEDIA" | "FB_PREVIEW">(defaultTab);
   const [selectedPreviewIdx, setSelectedPreviewIdx] = useState(0);
@@ -186,6 +192,58 @@ function OutputInspectorInner({
 
   const activePreview =
     analyzed.imagePreviews[selectedPreviewIdx] ?? analyzed.imagePreviews[0] ?? null;
+
+  async function handleSyncPreviewLayout(nextLayout: string) {
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fbPostLayout: nextLayout }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Không lưu được bố cục xem trước.", "error");
+        return;
+      }
+      if (data.task) {
+        onUpdated(data.task as TaskItem);
+      }
+      showToast("Đã đồng bộ bố cục bài đăng.");
+    } catch {
+      showToast("Lỗi kết nối khi cập nhật bố cục.", "error");
+    }
+  }
+
+  async function handlePersistPreviewImages(urls: string[]) {
+    const cleaned = urls.map((u) => u.trim()).filter(Boolean);
+    if (cleaned.length === 0) return;
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newAssets: cleaned.map((url, idx) => ({
+            kind: "DEMO",
+            label: url.startsWith("data:image/")
+              ? `Ảnh demo bài viết #${idx + 1}`
+              : "Ảnh / Thành phẩm bài viết",
+            url,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Không lưu được ảnh demo.", "error");
+        return;
+      }
+      if (data.task) {
+        onUpdated(data.task as TaskItem);
+      }
+      showToast(`Đã lưu & đồng bộ ${cleaned.length} ảnh vào bài viết.`);
+    } catch {
+      showToast("Lỗi kết nối khi lưu ảnh demo.", "error");
+    }
+  }
 
   async function handleCopyCaption() {
     const text = (task.caption || "").trim();
@@ -586,15 +644,19 @@ function OutputInspectorInner({
 
             {tab === "FB_PREVIEW" && (
               <FacebookPostPreview
-                pageName={task.publishChannel || task.project.name}
+                pageName={task.publishChannel?.trim() || task.project.name}
                 pageColor={task.project.color}
                 platform={task.platform}
                 postFormat={task.postFormat}
                 description={task.description}
                 caption={task.caption || ""}
                 layout={task.fbPostLayout || "SINGLE_SQUARE"}
-                mediaUrl={analyzed.deliverableAssets[0]?.url || null}
-                mediaUrls={analyzed.deliverableAssets.map((a) => a.url)}
+                onChangeLayout={(nextLayout) => {
+                  void handleSyncPreviewLayout(nextLayout);
+                }}
+                onPersistNewImages={handlePersistPreviewImages}
+                mediaUrl={previewMediaUrls[0] || null}
+                mediaUrls={previewMediaUrls}
                 title={task.title}
               />
             )}

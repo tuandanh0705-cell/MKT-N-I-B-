@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { GripVertical } from "lucide-react";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { ContentCalendarMobileCard } from "@/components/content-calendar-mobile-card";
 import { ContentCalendarRow } from "@/components/content-calendar-row";
@@ -40,6 +41,7 @@ export function ProjectContentCalendarPanel({
   onTaskUpdated,
   onTaskDeleted,
   onTasksAdded,
+  onTasksReordered,
   onRequestMediaOrder,
   onAddProjectOption,
   onOpenOptionsModal,
@@ -55,6 +57,7 @@ export function ProjectContentCalendarPanel({
   onTaskUpdated: (updated: TaskItem) => void;
   onTaskDeleted?: (taskId: string) => void;
   onTasksAdded: (added: TaskItem[]) => void;
+  onTasksReordered?: (orderMap: Record<string, number>) => void;
   onRequestMediaOrder: (sourceTask: TaskItem) => void;
   onAddProjectOption?: (
     kind: ProjectContentOptionKind,
@@ -99,6 +102,14 @@ export function ProjectContentCalendarPanel({
   const [importing, setImporting] = useState(false);
 
   const [inspectTaskId, setInspectTaskId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    id: string;
+    position: "BEFORE" | "AFTER";
+  } | null>(null);
+  const [localOrderMap, setLocalOrderMap] = useState<Record<string, number> | null>(
+    null
+  );
 
   const {
     aiCheckingTaskId,
@@ -132,17 +143,100 @@ export function ProjectContentCalendarPanel({
           t.taskType !== "ADS_CAMPAIGN" &&
           t.taskType !== "WEB_SEO")
     );
+    // Không tự động sắp xếp theo ngày/tên: tôn trọng thứ tự kéo thả thủ công (sortOrder ASC),
+    // mọi dòng mới thêm luôn lên trên cùng (sortOrder nhỏ hơn / createdAt mới nhất).
     return [...base].sort((a, b) => {
-      const da = a.scheduledPublishAt
-        ? new Date(a.scheduledPublishAt).getTime()
-        : Number.MAX_SAFE_INTEGER;
-      const db = b.scheduledPublishAt
-        ? new Date(b.scheduledPublishAt).getTime()
-        : Number.MAX_SAFE_INTEGER;
-      if (da !== db) return da - db;
+      const aOrder =
+        localOrderMap && Object.prototype.hasOwnProperty.call(localOrderMap, a.id)
+          ? localOrderMap[a.id]
+          : a.sortOrder;
+      const bOrder =
+        localOrderMap && Object.prototype.hasOwnProperty.call(localOrderMap, b.id)
+          ? localOrderMap[b.id]
+          : b.sortOrder;
+      const aHas = typeof aOrder === "number";
+      const bHas = typeof bOrder === "number";
+      if (aHas && bHas) {
+        if (aOrder !== bOrder) return aOrder - bOrder;
+      } else if (aHas !== bHas) {
+        return aHas ? -1 : 1;
+      }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [tasks]);
+  }, [tasks, localOrderMap]);
+
+  async function commitReorder(nextOrderedIds: string[]) {
+    const prevOrderMap: Record<string, number> = {};
+    contentPosts.forEach((t, idx) => {
+      prevOrderMap[t.id] = idx;
+    });
+    const nextOrderMap: Record<string, number> = {};
+    nextOrderedIds.forEach((id, idx) => {
+      nextOrderMap[id] = idx;
+    });
+
+    if (onTasksReordered) {
+      onTasksReordered(nextOrderMap);
+      setLocalOrderMap(null);
+    } else {
+      setLocalOrderMap(nextOrderMap);
+    }
+
+    try {
+      const res = await fetch("/api/tasks/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          orderedIds: nextOrderedIds,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (onTasksReordered) {
+          onTasksReordered(prevOrderMap);
+        } else {
+          setLocalOrderMap(prevOrderMap);
+        }
+        showToast(data.error || "Không lưu được thứ tự sắp xếp.", "error");
+        return;
+      }
+      showToast("Đã lưu thứ tự sắp xếp dòng.");
+    } catch {
+      if (onTasksReordered) {
+        onTasksReordered(prevOrderMap);
+      } else {
+        setLocalOrderMap(prevOrderMap);
+      }
+      showToast("Lỗi kết nối khi lưu thứ tự sắp xếp.", "error");
+    }
+  }
+
+  function handleReorderDrop(
+    draggedId: string,
+    targetId: string,
+    position: "BEFORE" | "AFTER"
+  ) {
+    setDraggingId(null);
+    setDropTarget(null);
+    if (!draggedId || !targetId || draggedId === targetId) return;
+
+    const currentIds = contentPosts.map((t) => t.id);
+    const fromIdx = currentIds.indexOf(draggedId);
+    if (fromIdx < 0) return;
+
+    const withoutDragged = currentIds.filter((id) => id !== draggedId);
+    const targetIdx = withoutDragged.indexOf(targetId);
+    if (targetIdx < 0) return;
+
+    const insertIdx = position === "BEFORE" ? targetIdx : targetIdx + 1;
+    withoutDragged.splice(insertIdx, 0, draggedId);
+
+    const unchanged = withoutDragged.every((id, i) => id === currentIds[i]);
+    if (unchanged) return;
+
+    void commitReorder(withoutDragged);
+  }
 
   const availableMonths = useMemo(() => {
     const set = new Set<string>();
@@ -259,6 +353,21 @@ export function ProjectContentCalendarPanel({
         .map((t) => t.id),
     [filteredPosts, currentUserRole, currentUserId]
   );
+
+  function handleMoveFilteredRelative(taskId: string, direction: "UP" | "DOWN") {
+    const visibleIdx = filteredPosts.findIndex((t) => t.id === taskId);
+    if (visibleIdx < 0) return;
+    const neighbor =
+      direction === "UP"
+        ? filteredPosts[visibleIdx - 1]
+        : filteredPosts[visibleIdx + 1];
+    if (!neighbor) return;
+    handleReorderDrop(
+      taskId,
+      neighbor.id,
+      direction === "UP" ? "BEFORE" : "AFTER"
+    );
+  }
 
   function toggleSelectDelete(taskId: string) {
     setSelectedDeleteIds((prev) =>
@@ -530,7 +639,7 @@ export function ProjectContentCalendarPanel({
             <strong>&ldquo;Thêm dòng&rdquo;</strong> để bắt đầu ngay!
           </div>
         ) : (
-          filteredPosts.map((t) => (
+          filteredPosts.map((t, idx) => (
             <ContentCalendarMobileCard
               key={t.id}
               task={t}
@@ -544,6 +653,10 @@ export function ProjectContentCalendarPanel({
               deletable={canUserDeleteTask(t, currentUserId, currentUserRole)}
               deleting={deleting}
               isSelectedForDelete={selectedDeleteIds.includes(t.id)}
+              canMoveUp={idx > 0}
+              canMoveDown={idx < filteredPosts.length - 1}
+              onMoveUp={() => handleMoveFilteredRelative(t.id, "UP")}
+              onMoveDown={() => handleMoveFilteredRelative(t.id, "DOWN")}
               onToggleSelectDelete={toggleSelectDelete}
               onRequestDeleteSingle={(id) => setDeleteConfirmIds([id])}
               onPatchTaskInline={patchTaskInline}
@@ -567,6 +680,12 @@ export function ProjectContentCalendarPanel({
         <table className="w-full text-left border-collapse text-xs min-w-[1040px]">
           <thead>
             <tr className="bg-[#38761d] text-white uppercase text-[11px] font-extrabold">
+              <th
+                className="py-3 px-1 w-9 text-center"
+                title="Di chuột vào đầu dòng (hiện biểu tượng bàn tay) rồi kéo lên xuống để sắp xếp"
+              >
+                <GripVertical className="w-3.5 h-3.5 mx-auto opacity-75" />
+              </th>
               {deleteMode && (
                 <th className="py-3 px-2 whitespace-nowrap bg-rose-700 text-center w-20">
                   <div className="inline-flex items-center gap-1.5">
@@ -612,9 +731,12 @@ export function ProjectContentCalendarPanel({
           </thead>
 
           <tbody className="divide-y divide-slate-200">
-            {/* Dòng thêm bài nhanh inline */}
+            {/* Dòng thêm bài nhanh inline (luôn thêm lên trên cùng) */}
             {quickOpen && (
               <tr className="bg-sky-50/70">
+                <td className="p-2 text-center text-sky-400">
+                  <GripVertical className="w-3.5 h-3.5 mx-auto opacity-50" />
+                </td>
                 {deleteMode && <td className="p-2 text-center text-slate-300">—</td>}
                 <td className="p-2">
                   <input
@@ -643,6 +765,7 @@ export function ProjectContentCalendarPanel({
                 <td className="p-2">
                   <input
                     type="text"
+                    autoFocus
                     value={qTitle}
                     onChange={(e) => setQTitle(e.target.value)}
                     onKeyDown={(e) => {
@@ -726,7 +849,7 @@ export function ProjectContentCalendarPanel({
             {filteredPosts.length === 0 ? (
               <tr>
                 <td
-                  colSpan={deleteMode ? 12 : 11}
+                  colSpan={deleteMode ? 13 : 12}
                   className="py-12 text-center text-slate-400"
                 >
                   Chưa có bài viết nào trong bộ lọc này — bấm{" "}
@@ -758,6 +881,37 @@ export function ProjectContentCalendarPanel({
                   deleting={deleting}
                   isSelectedForDelete={selectedDeleteIds.includes(t.id)}
                   savedAiResult={getAiResultForTask(t)}
+                  isDragging={draggingId === t.id}
+                  dropIndicator={
+                    dropTarget?.id === t.id && draggingId !== t.id
+                      ? dropTarget.position
+                      : null
+                  }
+                  onRowDragStart={(id) => {
+                    setDraggingId(id);
+                    setDropTarget(null);
+                  }}
+                  onRowDragOver={(targetId, pos) => {
+                    if (!draggingId || draggingId === targetId) {
+                      setDropTarget(null);
+                      return;
+                    }
+                    setDropTarget((prev) =>
+                      prev?.id === targetId && prev.position === pos
+                        ? prev
+                        : { id: targetId, position: pos }
+                    );
+                  }}
+                  onRowDrop={(transferredId, targetId, pos) => {
+                    const sourceId = transferredId || draggingId;
+                    if (sourceId) {
+                      handleReorderDrop(sourceId, targetId, pos);
+                    }
+                  }}
+                  onRowDragEnd={() => {
+                    setDraggingId(null);
+                    setDropTarget(null);
+                  }}
                   onToggleSelectDelete={toggleSelectDelete}
                   onRequestDeleteSingle={(id) => setDeleteConfirmIds([id])}
                   onPatchTaskInline={patchTaskInline}

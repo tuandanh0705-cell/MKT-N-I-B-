@@ -13,7 +13,7 @@ import { normalizeSubtasks } from "@/lib/subtasks";
 import { normalizeMediaBriefItems } from "@/lib/media-brief";
 import { TASK_CARD_INCLUDE } from "@/lib/task-queries";
 import { parseAssigneeIdsFromBody } from "@/lib/task-assignees";
-import type { Prisma, TaskPriority, TaskStatus, TaskType } from "@/generated/prisma/client";
+import type { AssetKind, Prisma, TaskPriority, TaskStatus, TaskType } from "@/generated/prisma/client";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -146,6 +146,75 @@ export async function POST(request: Request) {
       }
     }
     const briefLinkUrl = body.briefLinkUrl ? String(body.briefLinkUrl).trim() : "";
+    const validAssetKinds = new Set<AssetKind>([
+      "BRIEF_REF",
+      "DEMO",
+      "FINAL",
+      "PUBLISHED_LINK",
+    ]);
+    const requestedBriefKind = validAssetKinds.has(body.briefLinkKind as AssetKind)
+      ? (body.briefLinkKind as AssetKind)
+      : "BRIEF_REF";
+
+    const initialAssetsToCreate: Array<{
+      kind: AssetKind;
+      label: string;
+      url: string;
+      version: number;
+      createdById: string;
+    }> = [];
+    const seenInitialUrls = new Set<string>();
+    const kindCounters = new Map<AssetKind, number>();
+
+    const pushInitialAsset = (
+      rawUrl: string,
+      kind: AssetKind,
+      rawLabel?: string
+    ) => {
+      const cleanedUrl = rawUrl.trim();
+      if (!cleanedUrl || seenInitialUrls.has(cleanedUrl)) return;
+      if (cleanedUrl.startsWith("data:image/") && cleanedUrl.length > 650_000) {
+        return;
+      }
+      seenInitialUrls.add(cleanedUrl);
+      const nextVer = (kindCounters.get(kind) ?? 0) + 1;
+      kindCounters.set(kind, nextVer);
+      initialAssetsToCreate.push({
+        kind,
+        label:
+          rawLabel?.trim() ||
+          (kind === "DEMO"
+            ? "Ảnh / Thành phẩm bài viết"
+            : kind === "FINAL"
+              ? `Link Final v${nextVer}`
+              : kind === "PUBLISHED_LINK"
+                ? "Link bài đã đăng"
+                : "Brief & Tư liệu đính kèm"),
+        url: cleanedUrl,
+        version: nextVer,
+        createdById: user.id,
+      });
+    };
+
+    if (Array.isArray(body.initialAssets)) {
+      for (const item of body.initialAssets.slice(0, 10)) {
+        if (!item || typeof item !== "object") continue;
+        const obj = item as { kind?: unknown; label?: unknown; url?: unknown };
+        const url = typeof obj.url === "string" ? obj.url : "";
+        const kind = validAssetKinds.has(obj.kind as AssetKind)
+          ? (obj.kind as AssetKind)
+          : "DEMO";
+        const label = typeof obj.label === "string" ? obj.label : undefined;
+        pushInitialAsset(url, kind, label);
+      }
+    }
+    if (briefLinkUrl) {
+      pushInitialAsset(
+        briefLinkUrl,
+        requestedBriefKind,
+        body.briefLinkLabel ? String(body.briefLinkLabel) : undefined
+      );
+    }
     const mediaDueAt = body.mediaDueAt ? new Date(body.mediaDueAt) : null;
     const productLink = body.productLink ? String(body.productLink).trim() : null;
     const postFormat = body.postFormat ? String(body.postFormat).trim() : null;
@@ -165,10 +234,17 @@ export async function POST(request: Request) {
         ? normalizedMediaBriefItems.length
         : Math.max(1, Number(body.quantity || 1));
 
+    const minSortAgg = await prisma.task.aggregate({
+      where: { projectId, deletedAt: null },
+      _min: { sortOrder: true },
+    });
+    const nextTopSortOrder = (minSortAgg._min.sortOrder ?? 0) - 1;
+
     const created = await prisma.task.create({
       data: {
         code,
         title,
+        sortOrder: nextTopSortOrder,
         description: body.description ? String(body.description) : null,
         caption: body.caption ? String(body.caption) : null,
         platform: body.platform ? String(body.platform) : "Fanpage",
@@ -215,19 +291,12 @@ export async function POST(request: Request) {
               }
             : undefined,
         parentTaskId,
-        assets: briefLinkUrl
-          ? {
-              create: {
-                kind: "BRIEF_REF",
-                label: body.briefLinkLabel
-                  ? String(body.briefLinkLabel)
-                  : "Brief & Tư liệu đính kèm",
-                url: briefLinkUrl,
-                version: 1,
-                createdById: user.id,
-              },
-            }
-          : undefined,
+        assets:
+          initialAssetsToCreate.length > 0
+            ? {
+                create: initialAssetsToCreate,
+              }
+            : undefined,
       },
       include: TASK_CARD_INCLUDE,
     });

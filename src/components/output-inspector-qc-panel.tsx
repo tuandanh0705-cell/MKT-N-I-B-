@@ -8,6 +8,7 @@ import {
   Link2,
   Plus,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { GeminiQcPanel } from "@/components/gemini-qc-panel";
 import { TaskFeedbackChat } from "@/components/task-feedback-chat";
@@ -239,35 +240,64 @@ export function OutputInspectorQcPanel({
                     : asset.kind === "DEMO"
                       ? "bg-sky-50 text-sky-700 border-sky-200"
                       : "bg-slate-100 text-slate-700 border-slate-200";
+              const isDataImage = /^data:image\//i.test(asset.url);
               return (
                 <div
                   key={asset.id}
                   className="rounded-xl border border-slate-200 bg-white p-2.5 flex items-center justify-between gap-2"
                 >
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span
-                        className={`rounded-md border px-1.5 py-0.5 text-[10px] font-extrabold ${kindBadge}`}
-                      >
-                        {ASSET_KIND_LABEL[asset.kind] || asset.kind}
-                      </span>
-                      <span className="text-[11px] font-bold text-slate-500">
-                        v{asset.version} • {getAssetDomainLabel(asset.url)}
-                      </span>
-                    </div>
-                    <div className="text-xs font-bold text-slate-800 truncate">
-                      {asset.label}
+                  <div className="min-w-0 flex-1 flex items-center gap-2.5">
+                    {isDataImage && (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={asset.url}
+                        alt={asset.label}
+                        className="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0"
+                      />
+                    )}
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`rounded-md border px-1.5 py-0.5 text-[10px] font-extrabold ${kindBadge}`}
+                        >
+                          {ASSET_KIND_LABEL[asset.kind] || asset.kind}
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-500">
+                          v{asset.version} • {getAssetDomainLabel(asset.url)}
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-slate-800 truncate">
+                        {asset.label}
+                      </div>
                     </div>
                   </div>
-                  <a
-                    href={asset.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1.5 text-[11px] font-bold inline-flex items-center gap-1"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Mở
-                  </a>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {!isDataImage && (
+                      <a
+                        href={asset.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1.5 text-[11px] font-bold inline-flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Mở
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      disabled={acting}
+                      onClick={() =>
+                        void patchTask(
+                          { deleteAssetId: asset.id },
+                          "Đã gỡ ảnh / link Output."
+                        )
+                      }
+                      title="Gỡ ảnh / link này"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               );
             })}

@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  ArrowDown,
+  ArrowUp,
   Camera,
   Check,
   ExternalLink,
@@ -62,6 +64,10 @@ export function ContentCalendarMobileCard({
   deletable,
   deleting,
   isSelectedForDelete,
+  canMoveUp = false,
+  canMoveDown = false,
+  onMoveUp,
+  onMoveDown,
   onToggleSelectDelete,
   onRequestDeleteSingle,
   onPatchTaskInline,
@@ -81,6 +87,10 @@ export function ContentCalendarMobileCard({
   deletable: boolean;
   deleting: boolean;
   isSelectedForDelete: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   onToggleSelectDelete: (taskId: string) => void;
   onRequestDeleteSingle: (taskId: string) => void;
   onPatchTaskInline: (
@@ -151,11 +161,37 @@ export function ContentCalendarMobileCard({
           )}
         </div>
 
-        <span
-          className={`rounded-full border px-2 py-0.5 text-[10px] font-bold shrink-0 ${statusMeta.badgeClass}`}
-        >
-          {statusMeta.label}
-        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {(onMoveUp || onMoveDown) && (
+            <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+              <button
+                type="button"
+                disabled={!canMoveUp || rowBusy}
+                onClick={onMoveUp}
+                aria-label="Đưa dòng lên trên"
+                title="Đưa lên trên"
+                className="p-1 text-slate-600 hover:bg-white disabled:opacity-30 cursor-pointer"
+              >
+                <ArrowUp className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                disabled={!canMoveDown || rowBusy}
+                onClick={onMoveDown}
+                aria-label="Đưa dòng xuống dưới"
+                title="Đưa xuống dưới"
+                className="p-1 text-slate-600 hover:bg-white border-l border-slate-200 disabled:opacity-30 cursor-pointer"
+              >
+                <ArrowDown className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+          <span
+            className={`rounded-full border px-2 py-0.5 text-[10px] font-bold shrink-0 ${statusMeta.badgeClass}`}
+          >
+            {statusMeta.label}
+          </span>
+        </div>
       </div>
 
       {/* Title & caption snippet */}

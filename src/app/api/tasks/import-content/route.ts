@@ -53,10 +53,16 @@ export async function POST(request: Request) {
 
     const prefix = getProjectCodePrefix(project.slug);
     let countInProject = await prisma.task.count({ where: { projectId } });
-    const rows = rawRows.slice(0, 60);
+    const rows = rawRows.slice(0, 60).filter((r) => String(r.title ?? "").trim());
+    const minSortAgg = await prisma.task.aggregate({
+      where: { projectId, deletedAt: null },
+      _min: { sortOrder: true },
+    });
+    const baseSortOrder = (minSortAgg._min.sortOrder ?? 0) - rows.length;
 
     const createdTasks = [];
-    for (const row of rows) {
+    for (let idx = 0; idx < rows.length; idx += 1) {
+      const row = rows[idx];
       const title = String(row.title ?? "").trim();
       if (!title) continue;
       countInProject += 1;
@@ -71,6 +77,7 @@ export async function POST(request: Request) {
         data: {
           code,
           title,
+          sortOrder: baseSortOrder + idx,
           caption: row.caption ? String(row.caption) : null,
           platform: row.platform ? String(row.platform) : "Facebook",
           publishChannel: row.publishChannel

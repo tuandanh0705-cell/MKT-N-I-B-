@@ -151,6 +151,7 @@ export interface TaskItem {
   externalDepartment?: string | null;
   externalContact?: string | null;
   dailyKpiKey?: string | null;
+  sortOrder?: number | null;
   parentTaskId?: string | null;
   parentTask?: {
     id: string;

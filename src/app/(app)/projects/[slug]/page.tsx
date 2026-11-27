@@ -72,7 +72,7 @@ export default async function ProjectDetailPage({
     await Promise.all([
       prisma.task.findMany({
         where: buildTaskVisibilityWhere(user, project.id),
-        orderBy: [{ scheduledPublishAt: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
         include: TASK_CARD_INCLUDE,
       }),
       prisma.project.findMany({

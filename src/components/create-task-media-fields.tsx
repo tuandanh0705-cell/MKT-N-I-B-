@@ -354,6 +354,8 @@ interface CreateTaskAdvancedSectionProps {
   projectName?: string;
   projectColor?: string;
   briefLinkUrl: string;
+  draftDemoImages?: string[];
+  onDemoImagesChange?: (urls: string[]) => void;
   title: string;
 }
 
@@ -383,6 +385,8 @@ export function CreateTaskAdvancedSection({
   projectName,
   projectColor,
   briefLinkUrl,
+  draftDemoImages,
+  onDemoImagesChange,
   title,
 }: CreateTaskAdvancedSectionProps) {
   return (
@@ -547,6 +551,8 @@ export function CreateTaskAdvancedSection({
               layout={fbPostLayout}
               onChangeLayout={onChangeFbPostLayout}
               hideLayoutSelector
+              draftDemoImages={draftDemoImages}
+              onDemoImagesChange={onDemoImagesChange}
               mediaUrl={briefLinkUrl}
               mediaUrls={briefLinkUrl ? [briefLinkUrl] : []}
               title={title}

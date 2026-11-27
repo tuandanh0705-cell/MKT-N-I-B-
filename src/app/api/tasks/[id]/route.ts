@@ -95,33 +95,86 @@ export async function PATCH(
       });
     }
 
-    // 1. Thêm link Google Drive / Canva / Link bài đăng mới (tự tăng version v1, v2, v3)
+    // 1. Thêm 1 hoặc nhiều link/ảnh Google Drive / Canva / ảnh Demo mới (tự tăng version v1, v2, v3)
+    const incomingAssets: Array<{
+      kind?: AssetKind;
+      label?: string;
+      url: string;
+    }> = [];
     if (body.newAsset && body.newAsset.url) {
-      const kind = (body.newAsset.kind as AssetKind) || "DEMO";
-      const url = String(body.newAsset.url).trim();
-      const existingSameKind = await prisma.assetLink.count({
-        where: { taskId: id, kind },
+      incomingAssets.push({
+        kind: (body.newAsset.kind as AssetKind) || "DEMO",
+        label: body.newAsset.label ? String(body.newAsset.label) : undefined,
+        url: String(body.newAsset.url),
       });
-      const version = existingSameKind + 1;
-      const defaultLabel =
-        kind === "DEMO"
-          ? `Link Demo v${version}`
-          : kind === "FINAL"
-            ? `Link Final v${version}`
-            : kind === "PUBLISHED_LINK"
-              ? "Link bài đã đăng"
-              : "Brief / Tư liệu";
+    }
+    if (Array.isArray(body.newAssets)) {
+      for (const item of body.newAssets.slice(0, 10)) {
+        if (!item || typeof item !== "object") continue;
+        const obj = item as { kind?: unknown; label?: unknown; url?: unknown };
+        if (typeof obj.url === "string" && obj.url.trim()) {
+          incomingAssets.push({
+            kind: (obj.kind as AssetKind) || "DEMO",
+            label: typeof obj.label === "string" ? obj.label : undefined,
+            url: obj.url,
+          });
+        }
+      }
+    }
 
-      await prisma.assetLink.create({
-        data: {
-          taskId: id,
-          kind,
-          label: body.newAsset.label ? String(body.newAsset.label).trim() : defaultLabel,
-          url,
-          version,
-          createdById: user.id,
-        },
+    let addedAssetsCount = 0;
+    if (incomingAssets.length > 0) {
+      const validKinds = new Set<AssetKind>([
+        "BRIEF_REF",
+        "DEMO",
+        "FINAL",
+        "PUBLISHED_LINK",
+      ]);
+      const existingAssets = await prisma.assetLink.findMany({
+        where: { taskId: id },
+        select: { url: true, kind: true },
       });
+      const existingUrls = new Set(existingAssets.map((a) => a.url.trim()));
+      const kindCounts = new Map<AssetKind, number>();
+      for (const a of existingAssets) {
+        kindCounts.set(a.kind, (kindCounts.get(a.kind) ?? 0) + 1);
+      }
+
+      for (const item of incomingAssets) {
+        const cleanedUrl = item.url.trim();
+        if (!cleanedUrl || existingUrls.has(cleanedUrl)) continue;
+        if (cleanedUrl.startsWith("data:image/") && cleanedUrl.length > 650_000) {
+          continue;
+        }
+        const kind: AssetKind =
+          item.kind && validKinds.has(item.kind) ? item.kind : "DEMO";
+        const version = (kindCounts.get(kind) ?? 0) + 1;
+        kindCounts.set(kind, version);
+        existingUrls.add(cleanedUrl);
+
+        const defaultLabel =
+          kind === "DEMO"
+            ? cleanedUrl.startsWith("data:image/")
+              ? `Ảnh Demo v${version}`
+              : `Link Demo v${version}`
+            : kind === "FINAL"
+              ? `Link Final v${version}`
+              : kind === "PUBLISHED_LINK"
+                ? "Link bài đã đăng"
+                : "Brief / Tư liệu";
+
+        await prisma.assetLink.create({
+          data: {
+            taskId: id,
+            kind,
+            label: item.label?.trim() || defaultLabel,
+            url: cleanedUrl,
+            version,
+            createdById: user.id,
+          },
+        });
+        addedAssetsCount += 1;
+      }
     }
 
     // 2. Xử lý các action nghiệp vụ chuẩn quy trình Team MKT
@@ -637,7 +690,7 @@ export async function PATCH(
       diffs.length > 0 ||
       assigneesChanged ||
       action ||
-      body.newAsset ||
+      addedAssetsCount > 0 ||
       body.deleteAssetId
     ) {
       const nextTitle =
@@ -646,8 +699,10 @@ export async function PATCH(
           : existing.title;
       const summary = action
         ? `${user.name} thực hiện ${action} trên "${nextTitle}".`
-        : body.newAsset
-          ? `${user.name} gắn link ${body.newAsset.label || "tư liệu"} mới.`
+        : addedAssetsCount > 0
+          ? addedAssetsCount > 1
+            ? `${user.name} gắn thêm ${addedAssetsCount} ảnh / link tư liệu mới.`
+            : `${user.name} gắn link ${body.newAsset?.label || "ảnh / tư liệu"} mới.`
           : body.deleteAssetId
             ? `${user.name} gỡ một link đính kèm.`
             : diffs.length > 0

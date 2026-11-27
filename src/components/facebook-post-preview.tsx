@@ -26,6 +26,7 @@ import {
   type SocialMockupPlatform,
 } from "@/components/social-mockup-cards";
 import { FB_POST_LAYOUTS, FB_POST_LAYOUT_GROUPS } from "@/lib/constants";
+import { extractAssetPreviewImageUrl } from "@/lib/output-helpers";
 
 interface FacebookPostPreviewProps {
   pageName: string;
@@ -37,7 +38,9 @@ interface FacebookPostPreviewProps {
   layout?: string;
   onChangeLayout?: (nextLayout: string) => void;
   hideLayoutSelector?: boolean;
+  draftDemoImages?: string[];
   onDemoImagesChange?: (urls: string[]) => void;
+  onPersistNewImages?: (urls: string[]) => Promise<void> | void;
   mediaUrl?: string | null;
   mediaUrls?: string[];
   title?: string;
@@ -62,7 +65,7 @@ function fileToSmallDataUrl(file: File): Promise<string> {
       const img = document.createElement("img");
       img.onerror = () => reject(new Error("invalid image"));
       img.onload = () => {
-        const maxDim = 1400;
+        const maxDim = 1100;
         const scale = Math.min(
           1,
           maxDim / Math.max(img.width || 1, img.height || 1)
@@ -78,7 +81,7 @@ function fileToSmallDataUrl(file: File): Promise<string> {
           return;
         }
         ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", 0.82));
+        resolve(canvas.toDataURL("image/jpeg", 0.78));
       };
       img.src = String(reader.result || "");
     };
@@ -96,7 +99,9 @@ export function FacebookPostPreview({
   layout = "SINGLE_SQUARE",
   onChangeLayout,
   hideLayoutSelector = false,
+  draftDemoImages,
   onDemoImagesChange,
+  onPersistNewImages,
   mediaUrl,
   mediaUrls,
   title,
@@ -112,12 +117,22 @@ export function FacebookPostPreview({
   );
   const [device, setDevice] = useState<"MOBILE" | "DESKTOP">("MOBILE");
   const [internalLayout, setInternalLayout] = useState<string>(layout);
-  const [demoImages, setDemoImages] = useState<string[]>([]);
+  const [internalDemoImages, setInternalDemoImages] = useState<string[]>([]);
+  const [savingDemoImages, setSavingDemoImages] = useState(false);
   const [extraUrlInput, setExtraUrlInput] = useState("");
   const [showUrlAdd, setShowUrlAdd] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  const demoImages = draftDemoImages ?? internalDemoImages;
   const effectiveLayout = onChangeLayout ? layout : internalLayout;
+
+  function setDemoImagesList(updater: (prev: string[]) => string[]) {
+    const next = updater(demoImages);
+    if (draftDemoImages === undefined) {
+      setInternalDemoImages(next);
+    }
+    onDemoImagesChange?.(next);
+  }
 
   function handleChangeLayout(next: string) {
     if (onChangeLayout) {
@@ -141,6 +156,19 @@ export function FacebookPostPreview({
     return resolved;
   }, [demoImages, attachedUrls]);
 
+  function autoUpgradeLayoutForCount(nextTotal: number) {
+    if (effectiveLayout !== "SINGLE_SQUARE") return;
+    if (nextTotal >= 5) {
+      handleChangeLayout("ALBUM_5_HORIZONTAL");
+    } else if (nextTotal === 4) {
+      handleChangeLayout("ALBUM_4");
+    } else if (nextTotal === 3) {
+      handleChangeLayout("ALBUM_3_HORIZONTAL");
+    } else if (nextTotal === 2) {
+      handleChangeLayout("ALBUM_2");
+    }
+  }
+
   async function handleSelectDemoFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     const loaded: string[] = [];
@@ -152,37 +180,41 @@ export function FacebookPostPreview({
         // skip invalid image
       }
     }
-    if (loaded.length > 0) {
-      const nextCount = demoImages.length + loaded.length;
-      setDemoImages((prev) => {
-        const next = [...prev, ...loaded];
-        onDemoImagesChange?.(next);
-        return next;
-      });
-      if (effectiveLayout === "SINGLE_SQUARE") {
-        if (nextCount >= 5) {
-          handleChangeLayout("ALBUM_5_HORIZONTAL");
-        } else if (nextCount === 4) {
-          handleChangeLayout("ALBUM_4");
-        } else if (nextCount === 3) {
-          handleChangeLayout("ALBUM_3_HORIZONTAL");
-        } else if (nextCount === 2) {
-          handleChangeLayout("ALBUM_2");
-        }
+    if (loaded.length === 0) return;
+
+    const nextTotal = previewMedia.length + loaded.length;
+    if (onPersistNewImages) {
+      setSavingDemoImages(true);
+      try {
+        await onPersistNewImages(loaded);
+        autoUpgradeLayoutForCount(nextTotal);
+      } finally {
+        setSavingDemoImages(false);
       }
+      return;
     }
+
+    setDemoImagesList((prev) => [...prev, ...loaded]);
+    autoUpgradeLayoutForCount(nextTotal);
   }
 
-  function handleAddImageUrl() {
+  async function handleAddImageUrl() {
     const cleaned = extraUrlInput.trim();
     if (!cleaned) return;
-    setDemoImages((prev) => {
-      const next = prev.includes(cleaned) ? prev : [...prev, cleaned];
-      onDemoImagesChange?.(next);
-      return next;
-    });
     setExtraUrlInput("");
     setShowUrlAdd(false);
+
+    if (onPersistNewImages) {
+      setSavingDemoImages(true);
+      try {
+        await onPersistNewImages([cleaned]);
+      } finally {
+        setSavingDemoImages(false);
+      }
+      return;
+    }
+
+    setDemoImagesList((prev) => (prev.includes(cleaned) ? prev : [...prev, cleaned]));
   }
 
   const safeCaption = caption.trim();
@@ -244,11 +276,12 @@ export function FacebookPostPreview({
         <div className="flex flex-wrap items-center gap-1.5">
           <label className="inline-flex items-center gap-1 rounded-lg border border-[#DECBB8] bg-white hover:bg-[#F5ECE2] px-2 py-1 text-[11px] font-bold text-[#8A4624] cursor-pointer">
             <ImagePlus className="w-3.5 h-3.5" />
-            Ảnh demo ({previewMedia.length})
+            {savingDemoImages ? "Đang lưu ảnh..." : `Ảnh demo (${previewMedia.length})`}
             <input
               type="file"
               multiple
               accept="image/*"
+              disabled={savingDemoImages}
               className="hidden"
               onChange={(e) => {
                 void handleSelectDemoFiles(e.target.files);
@@ -354,52 +387,59 @@ export function FacebookPostPreview({
           />
           <button
             type="button"
-            onClick={handleAddImageUrl}
-            className="rounded-lg bg-[#A65D37] hover:bg-[#8E4D2B] text-white px-3 py-1.5 text-xs font-bold cursor-pointer"
+            disabled={savingDemoImages}
+            onClick={() => void handleAddImageUrl()}
+            className="rounded-lg bg-[#A65D37] hover:bg-[#8E4D2B] disabled:opacity-60 text-white px-3 py-1.5 text-xs font-bold cursor-pointer"
           >
-            Thêm
+            {savingDemoImages ? "Đang lưu..." : "Thêm"}
           </button>
         </div>
       )}
 
       {demoImages.length > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          {demoImages.map((imgSrc, i) => (
-            <div key={`${imgSrc.slice(0, 32)}-${i}`} className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  const foundIdx = previewMedia.indexOf(imgSrc);
-                  setLightboxIndex(foundIdx >= 0 ? foundIdx : 0);
-                }}
-                title="Bấm để phóng to ảnh"
-                className="block rounded-lg overflow-hidden cursor-zoom-in"
-              >
-                <Image
-                  src={imgSrc}
-                  alt={`Demo ${i + 1}`}
-                  width={44}
-                  height={44}
-                  unoptimized
-                  className="w-11 h-11 rounded-lg object-cover border border-[#DECBB8] hover:border-[#8A4624] transition"
-                />
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setDemoImages((prev) => {
-                    const next = prev.filter((_, idx) => idx !== i);
-                    onDemoImagesChange?.(next);
-                    return next;
-                  })
-                }
-                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center cursor-pointer"
-                title="Gỡ ảnh demo"
-              >
-                <X className="w-2.5 h-2.5" />
-              </button>
-            </div>
-          ))}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            {demoImages.map((imgSrc, i) => {
+              const resolvedThumb = extractAssetPreviewImageUrl(imgSrc) || imgSrc;
+              return (
+                <div key={`${imgSrc.slice(0, 32)}-${i}`} className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const foundIdx = previewMedia.indexOf(resolvedThumb);
+                      setLightboxIndex(foundIdx >= 0 ? foundIdx : 0);
+                    }}
+                    title="Bấm để phóng to ảnh"
+                    className="block rounded-lg overflow-hidden cursor-zoom-in"
+                  >
+                    <Image
+                      src={resolvedThumb}
+                      alt={`Demo ${i + 1}`}
+                      width={44}
+                      height={44}
+                      unoptimized
+                      className="w-11 h-11 rounded-lg object-cover border border-[#DECBB8] hover:border-[#8A4624] transition"
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDemoImagesList((prev) => prev.filter((_, idx) => idx !== i))
+                    }
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center cursor-pointer"
+                    title="Gỡ ảnh demo"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {onDemoImagesChange && !onPersistNewImages && (
+            <p className="text-[10.5px] font-medium text-[#8A4624]">
+              ✨ {demoImages.length} ảnh mới thêm sẽ tự động lưu &amp; đồng bộ sang phần Output Check khi bấm <strong>Lưu nháp</strong> hoặc <strong>Gửi Leader duyệt</strong>.
+            </p>
+          )}
         </div>
       )}
 
@@ -456,19 +496,29 @@ export function FacebookPostPreview({
         onChangeIndex={(nextIdx) => setLightboxIndex(nextIdx)}
       />
 
-      {attachedUrls.length > 0 && (
-        <div className="rounded-xl px-3 py-1.5 bg-white/80 border border-[#E6DDD2] text-[11px] text-[#7D563A] truncate">
-          📎 {attachedUrls.length} file đính kèm:{" "}
-          <a
-            href={attachedUrls[0]}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline font-semibold"
-          >
-            {attachedUrls[0]}
-          </a>
-        </div>
-      )}
+      {attachedUrls.length > 0 && (() => {
+        const firstExternal = attachedUrls.find((u) => /^https?:\/\//i.test(u));
+        return (
+          <div className="rounded-xl px-3 py-1.5 bg-white/80 border border-[#E6DDD2] text-[11px] text-[#7D563A] truncate">
+            📎 {attachedUrls.length} ảnh / file đính kèm
+            {firstExternal ? (
+              <>
+                :{" "}
+                <a
+                  href={firstExternal}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline font-semibold"
+                >
+                  {firstExternal}
+                </a>
+              </>
+            ) : (
+              " (đã đồng bộ)"
+            )}
+          </div>
+        );
+      })()}
 
       {/* Checklist tối ưu bài đăng */}
       <div className="flex flex-wrap gap-1.5 text-[11px]">

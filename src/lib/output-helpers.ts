@@ -71,14 +71,18 @@ export function extractAssetPreviewImageUrl(rawUrl: string): string | null {
 
   if (/^data:image\//i.test(url) || /^blob:/i.test(url)) return url;
   if (/\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(url)) return url;
-  if (/lh3\.googleusercontent\.com\//i.test(url)) return url;
+  if (/lh\d+\.googleusercontent\.com\//i.test(url)) return url;
 
-  const driveFileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+  const driveFileMatch = url.match(
+    /drive\.google\.com\/file\/(?:u\/\d+\/)?d\/([a-zA-Z0-9_-]+)/i
+  );
   if (driveFileMatch?.[1]) {
     return `https://drive.google.com/thumbnail?id=${driveFileMatch[1]}&sz=w1000`;
   }
 
-  const driveIdParam = url.match(/drive\.google\.com\/(?:open|uc)\?(?:[^#]*&)?id=([a-zA-Z0-9_-]+)/i);
+  const driveIdParam = url.match(
+    /drive\.google\.com\/(?:open|uc|thumbnail)\?(?:[^#]*&)?id=([a-zA-Z0-9_-]+)/i
+  );
   if (driveIdParam?.[1]) {
     return `https://drive.google.com/thumbnail?id=${driveIdParam[1]}&sz=w1000`;
   }
@@ -122,6 +126,96 @@ export interface AnalyzedTaskOutput {
   unitLabel: string;
 }
 
+function sortAssetsNewestFirst(list: AssetLinkItem[]): AssetLinkItem[] {
+  return [...list].sort((a, b) => {
+    const aTime = new Date(a.createdAt).getTime();
+    const bTime = new Date(b.createdAt).getTime();
+    if (!Number.isNaN(aTime) && !Number.isNaN(bTime) && bTime !== aTime) {
+      return bTime - aTime;
+    }
+    return (b.version || 0) - (a.version || 0);
+  });
+}
+
+function isBriefAssetPostVisual(
+  asset: AssetLinkItem,
+  category: OutputCategoryKey,
+  isMediaOrder?: boolean
+): boolean {
+  if (asset.kind !== "BRIEF_REF") return false;
+  if (asset.label === "Ảnh / Thành phẩm bài viết") return true;
+  if (/^data:image\//i.test(asset.url)) return true;
+  if (category === "CONTENT" && !isMediaOrder) return true;
+  return false;
+}
+
+/**
+ * Nguồn chuẩn duy nhất lấy danh sách URL media xem trước cho bài viết/output.
+ * Đảm bảo đồng bộ 100% số lượng & thứ tự ảnh giữa Khung Viết bài, Output Check và Task Drawer.
+ */
+export function getTaskPreviewMediaUrls(
+  task: Pick<TaskItem, "assets" | "taskType" | "isMediaOrder"> | null | undefined
+): string[] {
+  if (!task || !Array.isArray(task.assets) || task.assets.length === 0) {
+    return [];
+  }
+  const category = getTaskOutputCategory(task.taskType);
+  const assets = task.assets;
+
+  const finalAssets = sortAssetsNewestFirst(
+    assets.filter((a) => a.kind === "FINAL")
+  );
+  const demoAssets = sortAssetsNewestFirst(
+    assets.filter((a) => a.kind === "DEMO")
+  );
+  const publishedAssets = sortAssetsNewestFirst(
+    assets.filter((a) => a.kind === "PUBLISHED_LINK")
+  );
+  const promotedBriefAssets = sortAssetsNewestFirst(
+    assets.filter((a) => isBriefAssetPostVisual(a, category, task.isMediaOrder))
+  );
+  const remainingBriefAssets = sortAssetsNewestFirst(
+    assets.filter(
+      (a) =>
+        a.kind === "BRIEF_REF" &&
+        !isBriefAssetPostVisual(a, category, task.isMediaOrder)
+    )
+  );
+
+  // Ưu tiên: FINAL -> DEMO -> PUBLISHED_LINK -> BRIEF_REF bài viết;
+  // nếu chưa có ảnh nào trong nhóm trên, fallback nhẹ sang BRIEF_REF có link ảnh (nếu có).
+  const ordered = [
+    ...finalAssets,
+    ...demoAssets,
+    ...publishedAssets,
+    ...promotedBriefAssets,
+  ];
+  const primaryUrls: string[] = [];
+  const seen = new Set<string>();
+  for (const a of ordered) {
+    const cleaned = (a.url || "").trim();
+    if (!cleaned || seen.has(cleaned)) continue;
+    seen.add(cleaned);
+    primaryUrls.push(cleaned);
+  }
+
+  const hasAnyPreviewImage = primaryUrls.some(
+    (u) => extractAssetPreviewImageUrl(u) !== null
+  );
+  if (!hasAnyPreviewImage && remainingBriefAssets.length > 0) {
+    for (const a of remainingBriefAssets) {
+      const cleaned = (a.url || "").trim();
+      if (!cleaned || seen.has(cleaned)) continue;
+      if (extractAssetPreviewImageUrl(cleaned)) {
+        seen.add(cleaned);
+        primaryUrls.push(cleaned);
+      }
+    }
+  }
+
+  return primaryUrls;
+}
+
 /** Phân tích toàn diện sản phẩm đầu ra (caption, asset demo/final/đã đăng, ảnh xem trước). */
 export function analyzeTaskOutputs(task: TaskItem): AnalyzedTaskOutput {
   const category = getTaskOutputCategory(task.taskType);
@@ -129,11 +223,31 @@ export function analyzeTaskOutputs(task: TaskItem): AnalyzedTaskOutput {
   const description = (task.description || "").trim();
   const assets = task.assets ?? [];
 
-  const finalAssets = assets.filter((a) => a.kind === "FINAL");
-  const publishedAssets = assets.filter((a) => a.kind === "PUBLISHED_LINK");
-  const demoAssets = assets.filter((a) => a.kind === "DEMO");
-  const briefRefAssets = assets.filter((a) => a.kind === "BRIEF_REF");
-  const deliverableAssets = [...finalAssets, ...publishedAssets, ...demoAssets];
+  const finalAssets = sortAssetsNewestFirst(
+    assets.filter((a) => a.kind === "FINAL")
+  );
+  const publishedAssets = sortAssetsNewestFirst(
+    assets.filter((a) => a.kind === "PUBLISHED_LINK")
+  );
+  const demoAssets = sortAssetsNewestFirst(
+    assets.filter((a) => a.kind === "DEMO")
+  );
+  const promotedBriefAssets = sortAssetsNewestFirst(
+    assets.filter((a) => isBriefAssetPostVisual(a, category, task.isMediaOrder))
+  );
+  const briefRefAssets = sortAssetsNewestFirst(
+    assets.filter(
+      (a) =>
+        a.kind === "BRIEF_REF" &&
+        !isBriefAssetPostVisual(a, category, task.isMediaOrder)
+    )
+  );
+  const deliverableAssets = [
+    ...finalAssets,
+    ...demoAssets,
+    ...publishedAssets,
+    ...promotedBriefAssets,
+  ];
 
   const seenPreviewUrls = new Set<string>();
   const imagePreviews: Array<{ asset: AssetLinkItem; previewUrl: string }> = [];

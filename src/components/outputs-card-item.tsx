@@ -305,26 +305,45 @@ export function OutputsCardItem({
 
             {a.deliverableAssets.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {a.deliverableAssets.map((asset) => (
-                  <a
-                    key={asset.id}
-                    href={asset.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:border-blue-300 px-2.5 py-1 text-[11px] font-bold text-slate-700"
-                  >
-                    <span className="text-blue-600">
-                      {ASSET_KIND_LABEL[asset.kind] || asset.kind}
-                    </span>
-                    <span className="truncate max-w-[140px]">
-                      {asset.label}
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      ({getAssetDomainLabel(asset.url)})
-                    </span>
-                    <ExternalLink className="w-3 h-3 text-slate-400" />
-                  </a>
-                ))}
+                {a.deliverableAssets.map((asset) =>
+                  /^data:image\//i.test(asset.url) ? (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      onClick={onInspect}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:border-amber-300 px-2.5 py-1 text-[11px] font-bold text-slate-700 cursor-pointer"
+                    >
+                      <span className="text-amber-700">
+                        {ASSET_KIND_LABEL[asset.kind] || asset.kind}
+                      </span>
+                      <span className="truncate max-w-[140px]">
+                        {asset.label}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        (Ảnh tải lên)
+                      </span>
+                    </button>
+                  ) : (
+                    <a
+                      key={asset.id}
+                      href={asset.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:border-blue-300 px-2.5 py-1 text-[11px] font-bold text-slate-700"
+                    >
+                      <span className="text-blue-600">
+                        {ASSET_KIND_LABEL[asset.kind] || asset.kind}
+                      </span>
+                      <span className="truncate max-w-[140px]">
+                        {asset.label}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        ({getAssetDomainLabel(asset.url)})
+                      </span>
+                      <ExternalLink className="w-3 h-3 text-slate-400" />
+                    </a>
+                  )
+                )}
               </div>
             )}
 

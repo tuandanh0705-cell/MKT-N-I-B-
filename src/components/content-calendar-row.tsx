@@ -1,6 +1,16 @@
 "use client";
 
-import { Bot, Camera, Check, ExternalLink, PenLine, Send, Trash2 } from "lucide-react";
+import { useRef } from "react";
+import {
+  Bot,
+  Camera,
+  Check,
+  ExternalLink,
+  GripVertical,
+  PenLine,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { CustomizableOptionSelect } from "@/components/customizable-option-select";
 import { MultiAssigneePicker } from "@/components/multi-assignee-picker";
 import { PlatformLogo } from "@/components/platform-logo";
@@ -36,6 +46,16 @@ interface ContentCalendarRowProps {
   deleting: boolean;
   isSelectedForDelete: boolean;
   savedAiResult: GeminiQcCheckResponse | null;
+  isDragging?: boolean;
+  dropIndicator?: "BEFORE" | "AFTER" | null;
+  onRowDragStart?: (taskId: string) => void;
+  onRowDragOver?: (taskId: string, position: "BEFORE" | "AFTER") => void;
+  onRowDrop?: (
+    draggedId: string,
+    targetId: string,
+    position: "BEFORE" | "AFTER"
+  ) => void;
+  onRowDragEnd?: () => void;
   onToggleSelectDelete: (taskId: string) => void;
   onRequestDeleteSingle: (taskId: string) => void;
   onPatchTaskInline: (
@@ -70,6 +90,12 @@ export function ContentCalendarRow({
   deleting,
   isSelectedForDelete,
   savedAiResult,
+  isDragging = false,
+  dropIndicator = null,
+  onRowDragStart,
+  onRowDragOver,
+  onRowDrop,
+  onRowDragEnd,
   onToggleSelectDelete,
   onRequestDeleteSingle,
   onPatchTaskInline,
@@ -80,6 +106,8 @@ export function ContentCalendarRow({
   onRequestMediaOrder,
   onRequireCaptionBeforeSubmit,
 }: ContentCalendarRowProps) {
+  const rowRef = useRef<HTMLTableRowElement | null>(null);
+
   const pubDateVal = t.scheduledPublishAt
     ? getVnDateString(new Date(t.scheduledPublishAt))
     : "";
@@ -98,16 +126,76 @@ export function ContentCalendarRow({
     t.status !== "PUBLISHED" &&
     t.status !== "DONE";
 
+  const canDragRow = Boolean(onRowDragStart) && !rowBusy;
+
+  function computeDropPosition(e: React.DragEvent<HTMLTableRowElement>): "BEFORE" | "AFTER" {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return e.clientY < rect.top + rect.height / 2 ? "BEFORE" : "AFTER";
+  }
+
   return (
     <tr
-      className={`align-top hover:bg-slate-50/80 ${
-        isSelectedForDelete
-          ? "bg-rose-50/70"
-          : isToday
-            ? "bg-amber-50/40"
-            : ""
+      ref={rowRef}
+      data-row-task-id={t.id}
+      onDragOver={(e) => {
+        if (!onRowDragOver) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        onRowDragOver(t.id, computeDropPosition(e));
+      }}
+      onDrop={(e) => {
+        if (!onRowDrop) return;
+        e.preventDefault();
+        const transferredId = e.dataTransfer.getData("text/plain") || "";
+        onRowDrop(transferredId, t.id, computeDropPosition(e));
+      }}
+      className={`align-top transition-colors ${
+        isDragging
+          ? "opacity-45 bg-blue-50/50"
+          : dropIndicator === "BEFORE"
+            ? "shadow-[inset_0_3px_0_0_#2563eb] bg-blue-50/35"
+            : dropIndicator === "AFTER"
+              ? "shadow-[inset_0_-3px_0_0_#2563eb] bg-blue-50/35"
+              : isSelectedForDelete
+                ? "bg-rose-50/70"
+                : isToday
+                  ? "bg-amber-50/40 hover:bg-amber-50/70"
+                  : "hover:bg-slate-50/80"
       }`}
     >
+      {/* Tay nắm kéo thả ở đầu dòng (di chuột vào đổi thành bàn tay để kéo lên xuống) */}
+      <td
+        data-drag-handle={t.id}
+        draggable={canDragRow}
+        onDragStart={(e) => {
+          if (!canDragRow) {
+            e.preventDefault();
+            return;
+          }
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", t.id);
+          if (rowRef.current && typeof e.dataTransfer.setDragImage === "function") {
+            e.dataTransfer.setDragImage(rowRef.current, 24, 22);
+          }
+          onRowDragStart?.(t.id);
+        }}
+        onDragEnd={() => {
+          onRowDragEnd?.();
+        }}
+        title="Giữ và kéo lên/xuống để sắp xếp thứ tự dòng"
+        className={`w-9 py-2.5 px-1 text-center align-middle select-none transition-colors ${
+          canDragRow
+            ? "cursor-grab active:cursor-grabbing text-slate-300 hover:text-blue-600 hover:bg-blue-50/70"
+            : "text-slate-200 cursor-default"
+        }`}
+      >
+        <span
+          aria-label={`Kéo thả sắp xếp dòng ${t.title}`}
+          className="inline-flex items-center justify-center w-6 h-8 rounded-md"
+        >
+          <GripVertical className="w-4 h-4" />
+        </span>
+      </td>
       {deleteMode && (
         <td className="py-2.5 px-2 whitespace-nowrap text-center bg-rose-50/40">
           {deletable ? (

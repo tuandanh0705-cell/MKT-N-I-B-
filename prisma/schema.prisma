@@ -351,6 +351,7 @@ model Task {
   externalDepartment    String?
   externalContact       String?
   dailyKpiKey           String?
+  sortOrder             Int?
   lastAiQcJson          Json?
   lastAiQcAt            DateTime?
   deletedAt             DateTime?
@@ -380,6 +381,7 @@ model Task {
   activityLogs ActivityLog[]
 
   @@index([projectId, status])
+  @@index([projectId, sortOrder])
   @@index([deletedAt, projectId, status])
   @@index([assigneeId, dueAt])
   @@index([assigneeId, plannedDate])

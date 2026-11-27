@@ -42,7 +42,9 @@ import {
   type GeminiConfigInfo,
   type GeminiQcCheckResponse,
 } from "@/lib/gemini-shared";
+import { getTaskPreviewMediaUrls } from "@/lib/output-helpers";
 import type {
+  AssetLinkItem,
   ProjectChannelSuggestions,
   SimpleProject,
   SimpleUser,
@@ -213,6 +215,10 @@ function ContentPostEditorInner({
     task?.comments?.length ?? task?._count?.comments ?? 0
   );
   const [editorDemoImages, setEditorDemoImages] = useState<string[]>([]);
+  const [savedAssets, setSavedAssets] = useState<AssetLinkItem[]>(
+    task?.assets ?? []
+  );
+  const [removingAssetId, setRemovingAssetId] = useState<string | null>(null);
   const [customAiFocus, setCustomAiFocus] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -227,10 +233,40 @@ function ContentPostEditorInner({
         badgeClass: "bg-slate-100 text-slate-700 border-slate-300",
       };
 
-  const existingMediaUrls = (task?.assets || []).map((a) => a.url);
+  const existingMediaUrls = getTaskPreviewMediaUrls({
+    assets: savedAssets,
+    taskType: task?.taskType || "CONTENT_SOCIAL",
+    isMediaOrder: Boolean(task?.isMediaOrder),
+  });
   const previewMediaUrls = newAssetUrl.trim()
     ? [newAssetUrl.trim(), ...existingMediaUrls]
     : existingMediaUrls;
+
+  async function handleRemoveSavedAsset(assetId: string) {
+    if (!task || removingAssetId) return;
+    setRemovingAssetId(assetId);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deleteAssetId: assetId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Không gỡ được ảnh / link đính kèm.", "error");
+        return;
+      }
+      if (data.task) {
+        setSavedAssets(data.task.assets ?? []);
+        onSaved(data.task, prefill?.matrixIdeaId || task.matrixIdeaId || null);
+      }
+      showToast("Đã gỡ ảnh / link đính kèm.");
+    } catch {
+      showToast("Lỗi kết nối khi gỡ ảnh đính kèm.", "error");
+    } finally {
+      setRemovingAssetId(null);
+    }
+  }
 
   async function handleRunEditorAiCheck() {
     const combinedUrls = Array.from(
@@ -340,6 +376,22 @@ function ContentPostEditorInner({
         ? `${contentDueDate}T17:00:00+07:00`
         : null;
 
+      const pendingAssetUrls = Array.from(
+        new Set(
+          [
+            ...(newAssetUrl.trim() ? [newAssetUrl.trim()] : []),
+            ...editorDemoImages.map((u) => u.trim()),
+          ].filter(Boolean)
+        )
+      );
+      const pendingAssetsPayload = pendingAssetUrls.map((url, idx) => ({
+        kind: "DEMO" as const,
+        label: url.startsWith("data:image/")
+          ? `Ảnh demo bài viết #${idx + 1}`
+          : "Ảnh / Thành phẩm bài viết",
+        url,
+      }));
+
       if (!task) {
         const res = await fetch("/api/tasks", {
           method: "POST",
@@ -365,8 +417,8 @@ function ContentPostEditorInner({
             productLink: productLink.trim() || null,
             isAired,
             matrixIdeaId: prefill?.matrixIdeaId || null,
-            briefLinkUrl: newAssetUrl.trim() || undefined,
-            briefLinkLabel: newAssetUrl.trim() ? "Ảnh / Thành phẩm bài viết" : undefined,
+            initialAssets:
+              pendingAssetsPayload.length > 0 ? pendingAssetsPayload : undefined,
             status:
               mode === "SUBMIT_REVIEW"
                 ? "WAITING_APPROVAL"
@@ -380,6 +432,8 @@ function ContentPostEditorInner({
           showToast(data.error || "Không tạo được bài viết.", "error");
           return;
         }
+        setNewAssetUrl("");
+        setEditorDemoImages([]);
         onSaved(data.task, prefill?.matrixIdeaId || null);
         window.dispatchEvent(new CustomEvent("reviews-count-updated"));
         showToast(
@@ -412,14 +466,8 @@ function ContentPostEditorInner({
           dueAt,
           productLink: productLink.trim() || null,
           isAired,
-          ...(newAssetUrl.trim()
-            ? {
-                newAsset: {
-                  kind: "DEMO",
-                  label: "Ảnh / Thành phẩm bài viết",
-                  url: newAssetUrl.trim(),
-                },
-              }
+          ...(pendingAssetsPayload.length > 0
+            ? { newAssets: pendingAssetsPayload }
             : {}),
           ...(mode === "SUBMIT_REVIEW"
             ? { action: "SUBMIT_FOR_REVIEW", notifyUrl }
@@ -432,6 +480,11 @@ function ContentPostEditorInner({
       if (!res.ok) {
         showToast(data.error || "Không cập nhật được bài viết.", "error");
         return;
+      }
+      setNewAssetUrl("");
+      setEditorDemoImages([]);
+      if (data.task?.assets) {
+        setSavedAssets(data.task.assets);
       }
       onSaved(data.task, prefill?.matrixIdeaId || task.matrixIdeaId || null);
       window.dispatchEvent(new CustomEvent("reviews-count-updated"));
@@ -770,21 +823,44 @@ function ContentPostEditorInner({
                 Đã Air bài
               </label>
 
-              {task && task.assets.length > 0 && (
+              {task && savedAssets.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {task.assets.slice(0, 3).map((a) => (
-                    <a
-                      key={a.id}
-                      href={a.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 px-2 py-1 text-[11px] font-semibold text-blue-700"
-                    >
-                      <Link2 className="w-3 h-3" />
-                      {a.label}
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  ))}
+                  {savedAssets.map((a) => {
+                    const isDataImg = /^data:image\//i.test(a.url);
+                    return (
+                      <div
+                        key={a.id}
+                        className="inline-flex items-center gap-1 rounded-lg bg-slate-100 border border-slate-200/80 px-2 py-1 text-[11px] font-semibold text-blue-700"
+                      >
+                        {isDataImg ? (
+                          <span className="inline-flex items-center gap-1 text-slate-700">
+                            <Link2 className="w-3 h-3 text-amber-600" />
+                            <span>{a.label}</span>
+                          </span>
+                        ) : (
+                          <a
+                            href={a.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 hover:underline"
+                          >
+                            <Link2 className="w-3 h-3" />
+                            <span className="max-w-[160px] truncate">{a.label}</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          disabled={removingAssetId === a.id}
+                          onClick={() => void handleRemoveSavedAsset(a.id)}
+                          title="Gỡ ảnh / link này"
+                          className="ml-0.5 rounded p-0.5 text-slate-400 hover:bg-rose-100 hover:text-rose-600 cursor-pointer disabled:opacity-50"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -928,10 +1004,12 @@ function ContentPostEditorInner({
                 pageColor={project.color}
                 platform={platform}
                 postFormat={format}
+                description={task?.description}
                 caption={caption}
                 layout={fbLayout}
                 onChangeLayout={setFbLayout}
                 hideLayoutSelector
+                draftDemoImages={editorDemoImages}
                 onDemoImagesChange={setEditorDemoImages}
                 mediaUrl={previewMediaUrls[0] || null}
                 mediaUrls={previewMediaUrls}

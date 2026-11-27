@@ -6,6 +6,7 @@ import { FacebookPostPreview } from "@/components/facebook-post-preview";
 import { GeminiQcPanel } from "@/components/gemini-qc-panel";
 import { useToast } from "@/components/toast-provider";
 import { ASSET_KIND_LABEL } from "@/lib/constants";
+import { getTaskPreviewMediaUrls } from "@/lib/output-helpers";
 import type {
   GeminiConfigInfo,
   GeminiQcCheckResponse,
@@ -170,24 +171,46 @@ export function TaskDrawerQcTab({
                 ? "Ẩn bố cục bài đăng Facebook"
                 : "👁️ Xem trước bố cục bài đăng Facebook"}
             </button>
-            {showFbPreview && (
-              <FacebookPostPreview
-                pageName={task.publishChannel?.trim() || task.project.name}
-                pageColor={task.project.color}
-                caption={editingCaption ? captionDraft : task.caption || ""}
-                layout={fbLayoutDraft}
-                onChangeLayout={(nextLayout) => {
-                  setFbLayoutDraft(nextLayout);
-                  void onRunPatch(
-                    { fbPostLayout: nextLayout },
-                    "Đã cập nhật bố cục bài đăng Facebook."
-                  );
-                }}
-                mediaUrl={task.assets[0]?.url || null}
-                mediaUrls={task.assets.map((a) => a.url)}
-                title={task.title}
-              />
-            )}
+            {showFbPreview && (() => {
+              const drawerPreviewMediaUrls = getTaskPreviewMediaUrls(task);
+              return (
+                <FacebookPostPreview
+                  pageName={task.publishChannel?.trim() || task.project.name}
+                  pageColor={task.project.color}
+                  platform={task.platform}
+                  postFormat={task.postFormat}
+                  description={task.description}
+                  caption={editingCaption ? captionDraft : task.caption || ""}
+                  layout={fbLayoutDraft}
+                  onChangeLayout={(nextLayout) => {
+                    setFbLayoutDraft(nextLayout);
+                    void onRunPatch(
+                      { fbPostLayout: nextLayout },
+                      "Đã cập nhật bố cục bài đăng Facebook."
+                    );
+                  }}
+                  onPersistNewImages={async (urls) => {
+                    const cleaned = urls.map((u) => u.trim()).filter(Boolean);
+                    if (cleaned.length === 0) return;
+                    await onRunPatch(
+                      {
+                        newAssets: cleaned.map((url, idx) => ({
+                          kind: "DEMO",
+                          label: url.startsWith("data:image/")
+                            ? `Ảnh demo bài viết #${idx + 1}`
+                            : "Ảnh / Thành phẩm bài viết",
+                          url,
+                        })),
+                      },
+                      `Đã lưu & đồng bộ ${cleaned.length} ảnh vào bài viết.`
+                    );
+                  }}
+                  mediaUrl={drawerPreviewMediaUrls[0] || null}
+                  mediaUrls={drawerPreviewMediaUrls}
+                  title={task.title}
+                />
+              );
+            })()}
           </div>
         )}
           </div>
@@ -211,57 +234,86 @@ export function TaskDrawerQcTab({
           </p>
         ) : (
           <div className="space-y-2">
-            {task.assets.map((asset) => (
-              <div
-                key={asset.id}
-                className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5"
-              >
-                <a
-                  href={asset.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="min-w-0 flex-1 hover:text-blue-700"
+            {task.assets.map((asset) => {
+              const isDataImg = /^data:image\//i.test(asset.url);
+              return (
+                <div
+                  key={asset.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-blue-100 text-blue-800 px-1.5 py-0.5 text-[10px] font-bold">
-                      {ASSET_KIND_LABEL[asset.kind] || asset.kind}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-800 truncate">
-                      {asset.label}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-400 truncate mt-0.5">
-                    {asset.url}
-                  </div>
-                </a>
+                  {isDataImg ? (
+                    <div className="min-w-0 flex-1 flex items-center gap-2.5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={asset.url}
+                        alt={asset.label}
+                        className="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded bg-amber-100 text-amber-800 px-1.5 py-0.5 text-[10px] font-bold">
+                            {ASSET_KIND_LABEL[asset.kind] || asset.kind}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-800 truncate">
+                            {asset.label}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          Ảnh demo đã tải lên &amp; đồng bộ Preview
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <a
+                      href={asset.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="min-w-0 flex-1 hover:text-blue-700"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-blue-100 text-blue-800 px-1.5 py-0.5 text-[10px] font-bold">
+                          {ASSET_KIND_LABEL[asset.kind] || asset.kind}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-800 truncate">
+                          {asset.label}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                        {asset.url}
+                      </div>
+                    </a>
+                  )}
 
-                <div className="flex items-center gap-1 shrink-0">
-                  <a
-                    href={asset.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50"
-                    title="Mở link"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void onRunPatch(
-                        { deleteAssetId: asset.id },
-                        "Đã gỡ link đính kèm."
-                      )
-                    }
-                    disabled={saving}
-                    title="Gỡ link này"
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {!isDataImg && (
+                      <a
+                        href={asset.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50"
+                        title="Mở link"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void onRunPatch(
+                          { deleteAssetId: asset.id },
+                          "Đã gỡ link đính kèm."
+                        )
+                      }
+                      disabled={saving}
+                      title="Gỡ link này"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

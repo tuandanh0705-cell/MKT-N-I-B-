@@ -840,6 +840,15 @@ export function ProjectWorkspace({
           onTasksAdded={(added) =>
             setTasks((prev) => [...added, ...prev])
           }
+          onTasksReordered={(orderMap) =>
+            setTasks((prev) =>
+              prev.map((t) =>
+                Object.prototype.hasOwnProperty.call(orderMap, t.id)
+                  ? { ...t, sortOrder: orderMap[t.id] }
+                  : t
+              )
+            )
+          }
           onRequestMediaOrder={(sourceTask) => {
             const isVid =
               (sourceTask.postFormat || "").toLowerCase().includes("video") ||

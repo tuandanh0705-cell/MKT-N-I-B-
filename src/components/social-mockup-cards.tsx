@@ -212,7 +212,8 @@ function MockupVisualTile({
   isVideo?: boolean;
   safeRightPad?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = Boolean(src && failedSrc === src);
   const onOpenLightbox = useContext(MockupLightboxContext);
   const showImage = Boolean(src && !failed);
   const canZoom = Boolean(showImage && src && onOpenLightbox);
@@ -261,7 +262,7 @@ function MockupVisualTile({
           alt={alt}
           fill
           unoptimized
-          onError={() => setFailed(true)}
+          onError={() => setFailedSrc(src)}
           className={`object-cover transition-transform duration-200 ${
             canZoom ? "group-hover:scale-[1.02]" : ""
           }`}
