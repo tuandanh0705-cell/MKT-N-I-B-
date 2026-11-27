@@ -1,11 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { GripVertical } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { ContentCalendarMobileCard } from "@/components/content-calendar-mobile-card";
 import { ContentCalendarRow } from "@/components/content-calendar-row";
-import { ContentCalendarToolbar } from "@/components/content-calendar-toolbar";
+import {
+  ContentCalendarToolbar,
+  type ContentCalendarSortMode,
+} from "@/components/content-calendar-toolbar";
 import { CustomizableOptionSelect } from "@/components/customizable-option-select";
 import { OutputInspectorModal } from "@/components/output-inspector-modal";
 import { PlatformLogo } from "@/components/platform-logo";
@@ -77,6 +80,7 @@ export function ProjectContentCalendarPanel({
   const [picFilter, setPicFilter] = useState("ALL");
   const [routeFilter, setRouteFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [sortMode, setSortMode] = useState<ContentCalendarSortMode>("TIME_DESC");
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const [deleteMode, setDeleteMode] = useState(false);
@@ -144,8 +148,40 @@ export function ProjectContentCalendarPanel({
           t.taskType !== "ADS_CAMPAIGN" &&
           t.taskType !== "WEB_SEO")
     );
-    // Không tự động sắp xếp theo ngày/tên: tôn trọng thứ tự kéo thả thủ công (sortOrder ASC),
-    // mọi dòng mới thêm luôn lên trên cùng (sortOrder nhỏ hơn / createdAt mới nhất).
+
+    if (sortMode === "TIME_DESC") {
+      // Mặc định: từ trên xuống dưới theo Ngày & Giờ đăng muộn nhất -> sớm nhất
+      // (Bài chưa xếp ngày giữ trên cùng để không bị trôi mất khi mới tạo nháp)
+      return [...base].sort((a, b) => {
+        const aTime = a.scheduledPublishAt
+          ? new Date(a.scheduledPublishAt).getTime()
+          : null;
+        const bTime = b.scheduledPublishAt
+          ? new Date(b.scheduledPublishAt).getTime()
+          : null;
+        if (aTime === null && bTime !== null) return -1;
+        if (aTime !== null && bTime === null) return 1;
+        if (aTime !== null && bTime !== null && bTime !== aTime) {
+          return bTime - aTime;
+        }
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+    }
+
+    if (sortMode === "TIME_ASC") {
+      return [...base].sort((a, b) => {
+        const aTime = a.scheduledPublishAt
+          ? new Date(a.scheduledPublishAt).getTime()
+          : Number.MAX_SAFE_INTEGER;
+        const bTime = b.scheduledPublishAt
+          ? new Date(b.scheduledPublishAt).getTime()
+          : Number.MAX_SAFE_INTEGER;
+        if (aTime !== bTime) return aTime - bTime;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+    }
+
+    // Chế độ Thủ công (MANUAL): tôn trọng thứ tự kéo thả (sortOrder ASC), dòng mới thêm lên trên cùng
     return [...base].sort((a, b) => {
       const aOrder =
         localOrderMap && Object.prototype.hasOwnProperty.call(localOrderMap, a.id)
@@ -164,7 +200,7 @@ export function ProjectContentCalendarPanel({
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [tasks, localOrderMap]);
+  }, [tasks, localOrderMap, sortMode]);
 
   async function commitReorder(nextOrderedIds: string[]) {
     const prevOrderMap: Record<string, number> = {};
@@ -512,6 +548,16 @@ export function ProjectContentCalendarPanel({
         onChangeRouteFilter={setRouteFilter}
         statusFilter={statusFilter}
         onChangeStatusFilter={setStatusFilter}
+        sortMode={sortMode}
+        onChangeSortMode={(nextMode) => {
+          setSortMode(nextMode);
+          if (nextMode === "MANUAL") {
+            showToast(
+              "Đã chuyển sang chế độ Thủ công — di chuột vào đầu dòng (hiện bàn tay) để kéo thả lên xuống!",
+              "info"
+            );
+          }
+        }}
         deleteMode={deleteMode}
         onToggleDeleteMode={() => {
           setDeleteMode((v) => !v);
@@ -665,10 +711,20 @@ export function ProjectContentCalendarPanel({
               deletable={canUserDeleteTask(t, currentUserId, currentUserRole)}
               deleting={deleting}
               isSelectedForDelete={selectedDeleteIds.includes(t.id)}
-              canMoveUp={idx > 0}
-              canMoveDown={idx < filteredPosts.length - 1}
-              onMoveUp={() => handleMoveFilteredRelative(t.id, "UP")}
-              onMoveDown={() => handleMoveFilteredRelative(t.id, "DOWN")}
+              canMoveUp={sortMode === "MANUAL" && idx > 0}
+              canMoveDown={
+                sortMode === "MANUAL" && idx < filteredPosts.length - 1
+              }
+              onMoveUp={
+                sortMode === "MANUAL"
+                  ? () => handleMoveFilteredRelative(t.id, "UP")
+                  : undefined
+              }
+              onMoveDown={
+                sortMode === "MANUAL"
+                  ? () => handleMoveFilteredRelative(t.id, "DOWN")
+                  : undefined
+              }
               onToggleSelectDelete={toggleSelectDelete}
               onRequestDeleteSingle={(id) => setDeleteConfirmIds([id])}
               onPatchTaskInline={patchTaskInline}
@@ -722,7 +778,25 @@ export function ProjectContentCalendarPanel({
                   </div>
                 </th>
               )}
-              <th className="py-3 px-2 whitespace-nowrap">Ngày / Giờ đăng</th>
+              <th className="py-3 px-2 whitespace-nowrap">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSortMode((prev) =>
+                      prev === "TIME_DESC" ? "TIME_ASC" : "TIME_DESC"
+                    )
+                  }
+                  title="Bấm để đảo chiều sắp xếp theo Ngày & Giờ đăng"
+                  className="inline-flex items-center gap-1 uppercase font-extrabold hover:text-amber-200 transition cursor-pointer"
+                >
+                  <span>Ngày / Giờ đăng</span>
+                  {sortMode === "TIME_DESC" ? (
+                    <ArrowDown className="w-3.5 h-3.5 text-amber-300" />
+                  ) : sortMode === "TIME_ASC" ? (
+                    <ArrowUp className="w-3.5 h-3.5 text-amber-300" />
+                  ) : null}
+                </button>
+              </th>
               <th className="py-3 px-2 whitespace-nowrap">Tuyến</th>
               <th className="py-3 px-2 min-w-[165px]">Nội dung</th>
               <th className="py-3 px-2 whitespace-nowrap">Nền tảng</th>
@@ -902,6 +976,14 @@ export function ProjectContentCalendarPanel({
                   deleting={deleting}
                   isSelectedForDelete={selectedDeleteIds.includes(t.id)}
                   savedAiResult={getAiResultForTask(t)}
+                  manualDragEnabled={sortMode === "MANUAL"}
+                  onRequestManualMode={() => {
+                    setSortMode("MANUAL");
+                    showToast(
+                      "Đã chuyển sang chế độ Thủ công — giữ tay nắm đầu dòng để kéo thả sắp xếp lên xuống!",
+                      "info"
+                    );
+                  }}
                   isDragging={draggingId === t.id}
                   dropIndicator={
                     dropTarget?.id === t.id && draggingId !== t.id

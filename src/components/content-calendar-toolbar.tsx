@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowDownUp,
   ClipboardPaste,
   PenLine,
   Plus,
@@ -10,6 +11,8 @@ import {
   X,
 } from "lucide-react";
 import type { ProjectContentOptionKind } from "@/lib/content-plan";
+
+export type ContentCalendarSortMode = "TIME_DESC" | "TIME_ASC" | "MANUAL";
 
 interface ContentCalendarToolbarProps {
   filteredCount: number;
@@ -26,6 +29,8 @@ interface ContentCalendarToolbarProps {
   onChangeRouteFilter: (v: string) => void;
   statusFilter: string;
   onChangeStatusFilter: (v: string) => void;
+  sortMode: ContentCalendarSortMode;
+  onChangeSortMode: (mode: ContentCalendarSortMode) => void;
   deleteMode: boolean;
   onToggleDeleteMode: () => void;
   selectedDeleteCount: number;
@@ -61,6 +66,8 @@ export function ContentCalendarToolbar({
   onChangeRouteFilter,
   statusFilter,
   onChangeStatusFilter,
+  sortMode,
+  onChangeSortMode,
   deleteMode,
   onToggleDeleteMode,
   selectedDeleteCount,
@@ -181,22 +188,22 @@ export function ContentCalendarToolbar({
         </div>
       )}
 
-      {/* Bộ lọc nhanh */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 border-t border-slate-100 text-xs">
+      {/* Bộ lọc nhanh & Chế độ sắp xếp */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2 border-t border-slate-100 text-xs">
         <div className="relative col-span-2 sm:col-span-1">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => onChangeSearchQuery(e.target.value)}
             placeholder="Tìm ý tưởng, bài viết..."
-            className="w-full rounded-xl border border-slate-200 pl-8 pr-2.5 py-1.5 text-xs"
+            className="w-full h-9 rounded-xl border border-slate-200 pl-8 pr-2.5 text-xs"
           />
         </div>
         <select
           value={monthFilter}
           onChange={(e) => onChangeMonthFilter(e.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
+          className="h-9 rounded-xl border border-slate-200 bg-white px-2.5 truncate"
         >
           <option value="ALL">Tất cả tháng</option>
           <option value="UNSCHEDULED">⚠️ Chưa xếp lịch đăng</option>
@@ -209,7 +216,7 @@ export function ContentCalendarToolbar({
         <select
           value={picFilter}
           onChange={(e) => onChangePicFilter(e.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
+          className="h-9 rounded-xl border border-slate-200 bg-white px-2.5 truncate"
         >
           <option value="ALL">Tất cả PIC</option>
           <option value="MINE">📌 Bài của tôi</option>
@@ -222,7 +229,7 @@ export function ContentCalendarToolbar({
         <select
           value={routeFilter}
           onChange={(e) => onChangeRouteFilter(e.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
+          className="h-9 rounded-xl border border-slate-200 bg-white px-2.5 truncate"
         >
           <option value="ALL">Tất cả Tuyến</option>
           {routeOptions.map((opt) => (
@@ -234,7 +241,7 @@ export function ContentCalendarToolbar({
         <select
           value={statusFilter}
           onChange={(e) => onChangeStatusFilter(e.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5"
+          className="h-9 rounded-xl border border-slate-200 bg-white px-2.5 truncate"
         >
           <option value="ALL">Mọi tình trạng</option>
           <option value="DRAFT">Nháp</option>
@@ -244,6 +251,25 @@ export function ContentCalendarToolbar({
           <option value="APPROVED_FINAL">Đã duyệt Final</option>
           <option value="AIRED">Đã Air / Đăng</option>
         </select>
+        <div className="relative col-span-2 sm:col-span-1">
+          <ArrowDownUp className="w-3.5 h-3.5 text-sky-600 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <select
+            aria-label="Chế độ sắp xếp"
+            value={sortMode}
+            onChange={(e) =>
+              onChangeSortMode(e.target.value as ContentCalendarSortMode)
+            }
+            className={`w-full h-9 rounded-xl border pl-8 pr-2.5 font-bold cursor-pointer truncate ${
+              sortMode === "MANUAL"
+                ? "border-amber-300 bg-amber-50/70 text-amber-900"
+                : "border-sky-200 bg-sky-50/60 text-sky-900"
+            }`}
+          >
+            <option value="TIME_DESC">Muộn → Sớm</option>
+            <option value="TIME_ASC">Sớm → Muộn</option>
+            <option value="MANUAL">✋ Thủ công (Kéo thả)</option>
+          </select>
+        </div>
       </div>
 
       {/* Khung Paste Google Sheet */}

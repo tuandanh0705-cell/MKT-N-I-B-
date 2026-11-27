@@ -47,6 +47,8 @@ interface ContentCalendarRowProps {
   deleting: boolean;
   isSelectedForDelete: boolean;
   savedAiResult: GeminiQcCheckResponse | null;
+  manualDragEnabled?: boolean;
+  onRequestManualMode?: () => void;
   isDragging?: boolean;
   dropIndicator?: "BEFORE" | "AFTER" | null;
   onRowDragStart?: (taskId: string) => void;
@@ -91,6 +93,8 @@ export function ContentCalendarRow({
   deleting,
   isSelectedForDelete,
   savedAiResult,
+  manualDragEnabled = true,
+  onRequestManualMode,
   isDragging = false,
   dropIndicator = null,
   onRowDragStart,
@@ -130,7 +134,7 @@ export function ContentCalendarRow({
     t.status !== "PUBLISHED" &&
     t.status !== "DONE";
 
-  const canDragRow = Boolean(onRowDragStart) && !rowBusy;
+  const canDragRow = manualDragEnabled && Boolean(onRowDragStart) && !rowBusy;
 
   function computeDropPosition(e: React.DragEvent<HTMLTableRowElement>): "BEFORE" | "AFTER" {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -167,10 +171,15 @@ export function ContentCalendarRow({
                   : "hover:bg-slate-50/80"
       }`}
     >
-      {/* Tay nắm kéo thả ở đầu dòng (di chuột vào đổi thành bàn tay để kéo lên xuống) */}
+      {/* Tay nắm kéo thả ở đầu dòng (chế độ Thủ công: bàn tay kéo lên xuống; chế độ Thời gian: bấm để chuyển nhanh sang Thủ công) */}
       <td
         data-drag-handle={t.id}
         draggable={canDragRow}
+        onClick={() => {
+          if (!manualDragEnabled && onRequestManualMode) {
+            onRequestManualMode();
+          }
+        }}
         onDragStart={(e) => {
           if (!canDragRow) {
             e.preventDefault();
@@ -186,11 +195,17 @@ export function ContentCalendarRow({
         onDragEnd={() => {
           onRowDragEnd?.();
         }}
-        title="Giữ và kéo lên/xuống để sắp xếp thứ tự dòng"
+        title={
+          manualDragEnabled
+            ? "Giữ và kéo lên/xuống để sắp xếp thứ tự dòng"
+            : "Đang sắp xếp theo thời gian — bấm vào đây để chuyển sang chế độ Thủ công (Kéo thả)"
+        }
         className={`w-9 py-2.5 px-1 text-center align-middle select-none transition-colors ${
           canDragRow
-            ? "cursor-grab active:cursor-grabbing text-slate-300 hover:text-blue-600 hover:bg-blue-50/70"
-            : "text-slate-200 cursor-default"
+            ? "cursor-grab active:cursor-grabbing text-slate-400 hover:text-blue-600 hover:bg-blue-50/70"
+            : !manualDragEnabled && onRequestManualMode
+              ? "cursor-pointer text-slate-200 hover:text-amber-600 hover:bg-amber-50/60"
+              : "text-slate-200 cursor-default"
         }`}
       >
         <span
