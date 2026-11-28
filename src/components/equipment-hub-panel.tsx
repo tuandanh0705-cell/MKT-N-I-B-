@@ -13,11 +13,15 @@ import {
   X,
 } from "lucide-react";
 import type { AuthUser } from "@/lib/auth";
-import { EQUIPMENT_CATEGORY_META } from "@/lib/constants";
+import {
+  EQUIPMENT_CATEGORY_META,
+  isMediaProductionUser,
+} from "@/lib/constants";
 import {
   formatVnDateTime,
   getVnDateString,
   getVnWeekBounds,
+  parseVnDateTimeLocalToIso,
   shiftVnWeekStart,
 } from "@/lib/dates";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
@@ -45,6 +49,9 @@ export function EquipmentHubPanel({
   teamMembers?: { id: string; name: string }[];
 }) {
   const { showToast } = useToast();
+  const canManageEquipment =
+    currentUser.role === "LEADER" ||
+    isMediaProductionUser(currentUser.role, currentUser.departmentScope);
 
   const [equipment, setEquipment] =
     useState<EquipmentItemType[]>(initialEquipment);
@@ -124,8 +131,8 @@ export function EquipmentHubPanel({
           equipmentId: bookEquipId,
           projectId: bookProjectId || null,
           purpose: bookPurpose,
-          startAt: new Date(bookStart).toISOString(),
-          endAt: new Date(bookEnd).toISOString(),
+          startAt: parseVnDateTimeLocalToIso(bookStart),
+          endAt: parseVnDateTimeLocalToIso(bookEnd),
         }),
       });
       const data = await res.json();
@@ -375,24 +382,26 @@ export function EquipmentHubPanel({
                 >
                   Đặt lịch ↓
                 </button>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => openEditEquipmentModal(eq)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 cursor-pointer"
-                    title="Chỉnh sửa thiết bị"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteEquipTarget(eq)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
-                    title="Xóa thiết bị"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                {canManageEquipment && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => openEditEquipmentModal(eq)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 cursor-pointer"
+                      title="Chỉnh sửa thiết bị"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteEquipTarget(eq)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                      title="Xóa thiết bị"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );

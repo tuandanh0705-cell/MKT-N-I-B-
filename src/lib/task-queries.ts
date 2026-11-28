@@ -114,3 +114,56 @@ export const TASK_DETAIL_INCLUDE = {
     },
   },
 } satisfies Prisma.TaskInclude;
+
+/**
+ * Rút gọn các `AssetLink` đang lưu ảnh dạng Base64 (`data:image/...`) thành URL nhị phân có cache
+ * `/api/assets/[id]` trước khi trả xuống trình duyệt, giúp giảm hàng trăm KB payload JSON/SSR mỗi trang.
+ */
+export function rewriteInlineAssetUrl(assetId: string, url: string): string {
+  if (url && url.startsWith("data:image/")) {
+    return `/api/assets/${assetId}`;
+  }
+  return url;
+}
+
+export function sanitizeTaskAssets<
+  T extends { assets?: Array<{ id: string; url: string }> },
+>(task: T): T {
+  if (!task.assets || task.assets.length === 0) return task;
+  let changed = false;
+  const nextAssets = task.assets.map((a) => {
+    const rewritten = rewriteInlineAssetUrl(a.id, a.url);
+    if (rewritten !== a.url) {
+      changed = true;
+      return { ...a, url: rewritten };
+    }
+    return a;
+  });
+  return changed ? { ...task, assets: nextAssets } : task;
+}
+
+export function sanitizeTasksAssets<
+  T extends { assets?: Array<{ id: string; url: string }> },
+>(tasks: T[]): T[] {
+  return tasks.map((t) => sanitizeTaskAssets(t));
+}
+
+/**
+ * Projection gọn cho danh sách `Project` ở các trang không cần JSON lớn (`overviewJson`, `contentMatrixJson`).
+ */
+export const SIMPLE_PROJECT_SELECT = {
+  id: true,
+  slug: true,
+  name: true,
+  description: true,
+  channelSummary: true,
+  masterResourceUrl: true,
+  masterResourceNote: true,
+  weeklySocialTarget: true,
+  weeklyAdsTarget: true,
+  weeklyVideoTarget: true,
+  weeklyImageTarget: true,
+  kpiNote: true,
+  color: true,
+  isActive: true,
+} satisfies Prisma.ProjectSelect;

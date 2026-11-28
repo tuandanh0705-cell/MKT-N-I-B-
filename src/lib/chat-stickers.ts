@@ -393,7 +393,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   {
     id: "pirate",
     label: "Băng Mũ Rơm & Thiên nhiên",
-    icon: "🏴‍☠️",
+    icon: "⚓",
     emojis: makeEntries([
       ["🏴‍☠️", "co hai tac bang mu rom pirate"],
       ["👒", "mu rom luffy straw hat"],

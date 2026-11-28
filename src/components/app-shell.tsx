@@ -469,76 +469,81 @@ export function AppShell({
         )}
       </div>
 
-      {/* User Footer */}
-      <div className="p-3 border-t border-sky-300/15 bg-[#081C36]">
-        <div className="flex items-center justify-between gap-2">
+      {/* User Footer (2 hàng thoáng: thông tin tài khoản đầy đủ + thanh tiện ích 4 nút) */}
+      <div className="p-3 border-t border-sky-300/15 bg-[#081C36] space-y-2">
+        <button
+          type="button"
+          onClick={() => {
+            setMobileMenuOpen(false);
+            setAccountModalTab("PROFILE");
+          }}
+          title="Cài đặt tài khoản cá nhân (Tên, Tài khoản, Mật khẩu)"
+          className="w-full flex items-center gap-2.5 min-w-0 text-left rounded-xl px-2 py-1.5 hover:bg-sky-900/50 transition cursor-pointer"
+        >
+          <PirateAvatar
+            name={liveUser.name}
+            color={liveUser.avatarColor}
+            scope={liveUser.departmentScope}
+            pirateCharacter={liveUser.pirateCharacter}
+            size="md"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold text-white truncate">
+              {liveUser.preferredIcon ? `${liveUser.preferredIcon} ` : ""}
+              {liveUser.name}
+            </div>
+            <div className="text-[11px] text-sky-200/70 truncate">
+              {pirateRank.rank}
+            </div>
+          </div>
+        </button>
+
+        <div className="grid grid-cols-4 gap-1">
           <button
             type="button"
             onClick={() => {
               setMobileMenuOpen(false);
-              setAccountModalTab("PROFILE");
+              setAccountModalTab("CUSTOMIZE");
             }}
-            title="Cài đặt tài khoản cá nhân (Tên, Tài khoản, Mật khẩu)"
-            className="flex items-center gap-2.5 min-w-0 text-left rounded-xl p-1 -m-1 hover:bg-sky-900/50 transition cursor-pointer flex-1"
+            title="Cá nhân hóa (Nhân vật, Giọng văn, Icon)"
+            className="flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl bg-sky-950/60 hover:bg-sky-900/70 text-sky-200/80 hover:text-amber-300 transition cursor-pointer"
           >
-            <PirateAvatar
-              name={liveUser.name}
-              color={liveUser.avatarColor}
-              scope={liveUser.departmentScope}
-              pirateCharacter={liveUser.pirateCharacter}
-              size="lg"
-            />
-            <div className="min-w-0">
-              <div className="text-sm font-bold text-white truncate">
-                {liveUser.preferredIcon ? `${liveUser.preferredIcon} ` : ""}
-                {liveUser.name}
-              </div>
-              <div className="text-[10px] text-sky-200/70 truncate">
-                Tài khoản cá nhân
-              </div>
-            </div>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span className="text-[9px] font-semibold">Tùy biến</span>
           </button>
-
-          <div className="flex items-center gap-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setMobileMenuOpen(false);
-                setAccountModalTab("CUSTOMIZE");
-              }}
-              title="Cá nhân hóa (Nhân vật, Giọng văn, Icon)"
-              className="p-2 rounded-lg text-sky-200/70 hover:text-amber-300 hover:bg-sky-900/60 transition cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setTrashOpen(true)}
-              title="Thùng rác & Khôi phục"
-              className="p-2 rounded-lg text-sky-200/70 hover:text-amber-300 hover:bg-sky-900/60 transition cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMobileMenuOpen(false);
-                setAccountModalTab("SECURITY");
-              }}
-              title="Đổi mật khẩu"
-              className="p-2 rounded-lg text-sky-200/70 hover:text-amber-300 hover:bg-sky-900/60 transition cursor-pointer"
-            >
-              <KeyRound className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              title="Rời tàu (Đăng xuất)"
-              className="p-2 rounded-lg text-sky-200/70 hover:text-rose-400 hover:bg-sky-900/60 transition cursor-pointer"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              setTrashOpen(true);
+            }}
+            title="Thùng rác & Khôi phục"
+            className="flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl bg-sky-950/60 hover:bg-sky-900/70 text-sky-200/80 hover:text-amber-300 transition cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span className="text-[9px] font-semibold">Thùng rác</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              setAccountModalTab("SECURITY");
+            }}
+            title="Đổi mật khẩu"
+            className="flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl bg-sky-950/60 hover:bg-sky-900/70 text-sky-200/80 hover:text-amber-300 transition cursor-pointer"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            <span className="text-[9px] font-semibold">Mật khẩu</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            title="Rời tàu (Đăng xuất)"
+            className="flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl bg-sky-950/60 hover:bg-rose-950/70 text-sky-200/80 hover:text-rose-300 transition cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="text-[9px] font-semibold">Đăng xuất</span>
+          </button>
         </div>
       </div>
     </div>
@@ -579,12 +584,12 @@ export function AppShell({
                   type="button"
                   onClick={() => setAccountModalTab("PROFILE")}
                   title="Mở cài đặt tài khoản cá nhân"
-                  className="inline-flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-0.5 text-[11px] font-bold border bg-amber-50 hover:bg-amber-100 text-slate-900 border-amber-200 shrink-0 max-w-[110px] sm:max-w-none truncate transition cursor-pointer"
+                  className="hidden sm:inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold border bg-amber-50 hover:bg-amber-100 text-slate-900 border-amber-200 shrink-0 transition cursor-pointer"
                 >
                   <span className="shrink-0">{liveUser.preferredIcon || pirateRank.emoji}</span>
                   <span className="truncate">{liveUser.name}</span>
                 </button>
-                <span className="text-xs font-bold text-slate-700 truncate">
+                <span className="text-xs sm:text-sm font-extrabold text-slate-800 truncate">
                   {activePageTitle}
                 </span>
               </div>
@@ -765,9 +770,13 @@ export function AppShell({
         <Link
           href={user.role === "LEADER" ? "/leader" : "/my-work"}
           className={`flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold rounded-xl py-1 transition ${
-            pathname === "/leader" || pathname === "/my-work"
-              ? "text-red-600 bg-amber-100/70 font-bold"
-              : "text-slate-500"
+            user.role === "LEADER"
+              ? pathname === "/leader"
+                ? "text-red-600 bg-amber-100/70 font-bold"
+                : "text-slate-500"
+              : pathname === "/my-work"
+                ? "text-red-600 bg-amber-100/70 font-bold"
+                : "text-slate-500"
           }`}
         >
           {user.role === "LEADER" ? (

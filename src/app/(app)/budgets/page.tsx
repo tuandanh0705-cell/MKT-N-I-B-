@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { buildProjectVisibilityWhere } from "@/lib/permissions";
 import { getBudgetGeneralInfo } from "@/lib/budget-settings";
+import { SIMPLE_PROJECT_SELECT } from "@/lib/task-queries";
 import { BudgetsView } from "@/components/budgets-view";
 
 export default async function BudgetsPage() {
@@ -30,6 +31,7 @@ export default async function BudgetsPage() {
     prisma.project.findMany({
       where: buildProjectVisibilityWhere(user),
       orderBy: { createdAt: "asc" },
+      select: SIMPLE_PROJECT_SELECT,
     }),
     getBudgetGeneralInfo(),
   ]);

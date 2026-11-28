@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Wallet,
@@ -21,7 +21,11 @@ import {
   BUDGET_CATEGORY_LABEL,
   BUDGET_STATUS_META,
 } from "@/lib/constants";
-import { formatVnDate, formatVnd } from "@/lib/dates";
+import {
+  formatVnDate,
+  formatVnd,
+  parseVnDateTimeLocalToIso,
+} from "@/lib/dates";
 import { useToast } from "@/components/toast-provider";
 import type { BudgetGeneralInfo } from "@/lib/budget-settings";
 import type { BudgetItem, SimpleProject } from "@/types/crm";
@@ -59,6 +63,20 @@ export function BudgetsView({
   const [neededBy, setNeededBy] = useState("");
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [projectFilter, setProjectFilter] = useState<string>("ALL");
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+
+  const filteredBudgets = useMemo(() => {
+    return budgets.filter((b) => {
+      if (statusFilter !== "ALL" && b.status !== statusFilter) return false;
+      if (projectFilter !== "ALL" && b.project.id !== projectFilter) return false;
+      if (categoryFilter !== "ALL" && b.category !== categoryFilter) return false;
+      return true;
+    });
+  }, [budgets, statusFilter, projectFilter, categoryFilter]);
 
   async function handleCopy(key: string, text: string, label: string) {
     try {
@@ -130,7 +148,7 @@ export function BudgetsView({
           title,
           category,
           amount: Number(amount),
-          neededBy: neededBy ? new Date(neededBy).toISOString() : null,
+          neededBy: parseVnDateTimeLocalToIso(neededBy),
           note,
         }),
       });
@@ -142,6 +160,7 @@ export function BudgetsView({
       setBudgets((prev) => [data.budget, ...prev]);
       setTitle("");
       setAmount("");
+      setNeededBy("");
       setNote("");
       showToast(`Đã gửi đề xuất ${data.budget.code}.`);
       router.refresh();
@@ -151,16 +170,22 @@ export function BudgetsView({
   }
 
   async function handleReview(id: string, status: "APPROVED" | "REJECTED") {
+    const reviewNote = (reviewNotes[id] || "").trim();
     const res = await fetch("/api/budgets", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, status, reviewNote: reviewNote || undefined }),
     });
     const data = await res.json();
     if (res.ok) {
       setBudgets((prev) =>
         prev.map((b) => (b.id === id ? data.budget : b))
       );
+      setReviewNotes((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       showToast(
         status === "APPROVED" ? "Đã duyệt chi phí." : "Đã từ chối đề xuất.",
         status === "APPROVED" ? "success" : "info"
@@ -657,20 +682,66 @@ export function BudgetsView({
 
       {/* Danh sách Dự trù chi phí */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-3">
-        <div className="flex items-center gap-2">
-          <Wallet className="w-4 h-4 text-slate-700" />
-          <h2 className="text-sm font-bold text-slate-900">
-            Danh sách Dự trù ({budgets.length})
-          </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-slate-700" />
+            <h2 className="text-sm font-bold text-slate-900">
+              Danh sách Dự trù ({filteredBudgets.length}/{budgets.length})
+            </h2>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Lọc trạng thái ngân sách"
+              className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700"
+            >
+              <option value="ALL">Mọi trạng thái</option>
+              <option value="PENDING">Chờ duyệt</option>
+              <option value="APPROVED">Đã duyệt</option>
+              <option value="REJECTED">Từ chối</option>
+            </select>
+
+            <select
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+              aria-label="Lọc dự án ngân sách"
+              className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700"
+            >
+              <option value="ALL">Tất cả dự án</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              aria-label="Lọc hạng mục ngân sách"
+              className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700"
+            >
+              <option value="ALL">Mọi phân loại</option>
+              {Object.entries(BUDGET_CATEGORY_LABEL).map(([k, label]) => (
+                <option key={k} value={k}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {budgets.length === 0 ? (
+        {filteredBudgets.length === 0 ? (
           <div className="py-10 text-center text-sm text-slate-400">
-            Chưa có phiếu dự trù chi phí nào.
+            {budgets.length === 0
+              ? "Chưa có phiếu dự trù chi phí nào."
+              : "Không có phiếu chi phí khớp bộ lọc hiện tại."}
           </div>
         ) : (
           <div className="space-y-3">
-            {budgets.map((b) => {
+            {filteredBudgets.map((b) => {
               const st = BUDGET_STATUS_META[b.status];
               return (
                 <div
@@ -703,6 +774,11 @@ export function BudgetsView({
                     {b.note && (
                       <p className="text-xs text-slate-600">{b.note}</p>
                     )}
+                    {b.reviewNote && (
+                      <p className="text-xs font-medium text-indigo-800 bg-indigo-50/70 border border-indigo-100 rounded-lg px-2.5 py-1 inline-block">
+                        Ghi chú duyệt: {b.reviewNote}
+                      </p>
+                    )}
                     <div className="text-xs text-slate-500 flex flex-wrap gap-3">
                       <span>
                         Người đề xuất:{" "}
@@ -724,23 +800,37 @@ export function BudgetsView({
                       {formatVnd(b.amount)}
                     </div>
                     {currentUserRole === "LEADER" && b.status === "PENDING" && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleReview(b.id, "APPROVED")}
-                          className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Duyệt chi
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleReview(b.id, "REJECTED")}
-                          className="rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          Từ chối
-                        </button>
+                      <div className="flex flex-col sm:items-end gap-1.5">
+                        <input
+                          type="text"
+                          value={reviewNotes[b.id] || ""}
+                          onChange={(e) =>
+                            setReviewNotes((prev) => ({
+                              ...prev,
+                              [b.id]: e.target.value,
+                            }))
+                          }
+                          placeholder="Ghi chú duyệt / lý do (tùy chọn)..."
+                          className="w-full sm:w-56 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white px-2.5 py-1 text-xs"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleReview(b.id, "APPROVED")}
+                            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Duyệt chi
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleReview(b.id, "REJECTED")}
+                            className="rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            Từ chối
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

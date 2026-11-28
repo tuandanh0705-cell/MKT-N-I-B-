@@ -178,6 +178,7 @@ export function ChatWorkspace({
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const activeRoomIdRef = useRef<string | null>(activeRoomId);
+  const mobileShowChatRef = useRef<boolean>(mobileShowChat);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const mobileChatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -198,6 +199,10 @@ export function ChatWorkspace({
   useEffect(() => {
     activeRoomIdRef.current = activeRoomId;
   }, [activeRoomId]);
+
+  useEffect(() => {
+    mobileShowChatRef.current = mobileShowChat;
+  }, [mobileShowChat]);
 
   // Trên Mobile: khi mở phòng chat, đồng bộ chiều cao thực tế theo visualViewport để khung chat bám sát bàn phím iOS/Android giống Messenger/Instagram
   useEffect(() => {
@@ -410,6 +415,39 @@ export function ChatWorkspace({
     scrollToBottom(false);
   }, [activeRoomId, scrollToBottom]);
 
+  // Đồng bộ badge tổng tin chưa đọc ngay khi vào trang Chat & chỉ đánh dấu đã đọc phòng đầu tiên trên Desktop (tránh âm thầm đọc trên Mobile khi đang ở danh sách phòng)
+  useEffect(() => {
+    broadcastTotalUnread(initialRooms);
+    if (!initialRoomId || typeof window === "undefined") return;
+    const isDesktopOrDirectRoom =
+      window.innerWidth >= 768 || initialMobileShowChat;
+    if (!isDesktopOrDirectRoom) return;
+    const target = initialRooms.find((r) => r.id === initialRoomId);
+    if (!target || target.unreadCount <= 0) return;
+
+    const cached = roomCacheRef.current.get(initialRoomId) ?? [];
+    const lastConfirmed = [...cached].reverse().find((m) => !m.pending);
+    const url = lastConfirmed
+      ? `/api/chat/rooms/${initialRoomId}/messages?after=${encodeURIComponent(
+          lastConfirmed.createdAt
+        )}`
+      : `/api/chat/rooms/${initialRoomId}/messages`;
+
+    fetch(url)
+      .then((res) => {
+        if (!res.ok) return;
+        setRooms((prev) => {
+          const updated = prev.map((r) =>
+            r.id === initialRoomId ? { ...r, unreadCount: 0 } : r
+          );
+          broadcastTotalUnread(updated);
+          return updated;
+        });
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fetchRoomReminders = useCallback(async (roomId: string) => {
     try {
       const res = await fetch(`/api/chat/rooms/${roomId}/reminders`);
@@ -477,11 +515,28 @@ export function ChatWorkspace({
               let dirty = false;
               const existingIds = new Set(prev.map((m) => m.id));
               const updated = prev.map((m) => {
+                let nextMsg = m;
                 if (deletedSet.has(m.id) && !m.isDeleted) {
                   dirty = true;
-                  return { ...m, isDeleted: true, content: "", attachmentUrl: null };
+                  nextMsg = { ...nextMsg, isDeleted: true, content: "", attachmentUrl: null };
                 }
-                return m;
+                if (
+                  nextMsg.replyTo &&
+                  deletedSet.has(nextMsg.replyTo.id) &&
+                  !nextMsg.replyTo.isDeleted
+                ) {
+                  dirty = true;
+                  nextMsg = {
+                    ...nextMsg,
+                    replyTo: {
+                      ...nextMsg.replyTo,
+                      isDeleted: true,
+                      content: "",
+                      attachmentUrl: null,
+                    },
+                  };
+                }
+                return nextMsg;
               });
               for (const m of incoming) {
                 if (!existingIds.has(m.id)) {
@@ -525,13 +580,13 @@ export function ChatWorkspace({
     let inFlight = false;
     let lastActivityAt = Date.now();
 
-    const refreshRoomsList = async (currentId: string | null) => {
+    const refreshRoomsList = async (visibleRoomId: string | null) => {
       const roomsRes = await fetch("/api/chat/rooms?poll=1");
       if (roomsRes.ok && active) {
         const rData = await roomsRes.json();
         const fetchedRooms: ChatRoomSummary[] = rData.rooms || [];
         const normalized = fetchedRooms.map((r) =>
-          r.id === currentId ? { ...r, unreadCount: 0 } : r
+          visibleRoomId && r.id === visibleRoomId ? { ...r, unreadCount: 0 } : r
         );
         setRooms(normalized);
         broadcastTotalUnread(normalized);
@@ -542,36 +597,64 @@ export function ChatWorkspace({
       if (document.visibilityState !== "visible" || inFlight) return;
       inFlight = true;
       const currentId = activeRoomIdRef.current;
+      const isViewingRoom =
+        Boolean(currentId) &&
+        (typeof window === "undefined" ||
+          window.innerWidth >= 768 ||
+          mobileShowChatRef.current);
+      const visibleRoomId = isViewingRoom ? currentId : null;
       pollTickRef.current += 1;
       let hasNewIncoming = false;
 
       try {
-        if (currentId) {
-          const cached = roomCacheRef.current.get(currentId) ?? [];
+        if (visibleRoomId) {
+          const cached = roomCacheRef.current.get(visibleRoomId) ?? [];
           const lastConfirmed = [...cached].reverse().find((m) => !m.pending);
           const url = lastConfirmed
-            ? `/api/chat/rooms/${currentId}/messages?after=${encodeURIComponent(
+            ? `/api/chat/rooms/${visibleRoomId}/messages?after=${encodeURIComponent(
                 lastConfirmed.createdAt
               )}`
-            : `/api/chat/rooms/${currentId}/messages`;
+            : `/api/chat/rooms/${visibleRoomId}/messages`;
 
           const msgRes = await fetch(url);
-          if (msgRes.ok && active && activeRoomIdRef.current === currentId) {
+          if (msgRes.ok && active && activeRoomIdRef.current === visibleRoomId) {
             const mData = await msgRes.json();
             if (mData.incremental) {
               const incoming: ChatMessageItem[] = mData.messages || [];
               const deletedSet = new Set<string>(mData.deletedIds || []);
               if (incoming.length > 0) hasNewIncoming = true;
 
-              const changed = updateRoomMessages(currentId, (prev) => {
+              const changed = updateRoomMessages(visibleRoomId, (prev) => {
                 let dirty = false;
                 const existingIds = new Set(prev.map((m) => m.id));
                 const next = prev.map((m) => {
+                  let nextMsg = m;
                   if (deletedSet.has(m.id) && !m.isDeleted) {
                     dirty = true;
-                    return { ...m, isDeleted: true, content: "", attachmentUrl: null };
+                    nextMsg = {
+                      ...nextMsg,
+                      isDeleted: true,
+                      content: "",
+                      attachmentUrl: null,
+                    };
                   }
-                  return m;
+                  if (
+                    nextMsg.replyTo &&
+                    deletedSet.has(nextMsg.replyTo.id) &&
+                    !nextMsg.replyTo.isDeleted
+                  ) {
+                    dirty = true;
+                    nextMsg = {
+                      ...nextMsg,
+                      replyTo: {
+                        ...nextMsg.replyTo,
+                        isDeleted: true,
+                        content: "",
+                        attachmentUrl: null,
+                      },
+                    };
+                  }
+                  return nextMsg;
                 });
                 for (const m of incoming) {
                   if (!existingIds.has(m.id)) {
@@ -586,7 +669,7 @@ export function ChatWorkspace({
               }
             } else {
               const loaded: ChatMessageItem[] = mData.messages || [];
-              const changed = updateRoomMessages(currentId, (prev) => {
+              const changed = updateRoomMessages(visibleRoomId, (prev) => {
                 if (
                   prev.length === loaded.length &&
                   prev[prev.length - 1]?.id === loaded[loaded.length - 1]?.id &&
@@ -607,7 +690,7 @@ export function ChatWorkspace({
         }
         // Chỉ refresh danh sách phòng mỗi 3 nhịp, khi có tin mới, hoặc khi vừa quay lại tab
         if (forceRooms || hasNewIncoming || pollTickRef.current % 3 === 0) {
-          await refreshRoomsList(currentId);
+          await refreshRoomsList(visibleRoomId);
           if (currentId) {
             void fetchRoomReminders(currentId);
           }
@@ -734,6 +817,7 @@ export function ChatWorkspace({
         setDraft("");
         setAttachmentUrl("");
         setShowLinkInput(false);
+        setReplyingTo(null);
       }
 
       const endpointRoomId = existingSecret ? existingSecret.id : activeRoom.id;
@@ -1226,7 +1310,6 @@ export function ChatWorkspace({
           onSearchQueryChange={setSearchQuery}
           onFilterTabChange={setFilterTab}
           onStartDirectChat={handleStartDirectChat}
-          onOpenAnonymousModal={() => setAnonDirectOpen(true)}
           onSelectRoom={(id) => handleSelectRoom(id)}
           getDirectPeer={getDirectPeer}
           getRoomDisplayTitle={getRoomDisplayTitle}
@@ -1316,22 +1399,23 @@ export function ChatWorkspace({
                 />
 
                 {/* === TOOLBAR DESKTOP (md+) === */}
-                <div className="hidden md:flex items-center justify-between gap-1.5 mb-2">
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar min-w-0">
+                <div className="hidden md:flex flex-wrap items-center justify-between gap-1.5 mb-2">
+                  <div className="flex flex-wrap items-center gap-1 min-w-0">
                     {activeRoom.allowAnonymous &&
                       (isLockedAnonymous ? (
                         <span
-                          className="rounded-full px-3 py-1 text-[11px] font-bold inline-flex items-center gap-1 border bg-indigo-900 text-amber-300 border-indigo-700 shadow-sm shrink-0"
+                          className="rounded-full px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border bg-indigo-900 text-amber-300 border-indigo-700 shadow-sm shrink-0"
                           title="Phòng ẩn danh riêng luôn giữ bí mật danh tính thật của bạn"
                         >
                           <EyeOff className="w-3.5 h-3.5" />
-                          <span>🔒 Luôn bật Ẩn danh</span>
+                          <span className="hidden xl:inline">🔒 Luôn bật Ẩn danh</span>
+                          <span className="xl:hidden">🔒 Ẩn danh</span>
                         </span>
                       ) : (
                         <button
                           type="button"
                           onClick={() => setAnonymousMode((v) => !v)}
-                          className={`rounded-full px-3 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
                             effectiveAnonymous
                               ? "bg-indigo-900 text-amber-300 border-indigo-700 shadow-sm"
                               : "bg-white text-slate-700 border-amber-200 hover:border-indigo-400"
@@ -1341,12 +1425,13 @@ export function ChatWorkspace({
                           {effectiveAnonymous ? (
                             <>
                               <EyeOff className="w-3.5 h-3.5" />
-                              <span>🕵️ Đang bật Ẩn danh</span>
+                              <span className="hidden xl:inline">🕵️ Đang Ẩn danh</span>
+                              <span className="xl:hidden">Ẩn danh</span>
                             </>
                           ) : (
                             <>
                               <Eye className="w-3.5 h-3.5 text-slate-500" />
-                              <span>Gửi Ẩn danh</span>
+                              <span className="hidden lg:inline">Ẩn danh</span>
                             </>
                           )}
                         </button>
@@ -1356,7 +1441,7 @@ export function ChatWorkspace({
                       <select
                         value={anonymousAlias}
                         onChange={(e) => setAnonymousAlias(e.target.value)}
-                        className="rounded-full border border-indigo-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-indigo-900 focus:outline-none shrink-0"
+                        className="rounded-full border border-indigo-300 bg-white px-2 py-1 text-[11px] font-semibold text-indigo-900 focus:outline-none shrink-0 max-w-[130px]"
                       >
                         {STEALTH_ALIASES.map((alias) => (
                           <option key={alias} value={alias}>
@@ -1368,10 +1453,12 @@ export function ChatWorkspace({
 
                     <label
                       title="Gửi ảnh từ máy"
-                      className="rounded-full px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer shrink-0"
+                      className="rounded-full px-2 lg:px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer shrink-0"
                     >
                       <ImagePlus className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{uploadingImage ? "Đang nén..." : "Gửi Ảnh"}</span>
+                      <span className="hidden lg:inline">
+                        {uploadingImage ? "Đang nén..." : "Ảnh"}
+                      </span>
                       <input
                         type="file"
                         accept="image/*"
@@ -1393,24 +1480,24 @@ export function ChatWorkspace({
                         chatInputRef.current?.focus();
                       }}
                       title="Nhắc tên đồng đội (@)"
-                      className="rounded-full px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer shrink-0"
+                      className="rounded-full px-2 lg:px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-slate-600 hover:bg-amber-50 cursor-pointer shrink-0"
                     >
                       <AtSign className="w-3.5 h-3.5 text-violet-600" />
-                      <span>@Tag tên</span>
+                      <span className="hidden lg:inline">Tag</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setShowLinkInput((v) => !v)}
                       title="Đính kèm link"
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border cursor-pointer shrink-0 ${
+                      className={`rounded-full px-2 lg:px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border cursor-pointer shrink-0 ${
                         showLinkInput
                           ? "bg-sky-50 border-sky-300 text-sky-700"
                           : "bg-white border-amber-200 text-slate-600 hover:bg-amber-50"
                       }`}
                     >
                       <Link2 className="w-3.5 h-3.5" />
-                      <span>Gắn Link</span>
+                      <span className="hidden lg:inline">Link</span>
                     </button>
 
                     <button
@@ -1423,15 +1510,15 @@ export function ChatWorkspace({
                         })
                       }
                       title="Tạo nhắc hẹn trong cuộc trò chuyện"
-                      className="rounded-full px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-amber-800 hover:bg-amber-50 cursor-pointer shrink-0"
+                      className="rounded-full px-2 lg:px-2.5 py-1 text-[11px] font-semibold inline-flex items-center gap-1 border bg-white border-amber-200 text-amber-800 hover:bg-amber-50 cursor-pointer shrink-0"
                     >
                       <AlarmClock className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Nhắc hẹn</span>
+                      <span className="hidden lg:inline">Nhắc hẹn</span>
                     </button>
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
-                    <div className="hidden xl:flex items-center gap-0.5 mr-1">
+                    <div className="hidden 2xl:flex items-center gap-0.5 mr-1">
                       {QUICK_EMOJIS.map((em) => (
                         <button
                           key={em}
@@ -1455,7 +1542,7 @@ export function ChatWorkspace({
                           setPickerOpen(true);
                         }
                       }}
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
+                      className={`rounded-full px-2 lg:px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
                         pickerOpen && pickerTab === "EMOJI"
                           ? "bg-amber-100 border-amber-400 text-amber-950"
                           : "bg-white border-amber-200 text-slate-700 hover:bg-amber-50"
@@ -1463,7 +1550,7 @@ export function ChatWorkspace({
                       title="Mở kho biểu tượng cảm xúc đầy đủ"
                     >
                       <Smile className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Emoji</span>
+                      <span className="hidden lg:inline">Emoji</span>
                     </button>
 
                     <button
@@ -1476,7 +1563,7 @@ export function ChatWorkspace({
                           setPickerOpen(true);
                         }
                       }}
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
+                      className={`rounded-full px-2 lg:px-2.5 py-1 text-[11px] font-bold inline-flex items-center gap-1 border transition cursor-pointer shrink-0 ${
                         pickerOpen && pickerTab === "STICKER"
                           ? "bg-[#0B2545] border-[#0B2545] text-amber-300"
                           : "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100"
@@ -1484,7 +1571,7 @@ export function ChatWorkspace({
                       title="Mở kho Sticker & tự thêm Sticker"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>Sticker</span>
+                      <span className="hidden lg:inline">Sticker</span>
                     </button>
                   </div>
                 </div>

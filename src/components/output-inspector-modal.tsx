@@ -537,15 +537,26 @@ function OutputInspectorInner({
                         {ASSET_KIND_LABEL[activePreview.asset.kind] || activePreview.asset.kind}:{" "}
                         {activePreview.asset.label} (v{activePreview.asset.version})
                       </div>
-                      <a
-                        href={activePreview.asset.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        Mở file gốc ({getAssetDomainLabel(activePreview.asset.url)})
-                      </a>
+                      {activePreview.asset.url.startsWith("data:image/") ? (
+                        <button
+                          type="button"
+                          onClick={() => setMediaLightboxIdx(selectedPreviewIdx)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+                        >
+                          <ZoomIn className="w-3.5 h-3.5" />
+                          Phóng to ảnh gốc
+                        </button>
+                      ) : (
+                        <a
+                          href={activePreview.asset.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Mở file gốc ({getAssetDomainLabel(activePreview.asset.url)})
+                        </a>
+                      )}
                     </div>
 
                     {analyzed.imagePreviews.length > 1 && (

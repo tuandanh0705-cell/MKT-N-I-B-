@@ -15,7 +15,7 @@ import {
   User as UserIcon,
   X,
 } from "lucide-react";
-import { getVnDateString } from "@/lib/dates";
+import { getVnDateString, getVnTimeString } from "@/lib/dates";
 import {
   CONTENT_PLATFORM_OPTIONS,
   isContentTaskItem,
@@ -26,6 +26,7 @@ import {
   normalizePlatformSelectValue,
 } from "@/lib/platform-meta";
 import { canUserDeleteTask, softDeleteTasksByIds } from "@/lib/task-delete";
+import { formatTaskAssigneesLabel, getTaskAssignees } from "@/lib/task-assignees";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { PlatformLogo } from "@/components/platform-logo";
 import { PublishChannelInput } from "@/components/publish-channel-input";
@@ -95,9 +96,14 @@ export function ProjectPublishCalendarPanel({
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [editPlatform, setEditPlatform] = useState("Fanpage");
   const [editChannel, setEditChannel] = useState("");
+  const [editPublishDate, setEditPublishDate] = useState("");
+  const [editPublishTime, setEditPublishTime] = useState("09:00");
   const [savingDetail, setSavingDetail] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingDetail, setDeletingDetail] = useState(false);
+  const [draggedPostId, setDraggedPostId] = useState<string | null>(null);
+  const [dropTargetDateStr, setDropTargetDateStr] = useState<string | null>(null);
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
 
   const scheduledPosts = useMemo(() => {
     return tasks.filter(
@@ -186,27 +192,69 @@ export function ProjectPublishCalendarPanel({
     setDetailTaskId(t.id);
     setEditPlatform(normalizePlatformSelectValue(t.platform));
     setEditChannel(t.publishChannel || "");
+    const refDate = t.scheduledPublishAt ?? t.dueAt;
+    setEditPublishDate(refDate ? getVnDateString(new Date(refDate)) : todayStr);
+    setEditPublishTime(getVnTimeString(refDate, "09:00"));
+  }
+
+  async function handleDropPostOnDate(postId: string, targetDateStr: string) {
+    setDraggedPostId(null);
+    setDropTargetDateStr(null);
+    const post = tasks.find((t) => t.id === postId);
+    if (!post) return;
+
+    const currentRef = post.scheduledPublishAt ?? post.dueAt;
+    const currentYmd = currentRef ? getVnDateString(new Date(currentRef)) : "";
+    if (currentYmd === targetDateStr) return;
+
+    const preservedTime = getVnTimeString(currentRef, "09:00");
+    const nextIso = `${targetDateStr}T${preservedTime}:00+07:00`;
+
+    setReschedulingId(postId);
+    try {
+      const res = await fetch(`/api/tasks/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledPublishAt: nextIso }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Không dời được lịch đăng bài.", "error");
+        return;
+      }
+      onTaskUpdated?.(data.task);
+      const ddmm = `${targetDateStr.slice(8, 10)}/${targetDateStr.slice(5, 7)}`;
+      showToast(`Đã dời lịch "${post.title}" sang ${ddmm} lúc ${preservedTime}!`);
+    } catch {
+      showToast("Lỗi kết nối khi dời lịch bài viết.", "error");
+    } finally {
+      setReschedulingId(null);
+    }
   }
 
   async function saveDetailChannel() {
     if (!detailPost) return;
     setSavingDetail(true);
     try {
+      const nextScheduled = editPublishDate
+        ? `${editPublishDate}T${editPublishTime || "09:00"}:00+07:00`
+        : null;
       const res = await fetch(`/api/tasks/${detailPost.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           platform: editPlatform,
           publishChannel: editChannel.trim() || null,
+          scheduledPublishAt: nextScheduled,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        showToast(data.error || "Không cập nhật được kênh đăng.", "error");
+        showToast(data.error || "Không cập nhật được lịch & kênh đăng.", "error");
         return;
       }
       onTaskUpdated?.(data.task);
-      showToast("Đã cập nhật nền tảng & kênh đăng bài!");
+      showToast("Đã cập nhật lịch đăng & nền tảng bài viết!");
     } finally {
       setSavingDetail(false);
     }
@@ -223,10 +271,19 @@ export function ProjectPublishCalendarPanel({
 
   const expandedPosts = expandedDayStr ? postsByDate.get(expandedDayStr) ?? [] : [];
   const detailMeta = detailPost ? getPlatformChannelMeta(editPlatform) : null;
+  const detailOrigRef = detailPost
+    ? detailPost.scheduledPublishAt ?? detailPost.dueAt
+    : null;
+  const detailOrigDate = detailOrigRef
+    ? getVnDateString(new Date(detailOrigRef))
+    : "";
+  const detailOrigTime = getVnTimeString(detailOrigRef, "09:00");
   const detailDirty =
     detailPost !== null &&
     (normalizePlatformSelectValue(detailPost.platform) !== editPlatform ||
-      (detailPost.publishChannel || "") !== editChannel.trim());
+      (detailPost.publishChannel || "") !== editChannel.trim() ||
+      detailOrigDate !== editPublishDate ||
+      detailOrigTime !== editPublishTime);
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
@@ -286,7 +343,9 @@ export function ProjectPublishCalendarPanel({
         </div>
 
         <h2 className="text-base sm:text-lg font-extrabold text-slate-900">
-          Tháng {cursorMonth} {cursorYear}
+          {calMode === "WEEK" && weekCells.length === 7
+            ? `Tuần ${weekCells[0].dayNum}/${weekCells[0].dateStr.slice(5, 7)} → ${weekCells[6].dayNum}/${weekCells[6].dateStr.slice(5, 7)}/${weekCells[6].dateStr.slice(0, 4)}`
+            : `Tháng ${cursorMonth} ${cursorYear}`}
         </h2>
 
         <div className="flex items-center gap-3">
@@ -316,140 +375,232 @@ export function ProjectPublishCalendarPanel({
         </div>
       </div>
 
-      {/* Header 7 thứ Chủ Nhật -> Thứ Bảy */}
-      <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50/70">
-        {WEEKDAYS_SUN_TO_SAT.map((label) => (
-          <div
-            key={label}
-            className="py-2.5 px-2 text-center text-xs font-bold text-slate-700 border-r last:border-r-0 border-slate-200"
-          >
-            {label}
-          </div>
-        ))}
-      </div>
-
-      {/* Lưới Tháng */}
+      {/* Lưới Tháng (cuộn ngang mượt trên Mobile để đủ chỗ hiển thị) */}
       {calMode === "MONTH" ? (
-        <div className="grid grid-cols-7">
-          {monthCells.map((cell) => {
-            const isToday = cell.dateStr === todayStr;
-            const dayPosts = postsByDate.get(cell.dateStr) ?? [];
-            const visiblePosts = dayPosts.slice(0, 2);
-            const extraCount = dayPosts.length - visiblePosts.length;
+        <div className="overflow-x-auto">
+          <div className="min-w-[640px]">
+            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50/70">
+              {WEEKDAYS_SUN_TO_SAT.map((label) => (
+                <div
+                  key={label}
+                  className="py-2.5 px-2 text-center text-xs font-bold text-slate-700 border-r last:border-r-0 border-slate-200"
+                >
+                  {label}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {monthCells.map((cell) => {
+                const isToday = cell.dateStr === todayStr;
+                const dayPosts = postsByDate.get(cell.dateStr) ?? [];
+                const visiblePosts = dayPosts.slice(0, 2);
+                const extraCount = dayPosts.length - visiblePosts.length;
 
-            return (
-              <div
-                key={cell.dateStr}
-                className={`group relative min-h-[112px] sm:min-h-[122px] p-1.5 sm:p-2 border-r border-b border-slate-200 [&:nth-child(7n)]:border-r-0 flex flex-col gap-1.5 transition ${
-                  isToday
-                    ? "bg-sky-50/80"
-                    : cell.inCurrentMonth
-                      ? "bg-white hover:bg-slate-50/60"
-                      : "bg-slate-50/50 text-slate-300"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span
-                    className={`text-xs font-bold leading-none ${
-                      isToday
-                        ? "text-sky-600"
-                        : cell.inCurrentMonth
-                          ? "text-slate-700"
-                          : "text-slate-300"
+                const isDropOver = dropTargetDateStr === cell.dateStr;
+
+                return (
+                  <div
+                    key={cell.dateStr}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      if (dropTargetDateStr !== cell.dateStr) {
+                        setDropTargetDateStr(cell.dateStr);
+                      }
+                    }}
+                    onDragLeave={(e) => {
+                      if (
+                        !e.currentTarget.contains(e.relatedTarget as Node | null) &&
+                        dropTargetDateStr === cell.dateStr
+                      ) {
+                        setDropTargetDateStr(null);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const postId =
+                        e.dataTransfer.getData("text/plain") || draggedPostId;
+                      if (postId) void handleDropPostOnDate(postId, cell.dateStr);
+                    }}
+                    className={`group relative min-h-[112px] sm:min-h-[122px] p-1.5 sm:p-2 border-r border-b border-slate-200 [&:nth-child(7n)]:border-r-0 flex flex-col gap-1.5 transition ${
+                      isDropOver
+                        ? "bg-sky-100/80 ring-2 ring-inset ring-sky-400"
+                        : isToday
+                          ? "bg-sky-50/80"
+                          : cell.inCurrentMonth
+                            ? "bg-white hover:bg-slate-50/60"
+                            : "bg-slate-50/50 text-slate-300"
                     }`}
                   >
-                    {cell.dayNum}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => onCreatePostForDate(cell.dateStr)}
-                    title={`Thêm bài ngày ${cell.dayNum}/${cell.dateStr.slice(5, 7)}`}
-                    className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-slate-400 hover:bg-sky-100 hover:text-sky-700 transition cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="space-y-1 flex-1 min-w-0">
-                  {visiblePosts.map((post) => {
-                    const ready = isReadyPost(post);
-                    const timeStr = getVnTimeLabel(post.scheduledPublishAt ?? post.dueAt);
-                    const meta = getPlatformChannelMeta(post.platform);
-                    return (
-                      <button
-                        key={post.id}
-                        type="button"
-                        onClick={() => openPostDetail(post)}
-                        title={`${timeStr} • ${meta.displayLabel}${
-                          post.publishChannel ? ` (${post.publishChannel})` : ""
-                        } • ${post.title}${post.assignee ? ` — ${post.assignee.name}` : ""}`}
-                        className={`w-full rounded-md px-1.5 py-1 flex items-center justify-between gap-1 text-left text-[11px] font-bold transition hover:brightness-95 cursor-pointer ${
-                          ready
-                            ? "bg-teal-50 text-teal-800 border border-teal-100"
-                            : "bg-orange-50 text-orange-700 border border-orange-100"
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`text-xs font-bold leading-none ${
+                          isToday
+                            ? "text-sky-600"
+                            : cell.inCurrentMonth
+                              ? "text-slate-700"
+                              : "text-slate-300"
                         }`}
                       >
-                        <span className="inline-flex items-center gap-1 min-w-0">
-                          {ready ? (
-                            <FileText className="w-3 h-3 text-teal-600 shrink-0" />
-                          ) : (
-                            <RotateCw className="w-3 h-3 text-orange-500 shrink-0" />
-                          )}
-                          <span className="shrink-0 tabular-nums">{timeStr}</span>
-                          <span className="truncate font-semibold text-[10.5px] opacity-90 hidden xl:inline">
-                            {post.title}
-                          </span>
-                        </span>
-                        <PlatformLogo platform={post.platform} size="sm" />
-                      </button>
-                    );
-                  })}
+                        {cell.dayNum}
+                      </span>
 
-                  {extraCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setExpandedDayStr(cell.dateStr)}
-                      className="text-[11px] font-semibold text-sky-600 hover:underline pl-0.5 cursor-pointer"
-                    >
-                      + {extraCount} bài viết khác
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                      <button
+                        type="button"
+                        onClick={() => onCreatePostForDate(cell.dateStr)}
+                        title={`Thêm bài ngày ${cell.dayNum}/${cell.dateStr.slice(5, 7)}`}
+                        className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-slate-400 hover:bg-sky-100 hover:text-sky-700 transition cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-1 flex-1 min-w-0">
+                      {visiblePosts.map((post) => {
+                        const ready = isReadyPost(post);
+                        const timeStr = getVnTimeLabel(post.scheduledPublishAt ?? post.dueAt);
+                        const meta = getPlatformChannelMeta(post.platform);
+                        return (
+                          <button
+                            key={post.id}
+                            type="button"
+                            draggable
+                            onDragStart={(e) => {
+                              setDraggedPostId(post.id);
+                              e.dataTransfer.setData("text/plain", post.id);
+                              e.dataTransfer.effectAllowed = "move";
+                            }}
+                            onDragEnd={() => {
+                              setDraggedPostId(null);
+                              setDropTargetDateStr(null);
+                            }}
+                            onClick={() => openPostDetail(post)}
+                            title={`${timeStr} • ${meta.displayLabel}${
+                              post.publishChannel ? ` (${post.publishChannel})` : ""
+                            } • ${post.title}${
+                              getTaskAssignees(post).length > 0
+                                ? ` — ${formatTaskAssigneesLabel(post)}`
+                                : ""
+                            } (Kéo thả sang ngày khác để đổi lịch)`}
+                            className={`w-full rounded-md px-1.5 py-1 flex items-center justify-between gap-1 text-left text-[11px] font-bold transition hover:brightness-95 cursor-grab active:cursor-grabbing ${
+                              draggedPostId === post.id || reschedulingId === post.id
+                                ? "opacity-50"
+                                : ""
+                            } ${
+                              ready
+                                ? "bg-teal-50 text-teal-800 border border-teal-100"
+                                : "bg-orange-50 text-orange-700 border border-orange-100"
+                            }`}
+                          >
+                            <span className="inline-flex items-center gap-1 min-w-0">
+                              {ready ? (
+                                <FileText className="w-3 h-3 text-teal-600 shrink-0" />
+                              ) : (
+                                <RotateCw className="w-3 h-3 text-orange-500 shrink-0" />
+                              )}
+                              <span className="shrink-0 tabular-nums">{timeStr}</span>
+                              <span className="truncate font-semibold text-[10.5px] opacity-90 hidden md:inline">
+                                {post.title}
+                              </span>
+                            </span>
+                            <PlatformLogo platform={post.platform} size="sm" />
+                          </button>
+                        );
+                      })}
+
+                      {extraCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedDayStr(cell.dateStr)}
+                          className="text-[11px] font-semibold text-sky-600 hover:underline pl-0.5 cursor-pointer"
+                        >
+                          + {extraCount} bài viết khác
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       ) : (
         /* Lưới Tuần (7 ngày Chủ Nhật -> Thứ Bảy) */
-        <div className="grid grid-cols-1 md:grid-cols-7">
-          {weekCells.map((cell) => {
-            const isToday = cell.dateStr === todayStr;
-            const dayPosts = postsByDate.get(cell.dateStr) ?? [];
-            return (
+        <>
+          <div className="hidden md:grid grid-cols-7 border-b border-slate-200 bg-slate-50/70">
+            {WEEKDAYS_SUN_TO_SAT.map((label) => (
               <div
-                key={cell.dateStr}
-                className={`min-h-[260px] p-2.5 border-r last:border-r-0 border-b md:border-b-0 border-slate-200 flex flex-col gap-2 ${
-                  isToday ? "bg-sky-50/75" : "bg-white"
-                }`}
+                key={label}
+                className="py-2.5 px-2 text-center text-xs font-bold text-slate-700 border-r last:border-r-0 border-slate-200"
               >
-                <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-                  <span
-                    className={`text-xs font-extrabold ${
-                      isToday ? "text-sky-600" : "text-slate-700"
-                    }`}
-                  >
-                    {cell.dayNum}/{cell.dateStr.slice(5, 7)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onCreatePostForDate(cell.dateStr)}
-                    className="rounded-md p-1 text-slate-400 hover:bg-sky-100 hover:text-sky-700 cursor-pointer"
-                    title="Thêm bài ngày này"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                {label}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-7">
+            {weekCells.map((cell) => {
+              const isToday = cell.dateStr === todayStr;
+              const isDropOver = dropTargetDateStr === cell.dateStr;
+              const dayPosts = postsByDate.get(cell.dateStr) ?? [];
+              return (
+                <div
+                  key={cell.dateStr}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dropTargetDateStr !== cell.dateStr) {
+                      setDropTargetDateStr(cell.dateStr);
+                    }
+                  }}
+                  onDragLeave={(e) => {
+                    if (
+                      !e.currentTarget.contains(e.relatedTarget as Node | null) &&
+                      dropTargetDateStr === cell.dateStr
+                    ) {
+                      setDropTargetDateStr(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const postId =
+                      e.dataTransfer.getData("text/plain") || draggedPostId;
+                    if (postId) void handleDropPostOnDate(postId, cell.dateStr);
+                  }}
+                  className={`min-h-[120px] md:min-h-[260px] p-2.5 border-r-0 md:border-r md:last:border-r-0 border-b md:border-b-0 border-slate-200 flex flex-col gap-2 transition ${
+                    isDropOver
+                      ? "bg-sky-100/80 ring-2 ring-inset ring-sky-400"
+                      : isToday
+                        ? "bg-sky-50/75"
+                        : "bg-white"
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                    <span
+                      className={`text-xs font-extrabold inline-flex items-center gap-1.5 ${
+                        isToday ? "text-sky-600" : "text-slate-700"
+                      }`}
+                    >
+                      <span className="md:hidden text-slate-500 font-bold">
+                        {cell.weekdayLabel} •
+                      </span>
+                      <span>
+                        {cell.dayNum}/{cell.dateStr.slice(5, 7)}
+                      </span>
+                      {isToday && (
+                        <span className="md:hidden rounded-full bg-sky-100 text-sky-700 px-1.5 py-0.5 text-[10px]">
+                          Hôm nay
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onCreatePostForDate(cell.dateStr)}
+                      className="rounded-md p-1 text-slate-400 hover:bg-sky-100 hover:text-sky-700 cursor-pointer"
+                      title="Thêm bài ngày này"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
 
                 {dayPosts.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center text-[11px] text-slate-300">
@@ -465,8 +616,23 @@ export function ProjectPublishCalendarPanel({
                         <button
                           key={post.id}
                           type="button"
+                          draggable
+                          onDragStart={(e) => {
+                            setDraggedPostId(post.id);
+                            e.dataTransfer.setData("text/plain", post.id);
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          onDragEnd={() => {
+                            setDraggedPostId(null);
+                            setDropTargetDateStr(null);
+                          }}
                           onClick={() => openPostDetail(post)}
-                          className={`w-full rounded-lg p-2 text-left border transition hover:shadow-xs cursor-pointer space-y-1 ${
+                          title="Kéo thả sang ngày khác để đổi lịch đăng"
+                          className={`w-full rounded-lg p-2 text-left border transition hover:shadow-xs cursor-grab active:cursor-grabbing space-y-1 ${
+                            draggedPostId === post.id || reschedulingId === post.id
+                              ? "opacity-50"
+                              : ""
+                          } ${
                             ready
                               ? "bg-teal-50/90 border-teal-200/80 text-teal-900"
                               : "bg-orange-50/90 border-orange-200/80 text-orange-900"
@@ -494,9 +660,9 @@ export function ProjectPublishCalendarPanel({
                               </span>
                             )}
                           </div>
-                          {post.assignee && (
+                          {getTaskAssignees(post).length > 0 && (
                             <div className="text-[10px] opacity-75 truncate">
-                              {post.assignee.name}
+                              {formatTaskAssigneesLabel(post)}
                             </div>
                           )}
                         </button>
@@ -504,10 +670,11 @@ export function ProjectPublishCalendarPanel({
                     })}
                   </div>
                 )}
-              </div>
-            );
-          })}
-        </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Modal xem toàn bộ bài viết khi bấm "+ X bài viết khác" */}
@@ -737,6 +904,32 @@ export function ProjectPublishCalendarPanel({
                   suggestions={channelSuggestions}
                 />
 
+                {/* Đổi nhanh Ngày & Giờ đăng ngay trên lịch */}
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-sky-200/70">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Ngày đăng
+                    </label>
+                    <input
+                      type="date"
+                      value={editPublishDate}
+                      onChange={(e) => setEditPublishDate(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Giờ đăng
+                    </label>
+                    <input
+                      type="time"
+                      value={editPublishTime}
+                      onChange={(e) => setEditPublishTime(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800"
+                    />
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-end gap-2 pt-1">
                   <button
                     type="button"
@@ -749,7 +942,7 @@ export function ProjectPublishCalendarPanel({
                     }`}
                   >
                     <Check className="w-3.5 h-3.5" />
-                    {savingDetail ? "Đang lưu..." : "Lưu nơi đăng"}
+                    {savingDetail ? "Đang lưu..." : "Lưu lịch & nơi đăng"}
                   </button>
                 </div>
               </div>
@@ -851,6 +1044,7 @@ export function ProjectPublishCalendarPanel({
             ]);
             if (deletedIds.length > 0) {
               onTaskDeleted?.(confirmDeleteId);
+              window.dispatchEvent(new Event("reviews-count-updated"));
               setDetailTaskId(null);
               showToast("Đã chuyển bài viết vào Thùng rác.");
             } else {

@@ -116,22 +116,40 @@ export function OutputsCompactCard({
 
         {/* Hàng 4: Link thành phẩm gọn 1 dòng */}
         {primaryAsset ? (
-          <a
-            href={primaryAsset.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={`${primaryAsset.label} (${getAssetDomainLabel(primaryAsset.url)})`}
-            className="flex items-center justify-between gap-1.5 rounded-xl border border-amber-200/80 bg-amber-50/50 hover:bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-950 transition"
-          >
-            <span className="inline-flex items-center gap-1.5 min-w-0">
-              <Link2 className="w-3 h-3 text-amber-600 shrink-0" />
-              <span className="truncate">{primaryAsset.label}</span>
-            </span>
-            <span className="inline-flex items-center gap-1 shrink-0 text-[10px] text-amber-700">
-              {extraAssetCount > 0 && <span>+{extraAssetCount}</span>}
-              <ExternalLink className="w-3 h-3" />
-            </span>
-          </a>
+          primaryAsset.url.startsWith("data:image/") ? (
+            <button
+              type="button"
+              onClick={onInspect}
+              title={`Xem ảnh ${primaryAsset.label}`}
+              className="w-full flex items-center justify-between gap-1.5 rounded-xl border border-amber-200/80 bg-amber-50/50 hover:bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-950 transition cursor-pointer"
+            >
+              <span className="inline-flex items-center gap-1.5 min-w-0">
+                <ImageIcon className="w-3 h-3 text-amber-600 shrink-0" />
+                <span className="truncate">{primaryAsset.label}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 shrink-0 text-[10px] text-amber-700">
+                {extraAssetCount > 0 && <span>+{extraAssetCount}</span>}
+                <Eye className="w-3 h-3" />
+              </span>
+            </button>
+          ) : (
+            <a
+              href={primaryAsset.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`${primaryAsset.label} (${getAssetDomainLabel(primaryAsset.url)})`}
+              className="flex items-center justify-between gap-1.5 rounded-xl border border-amber-200/80 bg-amber-50/50 hover:bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-950 transition"
+            >
+              <span className="inline-flex items-center gap-1.5 min-w-0">
+                <Link2 className="w-3 h-3 text-amber-600 shrink-0" />
+                <span className="truncate">{primaryAsset.label}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 shrink-0 text-[10px] text-amber-700">
+                {extraAssetCount > 0 && <span>+{extraAssetCount}</span>}
+                <ExternalLink className="w-3 h-3" />
+              </span>
+            </a>
+          )
         ) : (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-2.5 py-1.5 text-[11px] text-slate-400 truncate">
             Chưa gắn link file thành phẩm

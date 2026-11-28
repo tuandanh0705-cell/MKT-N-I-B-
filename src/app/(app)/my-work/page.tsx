@@ -8,7 +8,11 @@ import { getVnDateString } from "@/lib/dates";
 import { computeBirthdayInfo, ensureDailyBirthdayCelebrations } from "@/lib/birthdays";
 import { resolveEffectiveDailyKpi } from "@/lib/daily-kpi";
 import { getUserPendingMandatoryCourses } from "@/lib/knowledge-data";
-import { TASK_CARD_INCLUDE } from "@/lib/task-queries";
+import {
+  SIMPLE_PROJECT_SELECT,
+  TASK_CARD_INCLUDE,
+  sanitizeTasksAssets,
+} from "@/lib/task-queries";
 import { MyWorkView } from "@/components/my-work-view";
 
 export default async function MyWorkPage({
@@ -21,20 +25,21 @@ export default async function MyWorkPage({
 
   const resolvedParams = await searchParams;
   const todayDate = getVnDateString();
-  const approvedLeaves = await prisma.leaveRequest.findMany({
-    where: { userId: user.id, status: "APPROVED" },
-    select: { startDate: true, endDate: true, leaveType: true },
-  });
-
-  await ensureDailyBirthdayCelebrations().catch(() => {});
 
   const isMediaProduction = isMediaProductionUser(
     user.role,
     user.departmentScope
   );
 
-  const [tasks, projects, users, capacity, initialCheckin, pendingCourses] =
-    await Promise.all([
+  const [
+    rawTasks,
+    projects,
+    users,
+    capacity,
+    initialCheckin,
+    pendingCourses,
+    approvedLeaves,
+  ] = await Promise.all([
     prisma.task.findMany({
       where: isMediaProduction
         ? {
@@ -59,6 +64,7 @@ export default async function MyWorkPage({
     prisma.project.findMany({
       where: buildProjectVisibilityWhere(user),
       orderBy: { createdAt: "asc" },
+      select: SIMPLE_PROJECT_SELECT,
     }),
     prisma.user.findMany({
       where: { isActive: true },
@@ -91,7 +97,14 @@ export default async function MyWorkPage({
       },
     }),
     getUserPendingMandatoryCourses(user),
+    prisma.leaveRequest.findMany({
+      where: { userId: user.id, status: "APPROVED" },
+      select: { startDate: true, endDate: true, leaveType: true },
+    }),
+    ensureDailyBirthdayCelebrations().catch(() => {}),
   ]);
+
+  const tasks = sanitizeTasksAssets(rawTasks);
 
   const { todayBirthdays } = computeBirthdayInfo(users, todayDate);
   const dailyKpi = resolveEffectiveDailyKpi(user);

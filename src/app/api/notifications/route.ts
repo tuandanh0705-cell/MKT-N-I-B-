@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
@@ -13,7 +13,9 @@ export async function GET() {
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   }
 
-  await dispatchDueChatReminders().catch(() => 0);
+  after(async () => {
+    await dispatchDueChatReminders().catch(() => 0);
+  });
 
   const [notifications, chatUnreadCount, pendingReviewsCount] = await Promise.all([
     prisma.notification.findMany({
@@ -22,14 +24,16 @@ export async function GET() {
       take: 30,
     }),
     getChatUnreadCountForUser(user.id),
-    prisma.task.count({
-      where: {
-        AND: [
-          buildTaskVisibilityWhere(user),
-          { status: { in: ["WAITING_APPROVAL", "BRIEF_REVIEW"] } },
-        ],
-      },
-    }),
+    user.role === "LEADER"
+      ? prisma.task.count({
+          where: {
+            AND: [
+              buildTaskVisibilityWhere(user),
+              { status: { in: ["WAITING_APPROVAL", "BRIEF_REVIEW"] } },
+            ],
+          },
+        })
+      : Promise.resolve(0),
   ]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;

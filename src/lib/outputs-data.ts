@@ -3,7 +3,10 @@ import { isMediaProductionUser } from "@/lib/constants";
 import { buildProjectVisibilityWhere } from "@/lib/permissions";
 import { analyzeTaskOutputs, sortTasksForOutputCheck } from "@/lib/output-helpers";
 import { getGeminiConfigStatus } from "@/lib/gemini-ai";
-import { TASK_WITH_RECENT_COMMENTS_INCLUDE } from "@/lib/task-queries";
+import {
+  TASK_WITH_RECENT_COMMENTS_INCLUDE,
+  sanitizeTasksAssets,
+} from "@/lib/task-queries";
 import type { AuthUser } from "@/lib/auth";
 import type { TaskItem } from "@/types/crm";
 
@@ -76,7 +79,9 @@ export async function getOutputsWorkspaceData(user: AuthUser) {
     getGeminiConfigStatus(),
   ]);
 
-  const tasks = sortTasksForOutputCheck(rawTasks as unknown as TaskItem[]);
+  const tasks = sortTasksForOutputCheck(
+    sanitizeTasksAssets(rawTasks) as unknown as TaskItem[]
+  );
 
   let withOutputCount = 0;
   let contentCount = 0;

@@ -82,11 +82,13 @@ function CardThumbnail({
 interface OutputsCardItemProps {
   task: TaskItem;
   isLeader: boolean;
+  isSelected?: boolean;
   isExpanded: boolean;
   copied: boolean;
   aiChecking: boolean;
   quickApproving: boolean;
   savedAiResult: GeminiQcCheckResponse | null;
+  onToggleSelect?: () => void;
   onToggleExpand: () => void;
   onCopyCaption: () => void;
   onInspect: () => void;
@@ -98,11 +100,13 @@ interface OutputsCardItemProps {
 export function OutputsCardItem({
   task: t,
   isLeader,
+  isSelected = false,
   isExpanded,
   copied,
   aiChecking,
   quickApproving,
   savedAiResult,
+  onToggleSelect,
   onToggleExpand,
   onCopyCaption,
   onInspect,
@@ -113,16 +117,37 @@ export function OutputsCardItem({
   const a = analyzeTaskOutputs(t);
   const catMeta = OUTPUT_CATEGORY_META[a.category];
   const captionText = (t.caption || "").trim();
-  const latestComment = t.comments?.[0];
+  const latestComment =
+    t.comments && t.comments.length > 0
+      ? t.comments.reduce((latest, cur) =>
+          new Date(cur.createdAt).getTime() >
+          new Date(latest.createdAt).getTime()
+            ? cur
+            : latest
+        )
+      : undefined;
 
   return (
     <div
-      className={`rounded-2xl border-2 ${catMeta.accentBorder} bg-white p-4 sm:p-5 shadow-sm flex flex-col justify-between gap-3.5`}
+      className={`rounded-2xl border-2 ${
+        isSelected
+          ? "border-blue-500 ring-2 ring-blue-200 bg-blue-50/15"
+          : `${catMeta.accentBorder} bg-white`
+      } p-4 sm:p-5 shadow-sm flex flex-col justify-between gap-3.5 transition`}
     >
       <div className="space-y-3">
-        {/* Top Row: Member, Project, Saved AI Score, Status */}
+        {/* Top Row: Selection Checkbox (Leader), Member, Project, Saved AI Score, Status */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 text-xs">
+            {isLeader && onToggleSelect && (
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={onToggleSelect}
+                aria-label={`Chọn ${t.code} để thao tác hàng loạt`}
+                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+              />
+            )}
             <TaskAssigneesBadges
               task={t}
               size="sm"

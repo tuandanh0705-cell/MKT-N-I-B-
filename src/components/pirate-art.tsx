@@ -315,7 +315,7 @@ export function getPirateCharacter(
     CHARACTER_BY_SCOPE[scope] ?? {
       id: "luffy",
       characterName: "Thuyền viên",
-      emoji: "🏴‍☠️",
+      emoji: "⚓",
       rank: "Thuyền Viên Mũ Rơm",
       avatarSrc: "/avatars/luffy-huong.jpg",
       sprite3dSrc: "/avatars/3d/luffy.png",

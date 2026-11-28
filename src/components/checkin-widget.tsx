@@ -77,7 +77,7 @@ export function CheckinWidget({
   }
 
   return (
-    <div className="bg-white rounded-2xl border-2 border-amber-200/80 px-4 py-3.5 shadow-sm">
+    <div className="w-full h-full bg-white rounded-2xl border-2 border-amber-200/80 px-4 py-4 shadow-sm flex flex-col justify-center">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-300 text-amber-800 flex items-center justify-center shrink-0">
@@ -101,7 +101,7 @@ export function CheckinWidget({
                   {checkin.status === "AT_RISK"
                     ? "🌊 Đang gặp sóng lớn"
                     : checkin.status === "DONE_TODAY"
-                      ? "🏴‍☠️ Đã cập bến hôm nay"
+                      ? "⚓ Đã cập bến hôm nay"
                       : "⛵ Thuận buồm xuôi gió"}
                 </span>
               )}
@@ -154,7 +154,7 @@ export function CheckinWidget({
             onClick={() => submitCheckin("DONE_TODAY")}
             className="rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-3 py-1.5 text-xs font-bold transition hover:-translate-y-0.5 cursor-pointer"
           >
-            🏴‍☠️ Cập bến hôm nay!
+            ⚓ Cập bến hôm nay!
           </button>
         </div>
       </div>

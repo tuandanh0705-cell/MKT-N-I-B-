@@ -59,8 +59,8 @@ export function MediaOrdersPageClient({
               Order Media &amp; Brief Ảnh / Video
             </h1>
             <p className="text-xs sm:text-sm text-slate-600">
-              Chọn 1 trong 2: <strong>Brief Ảnh</strong> hoặc{" "}
-              <strong>Brief Video</strong> để theo dõi Ngày order, Tình trạng, Deadline và Số lượng.
+              Chọn danh mục: <strong>Brief Ảnh</strong>,{" "}
+              <strong>Brief Video</strong> hoặc <strong>Đơn Ngoài Team</strong> để theo dõi Ngày order, Tình trạng, Deadline và Số lượng.
             </p>
           </div>
         </div>

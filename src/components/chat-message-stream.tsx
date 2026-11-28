@@ -262,7 +262,7 @@ export function ChatMessageStream({
               onClick={() =>
                 onOpenReminders(activeReminders.length > 0 ? "LIST" : "CREATE")
               }
-              className={`relative w-9 h-9 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1.5 rounded-full sm:rounded-xl border text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer transition ${
+              className={`relative w-8 h-8 xl:w-auto xl:h-auto xl:px-2.5 xl:py-1.5 rounded-full xl:rounded-xl border text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer transition ${
                 activeReminders.length > 0
                   ? "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100"
                   : "bg-white border-amber-200 hover:bg-amber-50 text-slate-700"
@@ -270,10 +270,10 @@ export function ChatMessageStream({
               title="Tạo & quản lý nhắc hẹn trong phòng"
               aria-label="Nhắc hẹn"
             >
-              <AlarmClock className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-600" />
-              <span className="hidden sm:inline">Nhắc hẹn</span>
+              <AlarmClock className="w-4 h-4 xl:w-3.5 xl:h-3.5 text-amber-600" />
+              <span className="hidden xl:inline">Nhắc hẹn</span>
               {activeReminders.length > 0 && (
-                <span className="absolute -top-1 -right-1 sm:static min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-extrabold inline-flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 xl:static min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-extrabold inline-flex items-center justify-center">
                   {activeReminders.length}
                 </span>
               )}
@@ -282,7 +282,7 @@ export function ChatMessageStream({
             <button
               type="button"
               onClick={onToggleMsgSearch}
-              className={`w-9 h-9 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1.5 rounded-full sm:rounded-xl border text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer transition ${
+              className={`w-8 h-8 xl:w-auto xl:h-auto xl:px-2.5 xl:py-1.5 rounded-full xl:rounded-xl border text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer transition ${
                 msgSearchOpen
                   ? "bg-sky-50 border-sky-300 text-sky-700"
                   : "bg-white border-amber-200 hover:bg-amber-50 text-slate-700"
@@ -290,19 +290,20 @@ export function ChatMessageStream({
               title="Tìm kiếm tin nhắn cũ trong phòng"
               aria-label="Tìm tin nhắn"
             >
-              <Search className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-              <span className="hidden sm:inline">Tìm tin</span>
+              <Search className="w-4 h-4 xl:w-3.5 xl:h-3.5" />
+              <span className="hidden xl:inline">Tìm tin</span>
             </button>
 
             {activeRoom.type === "GROUP" && (
               <button
                 type="button"
                 onClick={onOpenGroupSettings}
-                className="w-9 h-9 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1.5 rounded-full sm:rounded-xl border border-amber-200 bg-white hover:bg-amber-50 text-xs font-bold text-slate-700 inline-flex items-center justify-center gap-1.5 shrink-0 cursor-pointer transition"
+                className="w-8 h-8 xl:w-auto xl:h-auto xl:px-2.5 xl:py-1.5 rounded-full xl:rounded-xl border border-amber-200 bg-white hover:bg-amber-50 text-xs font-bold text-slate-700 inline-flex items-center justify-center gap-1.5 shrink-0 cursor-pointer transition"
+                title="Cài đặt nhóm & Thành viên"
                 aria-label="Cài đặt nhóm & Thành viên"
               >
-                <Settings2 className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-700" />
-                <span className="hidden sm:inline">Thành viên</span>
+                <Settings2 className="w-4 h-4 xl:w-3.5 xl:h-3.5 text-amber-700" />
+                <span className="hidden xl:inline">Thành viên</span>
               </button>
             )}
           </div>
@@ -608,6 +609,10 @@ export function ChatMessageStream({
                           <CheckCircle2 className="w-3 h-3" />
                           {remCompleted ? "Mở lại" : "Đánh dấu xong"}
                         </button>
+                      ) : msg.forwardedFrom ? (
+                        <span className="text-[10px] italic text-sky-700 font-semibold">
+                          Nhắc hẹn được chia sẻ
+                        </span>
                       ) : (
                         <span className="text-[10px] italic text-slate-400">
                           Đã gỡ khỏi danh sách

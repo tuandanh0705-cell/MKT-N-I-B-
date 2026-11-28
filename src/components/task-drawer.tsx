@@ -216,7 +216,6 @@ function TaskDrawerInner({
         onUpdated(data.task);
         window.dispatchEvent(new CustomEvent("reviews-count-updated"));
         if (successToast) showToast(successToast);
-        router.refresh();
       }
     } catch {
       setError("Lỗi kết nối máy chủ.");

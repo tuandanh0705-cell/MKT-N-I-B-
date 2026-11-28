@@ -5,7 +5,11 @@ import { getAnonymizedTeamCapacity } from "@/lib/capacity";
 import { getVnDateString } from "@/lib/dates";
 import { computeBirthdayInfo, ensureDailyBirthdayCelebrations } from "@/lib/birthdays";
 import { getLeaderLearningOverview } from "@/lib/knowledge-data";
-import { TASK_CARD_INCLUDE } from "@/lib/task-queries";
+import {
+  SIMPLE_PROJECT_SELECT,
+  TASK_CARD_INCLUDE,
+  sanitizeTasksAssets,
+} from "@/lib/task-queries";
 import { LeaderDashboard } from "@/components/leader-dashboard";
 
 export default async function LeaderPage() {
@@ -14,10 +18,9 @@ export default async function LeaderPage() {
   if (user.role !== "LEADER") redirect("/my-work");
 
   const todayDate = getVnDateString();
-  await ensureDailyBirthdayCelebrations().catch(() => {});
 
   const [
-    tasks,
+    rawTasks,
     projects,
     users,
     capacity,
@@ -33,6 +36,7 @@ export default async function LeaderPage() {
     prisma.project.findMany({
       where: { isActive: true },
       orderBy: { createdAt: "asc" },
+      select: SIMPLE_PROJECT_SELECT,
     }),
     prisma.user.findMany({
       where: { isActive: true },
@@ -80,7 +84,10 @@ export default async function LeaderPage() {
       include: { user: { select: { id: true, name: true } } },
     }),
     getLeaderLearningOverview(user.id),
+    ensureDailyBirthdayCelebrations().catch(() => {}),
   ]);
+
+  const tasks = sanitizeTasksAssets(rawTasks);
 
   const { todayBirthdays } = computeBirthdayInfo(users, todayDate);
 

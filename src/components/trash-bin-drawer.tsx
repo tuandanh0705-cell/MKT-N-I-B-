@@ -34,7 +34,16 @@ export function TrashBinDrawer({
   const router = useRouter();
   const { showToast } = useToast();
   const [items, setItems] = useState<TrashedTask[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loadedOpenKey, setLoadedOpenKey] = useState(0);
+  const [openCounter, setOpenCounter] = useState(0);
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setOpenCounter((c) => c + 1);
+    }
+  }
+  const loading = open && loadedOpenKey !== openCounter;
   const [permanentTarget, setPermanentTarget] = useState<TrashedTask | null>(null);
   const [confirmBulkAction, setConfirmBulkAction] = useState<
     "EMPTY_TRASH" | null
@@ -44,6 +53,7 @@ export function TrashBinDrawer({
   useEffect(() => {
     if (!open) return;
     let active = true;
+    const reqKey = openCounter;
     fetch("/api/tasks/trash")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -51,12 +61,12 @@ export function TrashBinDrawer({
       })
       .catch(() => {})
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setLoadedOpenKey(reqKey);
       });
     return () => {
       active = false;
     };
-  }, [open]);
+  }, [open, openCounter]);
 
   async function handleRestoreAll() {
     if (items.length === 0) return;
@@ -70,6 +80,7 @@ export function TrashBinDrawer({
       const data = await res.json();
       if (res.ok) {
         setItems([]);
+        window.dispatchEvent(new Event("reviews-count-updated"));
         showToast(
           `Đã khôi phục toàn bộ ${data.restoredCount ?? items.length} mục từ Thùng rác!`
         );
@@ -117,6 +128,7 @@ export function TrashBinDrawer({
       });
       if (res.ok) {
         setItems((prev) => prev.filter((t) => t.id !== item.id));
+        window.dispatchEvent(new Event("reviews-count-updated"));
         showToast(`Đã khôi phục "${item.title}" về danh sách làm việc!`);
         router.refresh();
         onRestored?.();

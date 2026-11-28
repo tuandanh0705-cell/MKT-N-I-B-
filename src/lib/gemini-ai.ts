@@ -14,6 +14,7 @@ import {
   type GeminiQcResult,
 } from "@/lib/gemini-shared";
 import type { UserRole } from "@/generated/prisma/client";
+import { formatTaskAssigneesLabel } from "@/lib/task-assignees";
 import type { TaskItem } from "@/types/crm";
 
 export type {
@@ -519,7 +520,7 @@ export async function runGeminiOutputQcCheck(
         ? ` (Bối cảnh dự án: ${options.projectDescription})`
         : ""
     }`,
-    `- Nhân viên thực hiện: ${task.assignee?.name || "Chưa gán"}`,
+    `- Nhân viên thực hiện: ${formatTaskAssigneesLabel(task, "Chưa gán")}`,
     `- Loại công việc: ${task.taskType} (Số lượng: ${task.quantity} ${analyzed.unitLabel})`,
     `- Nền tảng / Kênh đăng: ${task.platform}${
       task.publishChannel ? ` -> ${task.publishChannel}` : ""

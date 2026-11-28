@@ -113,7 +113,7 @@ export function MyWorkTopWidgets({
 
       {/* Widget Check-in 9h sáng bên trái + Nhân vật 3D đồng hành bên phải */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-        <div className="lg:col-span-8 flex flex-col justify-center">
+        <div className="lg:col-span-8 flex">
           <CheckinWidget
             todayDate={todayDate}
             initialCheckin={initialCheckin}

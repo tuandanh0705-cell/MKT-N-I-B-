@@ -62,11 +62,21 @@ export async function syncDailyKpiTasksForDate({
   const existingDayTasks = await prisma.task.findMany({
     where: {
       deletedAt: null,
-      assigneeId: user.id,
-      OR: [
-        { dueAt: { gte: start, lte: end } },
-        { scheduledPublishAt: { gte: start, lte: end } },
-        { dailyKpiKey: { endsWith: `:${dateStr}` } },
+      AND: [
+        {
+          OR: [
+            { assigneeId: user.id },
+            { assignees: { some: { userId: user.id } } },
+          ],
+        },
+        {
+          OR: [
+            { dueAt: { gte: start, lte: end } },
+            { scheduledPublishAt: { gte: start, lte: end } },
+            { plannedDate: dateStr },
+            { dailyKpiKey: { endsWith: `:${dateStr}` } },
+          ],
+        },
       ],
     },
     select: {
@@ -129,6 +139,7 @@ export async function syncDailyKpiTasksForDate({
         isMediaOrder: TASK_TYPE_META[row.taskType]?.isMediaOrderDefault ?? false,
         quantity: row.remainingToPlan,
         dueAt,
+        plannedDate: dateStr,
         dailyKpiKey: kpiKey,
         subtasksJson: subtasksJson
           ? (subtasksJson as unknown as Prisma.InputJsonValue)
@@ -136,6 +147,9 @@ export async function syncDailyKpiTasksForDate({
         projectId: targetProject.id,
         requesterId: user.id,
         assigneeId: user.id,
+        assignees: {
+          create: [{ userId: user.id }],
+        },
       },
       include: TASK_CARD_INCLUDE,
     });

@@ -40,6 +40,7 @@ export async function GET() {
       wasLate: true,
       dueAt: true,
       scheduledPublishAt: true,
+      completedAt: true,
       createdAt: true,
     },
   });
@@ -47,7 +48,7 @@ export async function GET() {
   const summary = projects.map((p) => {
     const projectTasks = tasks.filter((t) => {
       if (t.projectId !== p.id) return false;
-      const ref = t.scheduledPublishAt ?? t.dueAt ?? t.createdAt;
+      const ref = t.completedAt ?? t.scheduledPublishAt ?? t.dueAt ?? t.createdAt;
       return ref >= weekStart && ref <= weekEnd;
     });
 

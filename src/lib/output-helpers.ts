@@ -69,7 +69,13 @@ export function extractAssetPreviewImageUrl(rawUrl: string): string | null {
   const url = (rawUrl || "").trim();
   if (!url) return null;
 
-  if (/^data:image\//i.test(url) || /^blob:/i.test(url)) return url;
+  if (
+    /^data:image\//i.test(url) ||
+    /^blob:/i.test(url) ||
+    /^\/api\/assets\//i.test(url)
+  ) {
+    return url;
+  }
   if (/\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(url)) return url;
   if (/lh\d+\.googleusercontent\.com\//i.test(url)) return url;
 
@@ -94,7 +100,9 @@ export function extractAssetPreviewImageUrl(rawUrl: string): string | null {
 export function getAssetDomainLabel(rawUrl: string): string {
   const url = (rawUrl || "").trim();
   if (!url) return "Link";
-  if (/^data:image\//i.test(url)) return "Ảnh tải lên";
+  if (/^data:image\//i.test(url) || /^\/api\/assets\//i.test(url)) {
+    return "Ảnh tải lên";
+  }
   try {
     const host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
     if (host.includes("drive.google.com")) return "Google Drive";
@@ -144,7 +152,9 @@ function isBriefAssetPostVisual(
 ): boolean {
   if (asset.kind !== "BRIEF_REF") return false;
   if (asset.label === "Ảnh / Thành phẩm bài viết") return true;
-  if (/^data:image\//i.test(asset.url)) return true;
+  if (/^data:image\//i.test(asset.url) || /^\/api\/assets\//i.test(asset.url)) {
+    return true;
+  }
   if (category === "CONTENT" && !isMediaOrder) return true;
   return false;
 }

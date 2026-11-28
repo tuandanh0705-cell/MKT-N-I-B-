@@ -35,14 +35,16 @@ export default async function AuthenticatedAppLayout({
       orderBy: { createdAt: "desc" },
       take: 25,
     }),
-    prisma.task.count({
-      where: {
-        AND: [
-          buildTaskVisibilityWhere(user),
-          { status: { in: ["WAITING_APPROVAL", "BRIEF_REVIEW"] } },
-        ],
-      },
-    }),
+    user.role === "LEADER"
+      ? prisma.task.count({
+          where: {
+            AND: [
+              buildTaskVisibilityWhere(user),
+              { status: { in: ["WAITING_APPROVAL", "BRIEF_REVIEW"] } },
+            ],
+          },
+        })
+      : Promise.resolve(0),
     getChatUnreadCountForUser(user.id),
   ]);
 

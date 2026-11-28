@@ -84,24 +84,24 @@ export function FanpageReportsTables({
             📈 Báo Cáo Data Fanpage Tuần ({weekStart} → {weekEnd})
           </h2>
         </div>
-        <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[1050px]">
+        <table className="w-full text-left border-collapse text-xs min-w-[900px]">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 text-xs uppercase">
-              <th className="py-3 px-4">Fanpage</th>
-              <th className="py-3 px-4">Followers (+/-)</th>
-              <th className="py-3 px-4">Reach / Hiển thị</th>
-              <th className="py-3 px-4">Xem Trang / Video 3s</th>
-              <th className="py-3 px-4">Tương tác (ER%)</th>
-              <th className="py-3 px-4">React / Cmt / Share</th>
-              <th className="py-3 px-4">Click / Inbox</th>
-              <th className="py-3 px-4">Số bài & Top Post</th>
-              <th className="py-3 px-4">Trạng thái</th>
+            <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 text-[11px] uppercase">
+              <th className="py-2.5 px-2.5 xl:px-3.5">Fanpage</th>
+              <th className="py-2.5 px-2.5 xl:px-3.5">Followers (+/-)</th>
+              <th className="py-2.5 px-2.5 xl:px-3.5">Reach / Hiển thị</th>
+              <th className="py-2.5 px-2.5 xl:px-3.5">Xem Trang / Video 3s</th>
+              <th className="py-2.5 px-2.5 xl:px-3.5">Tương tác (ER%)</th>
+              <th className="py-2.5 px-2.5 xl:px-3.5">React / Cmt / Share</th>
+              <th className="py-2.5 px-2.5 xl:px-3.5">Click / Inbox</th>
+              <th className="py-2.5 px-2.5 xl:px-3.5">Số bài &amp; Top Post</th>
+              <th className="py-2.5 px-2.5 xl:px-3.5 whitespace-nowrap">Trạng thái</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {fanpageWeekly.map((r) => (
               <tr key={r.channelId} className="hover:bg-slate-50/70">
-                <td className="py-3 px-4">
+                <td className="py-2.5 px-2.5 xl:px-3.5">
                   <Link
                     href={`/fanpage-reports/${r.channelId}`}
                     className="font-bold text-slate-900 hover:text-blue-700 hover:underline inline-flex items-center gap-1"
@@ -115,7 +115,7 @@ export function FanpageReportsTables({
                     </div>
                   )}
                 </td>
-                <td className="py-3 px-4">
+                <td className="py-2.5 px-2.5 xl:px-3.5 whitespace-nowrap">
                   <div className="font-bold text-slate-900">
                     {r.followers.toLocaleString("vi-VN")}
                   </div>
@@ -131,7 +131,7 @@ export function FanpageReportsTables({
                     {r.newFollowers > 0 ? ` (+${r.newFollowers} mới)` : ""}
                   </div>
                 </td>
-                <td className="py-3 px-4">
+                <td className="py-2.5 px-2.5 xl:px-3.5 whitespace-nowrap">
                   <div className="font-bold text-blue-700">
                     {r.reach.toLocaleString("vi-VN")}
                   </div>
@@ -139,7 +139,7 @@ export function FanpageReportsTables({
                     {r.impressions.toLocaleString("vi-VN")} hiển thị
                   </div>
                 </td>
-                <td className="py-3 px-4 text-xs">
+                <td className="py-2.5 px-2.5 xl:px-3.5 text-xs whitespace-nowrap">
                   <div>
                     Xem trang:{" "}
                     <strong>{r.pageViews.toLocaleString("vi-VN")}</strong>
@@ -149,7 +149,7 @@ export function FanpageReportsTables({
                     <strong>{r.videoViews.toLocaleString("vi-VN")}</strong>
                   </div>
                 </td>
-                <td className="py-3 px-4">
+                <td className="py-2.5 px-2.5 xl:px-3.5 whitespace-nowrap">
                   <div className="font-bold text-slate-900">
                     {r.engagement.toLocaleString("vi-VN")}
                   </div>
@@ -157,10 +157,10 @@ export function FanpageReportsTables({
                     ER: {r.engagementRate}%
                   </div>
                 </td>
-                <td className="py-3 px-4 text-xs text-slate-600">
+                <td className="py-2.5 px-2.5 xl:px-3.5 text-xs text-slate-600 whitespace-nowrap">
                   {r.reactions} / {r.comments} / {r.shares}
                 </td>
-                <td className="py-3 px-4 text-xs">
+                <td className="py-2.5 px-2.5 xl:px-3.5 text-xs whitespace-nowrap">
                   <div>
                     Click:{" "}
                     <strong>{r.linkClicks.toLocaleString("vi-VN")}</strong>
@@ -169,7 +169,7 @@ export function FanpageReportsTables({
                     Inbox: {r.inboxMessages.toLocaleString("vi-VN")}
                   </div>
                 </td>
-                <td className="py-3 px-4 max-w-[210px] text-xs space-y-1">
+                <td className="py-2.5 px-2.5 xl:px-3.5 max-w-[175px] text-xs space-y-1">
                   <div className="font-semibold text-slate-800">
                     {r.postsCount} bài
                   </div>
@@ -194,13 +194,13 @@ export function FanpageReportsTables({
                     </button>
                   )}
                 </td>
-                <td className="py-3 px-4 text-xs">
+                <td className="py-2.5 px-2.5 xl:px-3.5 text-xs whitespace-nowrap">
                   {r.sentToLeaderAt ? (
-                    <span className="rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 font-bold">
+                    <span className="inline-block rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 font-bold">
                       Đã gửi Leader
                     </span>
                   ) : (
-                    <span className="rounded-full bg-amber-50 text-amber-800 px-2 py-0.5 font-semibold">
+                    <span className="inline-block rounded-full bg-amber-50 text-amber-800 px-2 py-0.5 font-semibold">
                       Bản nháp
                     </span>
                   )}

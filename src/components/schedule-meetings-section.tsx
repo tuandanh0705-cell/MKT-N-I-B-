@@ -9,7 +9,7 @@ import {
   Video,
 } from "lucide-react";
 import type { AuthUser } from "@/lib/auth";
-import { formatVnDateTime } from "@/lib/dates";
+import { formatVnDateTime, parseVnDateTimeLocalToIso } from "@/lib/dates";
 import { PirateAvatar } from "@/components/pirate-art";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { useToast } from "@/components/toast-provider";
@@ -110,8 +110,8 @@ export function ScheduleMeetingsSection({
           title: meetTitle,
           meetingType: meetType,
           projectId: meetProjectId || null,
-          startAt: new Date(meetStart).toISOString(),
-          endAt: new Date(meetEnd).toISOString(),
+          startAt: parseVnDateTimeLocalToIso(meetStart),
+          endAt: parseVnDateTimeLocalToIso(meetEnd),
           location: meetLocation || null,
           agenda: meetAgenda || null,
           participantIds: selectedParticipantIds,

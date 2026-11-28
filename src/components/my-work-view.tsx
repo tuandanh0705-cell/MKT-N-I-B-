@@ -511,6 +511,7 @@ export function MyWorkView({
         setTasks((prev) => prev.filter((t) => !deletedIds.includes(t.id)));
         setActiveTaskId((cur) => (cur && deletedIds.includes(cur) ? null : cur));
         setDeleteConfirmTask(null);
+        window.dispatchEvent(new Event("reviews-count-updated"));
       } else if (failedCount > 0) {
         showToast("Không thể xóa đầu việc này. Vui lòng thử lại.", "error");
       }
@@ -548,6 +549,7 @@ export function MyWorkView({
         return;
       }
       handleTaskUpdated(data.task);
+      window.dispatchEvent(new Event("reviews-count-updated"));
       if (!done) {
         setCelebrateNonce((n) => n + 1);
         showToast(`Đã hoàn thành "${task.title}"!`);
@@ -573,6 +575,7 @@ export function MyWorkView({
         return;
       }
       handleTaskUpdated(data.task);
+      window.dispatchEvent(new Event("reviews-count-updated"));
       setCelebrateNonce((n) => n + 1);
       showToast(`🚀 Đã đánh dấu "${task.title}" Đã lên sóng!`);
     } catch {
@@ -618,6 +621,7 @@ export function MyWorkView({
         return;
       }
       handleTaskUpdated(data.task);
+      window.dispatchEvent(new Event("reviews-count-updated"));
       setCelebrateNonce((n) => n + 1);
       showToast(`Đã gửi "${task.title}" lên hàng đợi Leader duyệt QC!`);
     } catch {
@@ -1122,7 +1126,7 @@ export function MyWorkView({
                         {searchQuery.trim() !== "" || projectFilter !== "ALL"
                           ? "Không có công việc khớp bộ lọc trong ngày này."
                           : day.dateStr === todayDate
-                            ? "Chưa có việc nào được xếp vào Hôm nay — bạn có thể bấm 'Làm hôm nay' từ khung Việc mới nhận ở trên hoặc tạo việc mới bên dưới."
+                            ? "Chưa có việc nào được xếp vào Hôm nay — bạn có thể bấm nút 'Thêm việc cá nhân' ngay bên dưới hoặc chọn 'Làm hôm nay' trong chi tiết đầu việc."
                             : "Chưa có đầu việc nào trong ngày này."}
                       </div>
                     )}

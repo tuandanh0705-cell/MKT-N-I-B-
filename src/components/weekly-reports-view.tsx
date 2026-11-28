@@ -142,22 +142,28 @@ export function WeeklyReportsView({
   );
 
   useEffect(() => {
+    const controller = new AbortController();
     let active = true;
-    fetch(
-      `/api/reports/overview?weekStart=${encodeURIComponent(
-        weekStart
-      )}&month=${encodeURIComponent(monthKey)}`
-    )
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `/api/reports/overview?scope=work&weekStart=${encodeURIComponent(
+            weekStart
+          )}&month=${encodeURIComponent(monthKey)}`,
+          { signal: controller.signal }
+        );
+        const data = res.ok ? await res.json() : null;
         if (active && data) applyData(data);
-      })
-      .catch(() => {})
-      .finally(() => {
+      } catch (err) {
+        if ((err as { name?: string })?.name === "AbortError") return;
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    };
+    void load();
     return () => {
       active = false;
+      controller.abort();
     };
   }, [weekStart, monthKey, applyData]);
 
@@ -258,7 +264,7 @@ export function WeeklyReportsView({
           0,
           0,
           "—",
-          m.onTimeRate,
+          "—",
         ]);
         continue;
       }
@@ -442,7 +448,7 @@ export function WeeklyReportsView({
                 <div className="flex items-center gap-2">
                   <BarChart3 className="w-5 h-5 text-amber-600" />
                   <h2 className="text-sm font-extrabold text-slate-900">
-                    📊 Biểu Đồ Tiến Độ KPI Theo Dự Án
+                    Biểu Đồ Tiến Độ KPI Theo Dự Án
                   </h2>
                 </div>
                 <span className="text-[11px] font-semibold text-slate-500">
@@ -513,8 +519,8 @@ export function WeeklyReportsView({
                   <TrendingUp className="w-5 h-5 text-sky-600" />
                   <h2 className="text-sm font-extrabold text-slate-900">
                     {isLeader
-                      ? "🎯 Tỷ Lệ Đúng Hạn & Sản Lượng Thành Viên"
-                      : "🎯 Hiệu Suất & Tỷ Lệ Đúng Hạn Của Tôi"}
+                      ? "Tỷ Lệ Đúng Hạn & Sản Lượng Thành Viên"
+                      : "Hiệu Suất & Tỷ Lệ Đúng Hạn Của Tôi"}
                   </h2>
                 </div>
                 <span className="text-[11px] font-semibold text-slate-500">
@@ -522,9 +528,14 @@ export function WeeklyReportsView({
                 </span>
               </div>
 
-              <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
-                {activeWorkData.byMember.map((m) => (
-                  <div key={m.userId} className="space-y-2 text-xs">
+              <div className="space-y-3">
+                {activeWorkData.byMember.map((m) => {
+                  const hasTasks = m.assignedCount > 0;
+                  const hasCompleted = m.completedCount > 0;
+                  const displayRate = hasCompleted ? `${m.onTimeRate}%` : hasTasks ? "Chưa xong" : "—";
+                  const barWidth = hasCompleted ? Math.max(4, m.onTimeRate) : 0;
+                  return (
+                  <div key={m.userId} className="space-y-1.5 text-xs">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-bold text-slate-800 truncate">
                         {m.name}{" "}
@@ -536,27 +547,31 @@ export function WeeklyReportsView({
                       </span>
                       <span
                         className={`font-extrabold shrink-0 ${
-                          m.onTimeRate >= 85
-                            ? "text-emerald-600"
-                            : m.onTimeRate >= 60
-                              ? "text-amber-600"
-                              : "text-rose-600"
+                          !hasCompleted
+                            ? "text-slate-400 font-semibold"
+                            : m.onTimeRate >= 85
+                              ? "text-emerald-600"
+                              : m.onTimeRate >= 60
+                                ? "text-amber-600"
+                                : "text-rose-600"
                         }`}
                       >
-                        {m.onTimeRate}%
+                        {displayRate}
                       </span>
                     </div>
                     <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          m.onTimeRate >= 85
-                            ? "bg-emerald-500"
-                            : m.onTimeRate >= 60
-                              ? "bg-amber-500"
-                              : "bg-rose-500"
+                          !hasCompleted
+                            ? "bg-slate-200"
+                            : m.onTimeRate >= 85
+                              ? "bg-emerald-500"
+                              : m.onTimeRate >= 60
+                                ? "bg-amber-500"
+                                : "bg-rose-500"
                         }`}
                         style={{
-                          width: `${Math.max(m.assignedCount > 0 ? 4 : 0, m.onTimeRate)}%`,
+                          width: `${barWidth}%`,
                         }}
                       />
                     </div>
@@ -590,7 +605,8 @@ export function WeeklyReportsView({
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

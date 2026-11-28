@@ -275,7 +275,7 @@ function TeamEditUserModalInner({
 
         <div>
           <label className="block text-xs font-bold text-slate-700 mb-1.5">
-            🏴‍☠️ Nhân vật One Piece 3D (chọn hoặc đổi nhân vật khác)
+            ⚓ Nhân vật One Piece 3D (chọn hoặc đổi nhân vật khác)
           </label>
           <PirateCharacterPicker
             value={editPirateCharacter}

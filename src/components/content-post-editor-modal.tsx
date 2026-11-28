@@ -35,7 +35,11 @@ import {
 } from "@/lib/content-plan";
 import { normalizePlatformSelectValue } from "@/lib/platform-meta";
 import { FB_POST_LAYOUTS, FB_POST_LAYOUT_GROUPS } from "@/lib/constants";
-import { getVnDateString, getVnTimeString } from "@/lib/dates";
+import {
+  getVnDateString,
+  getVnTimeString,
+  replaceVnDatePreservingTime,
+} from "@/lib/dates";
 import { useToast } from "@/components/toast-provider";
 import {
   parseSavedAiQcResult,
@@ -184,8 +188,10 @@ function ContentPostEditorInner({
     task ? getTaskAssigneeIds(task) : currentUserId ? [currentUserId] : []
   );
   const [publishDate, setPublishDate] = useState(
-    task?.scheduledPublishAt
-      ? getVnDateString(new Date(task.scheduledPublishAt))
+    task
+      ? task.scheduledPublishAt
+        ? getVnDateString(new Date(task.scheduledPublishAt))
+        : ""
       : prefill?.publishDate || getVnDateString()
   );
   const [publishTime, setPublishTime] = useState(
@@ -374,12 +380,16 @@ function ContentPostEditorInner({
       const scheduledPublishAt = publishDate
         ? `${publishDate}T${publishTime || "09:00"}:00+07:00`
         : null;
-      const mediaDueAt = mediaDueDate
-        ? `${mediaDueDate}T17:00:00+07:00`
-        : null;
-      const dueAt = contentDueDate
-        ? `${contentDueDate}T17:00:00+07:00`
-        : null;
+      const mediaDueAt = replaceVnDatePreservingTime(
+        mediaDueDate,
+        task?.mediaDueAt,
+        "17:00"
+      );
+      const dueAt = replaceVnDatePreservingTime(
+        contentDueDate,
+        task?.dueAt,
+        "17:00"
+      );
 
       const pendingAssetUrls = Array.from(
         new Set(

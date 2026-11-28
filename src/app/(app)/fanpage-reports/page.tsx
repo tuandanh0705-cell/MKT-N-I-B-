@@ -48,6 +48,7 @@ export default async function FanpageReportsPage({
       initialMonthKey={monthKey}
       projects={projects}
       users={users}
+      currentUserId={user.id}
       currentUserRole={user.role}
       toneMode={user.preferredTone}
       initialBookmarkletJson={bm || null}

@@ -47,6 +47,7 @@ export function FanpageReportsView({
   initialMonthKey,
   projects,
   users,
+  currentUserId,
   currentUserRole,
   toneMode,
   initialBookmarkletJson,
@@ -56,6 +57,7 @@ export function FanpageReportsView({
   initialMonthKey: string;
   projects: SimpleProject[];
   users: SimpleUser[];
+  currentUserId: string;
   currentUserRole: UserRole;
   toneMode?: string;
   initialBookmarkletJson?: string | null;
@@ -114,7 +116,7 @@ export function FanpageReportsView({
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/reports/overview?weekStart=${encodeURIComponent(
+        `/api/reports/overview?scope=fanpage&weekStart=${encodeURIComponent(
           weekStart
         )}&month=${encodeURIComponent(monthKey)}`
       );
@@ -127,7 +129,7 @@ export function FanpageReportsView({
   useEffect(() => {
     let active = true;
     fetch(
-      `/api/reports/overview?weekStart=${encodeURIComponent(
+      `/api/reports/overview?scope=fanpage&weekStart=${encodeURIComponent(
         weekStart
       )}&month=${encodeURIComponent(monthKey)}`
     )
@@ -157,13 +159,19 @@ export function FanpageReportsView({
             };
             const urlLower = (bm.pageUrl || "").toLowerCase();
             const titleLower = (bm.pageTitle || "").toLowerCase();
-            const matched =
-              list.find(
-                (c) =>
-                  (c.pageId && urlLower.includes(c.pageId.toLowerCase())) ||
-                  (c.pageUrl && urlLower.includes(c.pageUrl.toLowerCase())) ||
-                  titleLower.includes(c.name.toLowerCase())
-              ) || list[0];
+            const matched = list.find(
+              (c) =>
+                (c.pageId && urlLower.includes(c.pageId.toLowerCase())) ||
+                (c.pageUrl && urlLower.includes(c.pageUrl.toLowerCase())) ||
+                titleLower.includes(c.name.toLowerCase())
+            );
+            if (!matched) {
+              showToast(
+                `Không tìm thấy Fanpage khớp với "${bm.pageTitle || bm.pageUrl || "trang đang mở"}". Hãy kiểm tra lại Tên/Link Fanpage trên CRM trước khi đồng bộ!`,
+                "error"
+              );
+              return;
+            }
             setManualModalTarget({
               channel: matched,
               overrides: {
@@ -592,7 +600,8 @@ export function FanpageReportsView({
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
-                    {(currentUserRole === "LEADER" || ch.managedById) && (
+                    {(currentUserRole === "LEADER" ||
+                      ch.managedById === currentUserId) && (
                       <button
                         type="button"
                         onClick={() => setDeleteChannelTarget(ch)}
@@ -655,9 +664,9 @@ export function FanpageReportsView({
                     Cào Graph API Realtime & Gửi Leader
                   </button>
 
-                  <label className="rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-2.5 py-2 text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer">
-                    <Upload className="w-3.5 h-3.5" />
-                    Import CSV Meta
+                  <label className="rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-2 py-2 text-[11px] font-bold inline-flex items-center justify-center gap-1 whitespace-nowrap cursor-pointer">
+                    <Upload className="w-3.5 h-3.5 shrink-0" />
+                    <span>Import CSV</span>
                     <input
                       type="file"
                       accept=".csv"
@@ -675,10 +684,10 @@ export function FanpageReportsView({
                   <button
                     type="button"
                     onClick={() => setManualModalTarget({ channel: ch })}
-                    className="rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 px-2.5 py-2 text-xs font-bold cursor-pointer inline-flex items-center gap-1"
+                    className="rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 px-2 py-2 text-[11px] font-bold cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
                   >
-                    <ClipboardPaste className="w-3.5 h-3.5" />
-                    Dán / Chốt số liệu
+                    <ClipboardPaste className="w-3.5 h-3.5 shrink-0" />
+                    <span>Dán / Chốt số</span>
                   </button>
                 </div>
               </div>

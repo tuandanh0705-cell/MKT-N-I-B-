@@ -122,7 +122,9 @@ export async function GET() {
         },
       },
     }),
-    getOrCreateAppSecret("fanpage_ingest_secret"),
+    user.role === "LEADER"
+      ? getOrCreateAppSecret("fanpage_ingest_secret")
+      : Promise.resolve(null),
   ]);
 
   const sanitized = channels.map((c) => ({

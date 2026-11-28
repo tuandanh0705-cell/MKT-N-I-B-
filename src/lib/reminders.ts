@@ -215,7 +215,11 @@ export async function runScheduledReminder(
       },
       include: {
         project: { select: { name: true } },
-        assignee: { select: { name: true } },
+        assignee: { select: { id: true, name: true } },
+        assignees: {
+          orderBy: { assignedAt: "asc" },
+          include: { user: { select: { id: true, name: true } } },
+        },
       },
       orderBy: { scheduledPublishAt: "asc" },
     });
@@ -225,10 +229,14 @@ export async function runScheduledReminder(
         waitingTasks.length > 0
           ? waitingTasks
               .slice(0, 10)
-              .map(
-                (t) =>
-                  `• [${t.project.name}] ${t.title} (${t.assignee?.name ?? "Chưa gán"})`
-              )
+              .map((t) => {
+                const names = new Map<string, string>();
+                for (const a of t.assignees) names.set(a.user.id, a.user.name);
+                if (t.assignee) names.set(t.assignee.id, t.assignee.name);
+                const picLabel =
+                  names.size > 0 ? [...names.values()].join(", ") : "Chưa gán";
+                return `• [${t.project.name}] ${t.title} (${picLabel})`;
+              })
           : ["• Hiện không có ấn phẩm hay brief nào tồn đọng chờ duyệt."];
 
       const mailRes = await sendMktEmail({

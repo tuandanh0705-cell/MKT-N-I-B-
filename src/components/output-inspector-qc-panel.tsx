@@ -16,6 +16,7 @@ import { useToast } from "@/components/toast-provider";
 import { ASSET_KIND_LABEL } from "@/lib/constants";
 import { getAssetDomainLabel } from "@/lib/output-helpers";
 import { getQcCriteriaForTaskType } from "@/lib/qc-standards";
+import { formatTaskAssigneesLabel } from "@/lib/task-assignees";
 import type {
   GeminiConfigInfo,
   GeminiQcCheckResponse,
@@ -132,7 +133,7 @@ export function OutputInspectorQcPanel({
         feedback: revisionNote.trim(),
         qcFlags: selectedQcCodes,
       },
-      `Đã gửi yêu cầu chỉnh sửa cho ${task.assignee?.name || "nhân sự"}.`
+      `Đã gửi yêu cầu chỉnh sửa cho ${formatTaskAssigneesLabel(task, "nhân sự")}.`
     );
     if (ok) {
       setShowRevisionForm(false);

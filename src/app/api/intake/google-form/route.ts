@@ -177,7 +177,7 @@ export async function POST(request: Request) {
     const code = `${prefix}-EXT-${String(countInProject + 1).padStart(
       2,
       "0"
-    )}`;
+    )}-${Math.floor(10 + Math.random() * 89)}`;
 
     const fullDesc = [
       `📋 Nguồn: Google Form Ngoài Team MKT`,

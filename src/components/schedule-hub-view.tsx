@@ -9,10 +9,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Camera,
+  Clock,
+  ExternalLink,
+  MapPin,
+  Video,
+  X,
 } from "lucide-react";
 import type { AuthUser } from "@/lib/auth";
 import { LEAVE_TYPE_META } from "@/lib/constants";
 import {
+  formatVnDateTime,
   getVnDateString,
   getVnWeekBounds,
   shiftVnWeekStart,
@@ -59,6 +65,8 @@ export function ScheduleHubView({
   );
   const [meetings, setMeetings] = useState<TeamMeetingItem[]>(initialMeetings);
   const [leaves, setLeaves] = useState<LeaveRequestItem[]>(initialLeaves);
+  const [activeMeeting, setActiveMeeting] = useState<TeamMeetingItem | null>(null);
+  const [activeLeave, setActiveLeave] = useState<LeaveRequestItem | null>(null);
 
   const weekDays = useMemo(() => {
     const startAnchor = new Date(`${weekStart}T00:00:00+07:00`);
@@ -258,27 +266,36 @@ export function ScheduleHubView({
               ))}
 
               {d.dayMeetings.map((m) => (
-                <div
+                <button
                   key={m.id}
-                  className="rounded-lg bg-blue-50 border border-blue-200 px-2 py-1 text-[11px] text-blue-900"
+                  type="button"
+                  onClick={() => setActiveMeeting(m)}
+                  title="Bấm xem chi tiết lịch họp & link phòng họp"
+                  className="w-full text-left rounded-lg bg-blue-50 hover:bg-blue-100/90 border border-blue-200 hover:border-blue-400 px-2 py-1 text-[11px] text-blue-900 transition cursor-pointer"
                 >
                   <div className="font-bold truncate">
                     🤝 {formatScheduleTimeShort(m.startAt)} {m.title}
                   </div>
-                  <div className="text-[10px] text-blue-700">
-                    {m.participants.length} người
+                  <div className="text-[10px] text-blue-700 flex items-center justify-between gap-1">
+                    <span>{m.participants.length} người</span>
+                    {m.location && /^https?:\/\//i.test(m.location) && (
+                      <span className="font-bold text-blue-600">Link ↗</span>
+                    )}
                   </div>
-                </div>
+                </button>
               ))}
 
               {d.dayLeaves.map((l) => (
-                <div
+                <button
                   key={l.id}
-                  className="rounded-lg bg-amber-50 border border-amber-200 px-2 py-1 text-[11px] text-amber-900"
+                  type="button"
+                  onClick={() => setActiveLeave(l)}
+                  title="Bấm xem chi tiết đơn nghỉ / WFH"
+                  className="w-full text-left rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 hover:border-amber-400 px-2 py-1 text-[11px] text-amber-900 transition cursor-pointer"
                 >
                   🏖️ {l.user.name} (
                   {l.leaveType === "REMOTE" ? "WFH" : "Nghỉ"})
-                </div>
+                </button>
               ))}
 
               {d.dayBirthdays.length === 0 &&
@@ -380,6 +397,223 @@ export function ScheduleHubView({
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Modal chi tiết Lịch họp khi bấm vào thẻ lịch tuần */}
+      {activeMeeting && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4"
+          onClick={() => setActiveMeeting(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white border-2 border-blue-200 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-blue-100 bg-blue-50/70 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-700 mb-1">
+                  <Video className="w-3.5 h-3.5" />
+                  <span>Lịch họp băng</span>
+                  {activeMeeting.project && (
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] text-white"
+                      style={{ backgroundColor: activeMeeting.project.color }}
+                    >
+                      {activeMeeting.project.name}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  {activeMeeting.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveMeeting(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-blue-100 hover:text-slate-700 cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5 text-xs">
+              <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>
+                  {formatVnDateTime(activeMeeting.startAt)} →{" "}
+                  {formatVnDateTime(activeMeeting.endAt)}
+                </span>
+              </div>
+
+              {activeMeeting.location && (
+                <div className="flex items-start gap-2">
+                  <MapPin className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  {/^https?:\/\//i.test(activeMeeting.location) ? (
+                    <a
+                      href={activeMeeting.location}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs"
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                      Mở link phòng họp ngay
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  ) : (
+                    <span className="font-semibold text-slate-800">
+                      Địa điểm: {activeMeeting.location}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {activeMeeting.agenda && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
+                  <div className="text-[11px] font-bold uppercase text-slate-500">
+                    Nội dung / Agenda
+                  </div>
+                  <p className="text-slate-800 whitespace-pre-line leading-relaxed">
+                    {activeMeeting.agenda}
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <div className="text-[11px] font-bold uppercase text-slate-500">
+                  Người tham gia ({activeMeeting.participants.length}) • Chủ trì:{" "}
+                  <span className="text-slate-800 normal-case">
+                    {activeMeeting.organizer.name}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {activeMeeting.participants.map((p) => (
+                    <span
+                      key={p.id}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700"
+                    >
+                      <PirateAvatar
+                        name={p.user.name}
+                        color={p.user.avatarColor}
+                        scope={p.user.departmentScope}
+                        pirateCharacter={p.user.pirateCharacter}
+                        size="sm"
+                        animate={false}
+                      />
+                      {p.user.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTab("MEETINGS");
+                  setActiveMeeting(null);
+                }}
+                className="text-xs font-bold text-blue-700 hover:underline cursor-pointer"
+              >
+                Mở tab Quản lý lịch họp →
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveMeeting(null)}
+                className="rounded-xl border border-slate-200 bg-white hover:bg-slate-100 px-3.5 py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal chi tiết Lịch Nghỉ / WFH khi bấm vào thẻ lịch tuần */}
+      {activeLeave && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4"
+          onClick={() => setActiveLeave(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white border-2 border-amber-200 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-amber-100 bg-amber-50/70 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <PirateAvatar
+                  name={activeLeave.user.name}
+                  color={activeLeave.user.avatarColor}
+                  scope={activeLeave.user.departmentScope}
+                  pirateCharacter={activeLeave.user.pirateCharacter}
+                  size="md"
+                  animate={false}
+                />
+                <div className="min-w-0">
+                  <h3 className="text-base font-extrabold text-slate-900 truncate">
+                    {activeLeave.user.name}
+                  </h3>
+                  <span className="inline-block rounded-full bg-white border border-amber-300 px-2 py-0.5 text-[11px] font-bold text-amber-900">
+                    {LEAVE_TYPE_META[activeLeave.leaveType]?.label ||
+                      activeLeave.leaveType}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveLeave(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-amber-100 hover:text-slate-700 cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3 text-xs">
+              <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  Từ <strong>{activeLeave.startDate}</strong> đến{" "}
+                  <strong>{activeLeave.endDate}</strong>
+                </span>
+              </div>
+              {activeLeave.reason && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
+                  <div className="text-[11px] font-bold uppercase text-slate-500">
+                    Lý do / Ghi chú
+                  </div>
+                  <p className="text-slate-800 whitespace-pre-line leading-relaxed">
+                    {activeLeave.reason}
+                  </p>
+                </div>
+              )}
+              {activeLeave.reviewedBy && (
+                <div className="text-[11px] text-emerald-700 font-semibold">
+                  ✓ Đã duyệt bởi {activeLeave.reviewedBy.name}
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTab("LEAVE");
+                  setActiveLeave(null);
+                }}
+                className="text-xs font-bold text-amber-800 hover:underline cursor-pointer"
+              >
+                Mở tab Lịch Nghỉ / WFH →
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveLeave(null)}
+                className="rounded-xl border border-slate-200 bg-white hover:bg-slate-100 px-3.5 py-1.5 text-xs font-bold text-slate-700 cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}

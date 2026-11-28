@@ -8,7 +8,7 @@ import { buildFieldDiffs, recordActivity } from "@/lib/activity";
 import { normalizeSubtasks } from "@/lib/subtasks";
 import { normalizeMediaBriefItems } from "@/lib/media-brief";
 import { taskRequiresLeaderApproval } from "@/lib/constants";
-import { TASK_DETAIL_INCLUDE } from "@/lib/task-queries";
+import { TASK_DETAIL_INCLUDE, sanitizeTaskAssets } from "@/lib/task-queries";
 import { parseAssigneeIdsFromBody } from "@/lib/task-assignees";
 import type {
   ActivityAction,
@@ -49,7 +49,7 @@ export async function GET(
     );
   }
 
-  return NextResponse.json({ task });
+  return NextResponse.json({ task: sanitizeTaskAssets(task) });
 }
 
 export async function PATCH(
@@ -142,7 +142,13 @@ export async function PATCH(
 
       for (const item of incomingAssets) {
         const cleanedUrl = item.url.trim();
-        if (!cleanedUrl || existingUrls.has(cleanedUrl)) continue;
+        if (
+          !cleanedUrl ||
+          existingUrls.has(cleanedUrl) ||
+          cleanedUrl.startsWith("/api/assets/")
+        ) {
+          continue;
+        }
         if (cleanedUrl.startsWith("data:image/") && cleanedUrl.length > 650_000) {
           continue;
         }
@@ -465,7 +471,7 @@ export async function PATCH(
         });
       }
 
-      // Nếu là Order Media gắn với 1 bài Content gốc -> báo luôn cho người phụ trách bài Content biết Media đã nộp sản phẩm!
+      // Nếu là Order Media gắn với 1 bài Content gốc -> báo luôn cho toàn bộ PIC của bài Content biết Media đã nộp sản phẩm!
       if (existing.parentTaskId) {
         const parentTask = await prisma.task.findUnique({
           where: { id: existing.parentTaskId },
@@ -474,19 +480,31 @@ export async function PATCH(
             code: true,
             title: true,
             assigneeId: true,
+            assignees: { select: { userId: true } },
             requesterId: true,
             project: { select: { slug: true } },
           },
         });
-        const contentPicId = parentTask?.assigneeId || parentTask?.requesterId;
-        if (parentTask && contentPicId && contentPicId !== user.id) {
-          await createNotification({
-            userId: contentPicId,
-            type: "SYSTEM",
-            title: `🎨 Media vừa nộp ấn phẩm cho bài ${parentTask.code}`,
-            message: `${user.name} vừa gửi duyệt "${existing.title}" (liên kết với "${parentTask.title}").`,
-            linkUrl: `/projects/${parentTask.project.slug}?tab=CONTENT_CALENDAR&taskId=${parentTask.id}`,
-          });
+        if (parentTask) {
+          const parentPics = new Set<string>(
+            [
+              parentTask.assigneeId,
+              ...parentTask.assignees.map((a) => a.userId),
+            ].filter((uid): uid is string => Boolean(uid))
+          );
+          if (parentPics.size === 0 && parentTask.requesterId) {
+            parentPics.add(parentTask.requesterId);
+          }
+          for (const picId of parentPics) {
+            if (picId === user.id) continue;
+            await createNotification({
+              userId: picId,
+              type: "SYSTEM",
+              title: `🎨 Media vừa nộp ấn phẩm cho bài ${parentTask.code}`,
+              message: `${user.name} vừa gửi duyệt "${existing.title}" (liên kết với "${parentTask.title}").`,
+              linkUrl: `/projects/${parentTask.project.slug}?tab=CONTENT_CALENDAR&taskId=${parentTask.id}`,
+            });
+          }
         }
       }
     } else if (action === "APPROVE") {
@@ -519,7 +537,7 @@ export async function PATCH(
         });
       }
 
-      // Liên kết 2 chiều: Media Order được duyệt Final -> báo ngay cho PIC bài Content gốc lấy link đăng bài!
+      // Liên kết 2 chiều: Media Order được duyệt Final -> báo ngay cho toàn bộ PIC bài Content gốc lấy link đăng bài!
       if (existing.parentTaskId) {
         const parentTask = await prisma.task.findUnique({
           where: { id: existing.parentTaskId },
@@ -528,24 +546,31 @@ export async function PATCH(
             code: true,
             title: true,
             assigneeId: true,
+            assignees: { select: { userId: true } },
             requesterId: true,
             project: { select: { slug: true } },
           },
         });
-        const contentPicId = parentTask?.assigneeId || parentTask?.requesterId;
-        if (
-          parentTask &&
-          contentPicId &&
-          contentPicId !== user.id &&
-          !recipients.has(contentPicId)
-        ) {
-          await createNotification({
-            userId: contentPicId,
-            type: "APPROVED",
-            title: `🎬 Media Final đã sẵn sàng cho bài ${parentTask.code}!`,
-            message: `Ấn phẩm "${existing.title}" đã được Leader duyệt Final — mở bài viết để lấy link đăng ngay.`,
-            linkUrl: `/projects/${parentTask.project.slug}?tab=CONTENT_CALENDAR&taskId=${parentTask.id}`,
-          });
+        if (parentTask) {
+          const parentPics = new Set<string>(
+            [
+              parentTask.assigneeId,
+              ...parentTask.assignees.map((a) => a.userId),
+            ].filter((uid): uid is string => Boolean(uid))
+          );
+          if (parentPics.size === 0 && parentTask.requesterId) {
+            parentPics.add(parentTask.requesterId);
+          }
+          for (const picId of parentPics) {
+            if (picId === user.id || recipients.has(picId)) continue;
+            await createNotification({
+              userId: picId,
+              type: "APPROVED",
+              title: `🎬 Media Final đã sẵn sàng cho bài ${parentTask.code}!`,
+              message: `Ấn phẩm "${existing.title}" đã được Leader duyệt Final — mở bài viết để lấy link đăng ngay.`,
+              linkUrl: `/projects/${parentTask.project.slug}?tab=CONTENT_CALENDAR&taskId=${parentTask.id}`,
+            });
+          }
         }
       }
     } else if (action === "REQUEST_REVISION") {
@@ -667,7 +692,19 @@ export async function PATCH(
         if (existing.dueAt && now > existing.dueAt) {
           updateData.wasLate = true;
         }
+      } else if (existing.completedAt) {
+        updateData.completedAt = null;
       }
+    }
+
+    if (
+      action &&
+      (action === "APPROVE_BRIEF" ||
+        action === "SUBMIT_FOR_REVIEW" ||
+        action === "REQUEST_REVISION") &&
+      existing.completedAt
+    ) {
+      updateData.completedAt = null;
     }
 
     const diffs = buildFieldDiffs(
@@ -737,7 +774,7 @@ export async function PATCH(
       include: TASK_DETAIL_INCLUDE,
     });
 
-    return NextResponse.json({ task: updated });
+    return NextResponse.json({ task: sanitizeTaskAssets(updated) });
   } catch (err) {
     console.error("Update task error:", err);
     return NextResponse.json(

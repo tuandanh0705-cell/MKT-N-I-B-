@@ -551,7 +551,7 @@ export function TeamAdminView({
         <div className="flex items-center gap-2 mb-3">
           <UserPlus className="w-4 h-4 text-amber-600" />
           <h2 className="text-sm font-bold text-slate-900">
-            🏴‍☠️ Chiêu mộ Nhân sự mới vào Băng Hải Tặc
+            ⚓ Chiêu mộ Nhân sự mới vào Băng Hải Tặc
           </h2>
         </div>
 
@@ -681,7 +681,7 @@ export function TeamAdminView({
         <div className="px-5 py-4 border-b border-amber-100 flex items-center gap-2">
           <Shield className="w-4 h-4 text-amber-700" />
           <h2 className="text-sm font-extrabold text-slate-900">
-            🏴‍☠️ Danh sách Băng Hải Tặc & Hải Đồ được phép xem ({users.length})
+            ⚓ Danh sách Băng Hải Tặc &amp; Hải Đồ được phép xem ({users.length})
           </h2>
         </div>
 
@@ -731,9 +731,26 @@ export function TeamAdminView({
                   </div>
                 </td>
                 <td className="py-3 px-4">
-                  <span className="text-xs font-semibold text-slate-600">
-                    {u.employmentType === "FULL_TIME" ? "Full-time" : "Part-time"}
-                  </span>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                          u.role === "LEADER"
+                            ? "bg-amber-100 text-amber-900 border border-amber-300"
+                            : "bg-sky-50 text-sky-800 border border-sky-200"
+                        }`}
+                      >
+                        {u.role === "LEADER" ? "Leader" : "Thành viên"}
+                      </span>
+                      <span className="rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-[10px] font-semibold">
+                        {DEPARTMENT_SCOPE_LABEL[u.departmentScope] || u.departmentScope}
+                      </span>
+                    </div>
+                    <div className="text-[11px] font-semibold text-slate-500">
+                      {u.employmentType === "FULL_TIME" ? "Full-time" : "Part-time"}
+                      {u.title ? ` • ${u.title}` : ""}
+                    </div>
+                  </div>
                 </td>
                 <td className="py-3 px-4 text-xs font-medium text-slate-700">
                   <div className="space-y-0.5">
@@ -743,9 +760,12 @@ export function TeamAdminView({
                     {(u.weeklyImageLimit || u.dailyVideoLimit) && (
                       <div className="text-[11px] text-slate-400">
                         Giới hạn:{" "}
-                        {u.weeklyImageLimit
-                          ? `${u.weeklyImageLimit} ảnh/tuần`
-                          : `${u.dailyVideoLimit} video/ngày`}
+                        {[
+                          u.weeklyImageLimit ? `${u.weeklyImageLimit} ảnh/tuần` : null,
+                          u.dailyVideoLimit ? `${u.dailyVideoLimit} video/ngày` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" • ")}
                       </div>
                     )}
                   </div>

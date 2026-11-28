@@ -28,7 +28,6 @@ interface ChatRoomsSidebarProps {
   onSearchQueryChange: (q: string) => void;
   onFilterTabChange: (tab: "ALL" | "GROUP" | "DIRECT" | "ANON") => void;
   onStartDirectChat: (userId: string) => void;
-  onOpenAnonymousModal: () => void;
   onSelectRoom: (roomId: string) => void;
   getDirectPeer: (room: ChatRoomSummary) => ChatParticipantUser | null;
   getRoomDisplayTitle: (room: ChatRoomSummary) => string;
@@ -44,7 +43,6 @@ export function ChatRoomsSidebar({
   onSearchQueryChange,
   onFilterTabChange,
   onStartDirectChat,
-  onOpenAnonymousModal,
   onSelectRoom,
   getDirectPeer,
   getRoomDisplayTitle,
@@ -61,40 +59,40 @@ export function ChatRoomsSidebar({
           <div className="text-[11px] font-bold uppercase tracking-wider text-amber-800/80 truncate">
             Nhắn riêng 1-1
           </div>
-          <button
-            type="button"
-            onClick={onOpenAnonymousModal}
-            className="rounded-full bg-indigo-900 hover:bg-indigo-800 text-amber-300 px-2.5 py-0.5 text-[10px] font-bold inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer transition shadow-xs"
-            title="Mở cuộc trò chuyện ẩn danh 1-1 tách biệt"
-          >
-            <EyeOff className="w-3 h-3 shrink-0" />
-            <span>Nhắn ẩn danh</span>
-          </button>
+          <span className="text-[10px] font-medium text-slate-400 shrink-0">
+            {teammates.length} đồng đội
+          </span>
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-          {teammates.map((member) => (
-            <button
-              key={member.id}
-              type="button"
-              onClick={() => onStartDirectChat(member.id)}
-              title={`Nhắn riêng cho ${member.name}`}
-              className="flex flex-col items-center gap-1 shrink-0 w-14 group cursor-pointer"
-            >
-              <PirateAvatar
-                name={member.name}
-                color={member.avatarColor}
-                scope={member.departmentScope}
-                pirateCharacter={member.pirateCharacter}
-                size="md"
-                animate={false}
-              />
-              <span className="text-[10px] font-bold text-slate-700 group-hover:text-sky-600 truncate w-full text-center">
-                {member.name.split(" ")[0] === "Chị"
-                  ? "Hương"
-                  : member.name.split(" ")[0]}
-              </span>
-            </button>
-          ))}
+        <div className="relative">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 pr-6">
+            {teammates.map((member) => (
+              <button
+                key={member.id}
+                type="button"
+                onClick={() => onStartDirectChat(member.id)}
+                title={`Nhắn riêng cho ${member.name}`}
+                className="flex flex-col items-center gap-1 shrink-0 w-14 group cursor-pointer"
+              >
+                <PirateAvatar
+                  name={member.name}
+                  color={member.avatarColor}
+                  scope={member.departmentScope}
+                  pirateCharacter={member.pirateCharacter}
+                  size="md"
+                  animate={false}
+                />
+                <span className="text-[10px] font-bold text-slate-700 group-hover:text-sky-600 truncate w-full text-center">
+                  {member.name.split(" ")[0] === "Chị"
+                    ? "Hương"
+                    : member.name.split(" ")[0]}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-0 top-0 bottom-1 w-7 bg-gradient-to-l from-[#FFFDF7] via-[#FFFDF7]/85 to-transparent"
+          />
         </div>
       </div>
 

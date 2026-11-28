@@ -233,17 +233,26 @@ export function ContentCalendarMobileCard({
                 >
                   {meta.label} ({m.code})
                 </button>
-                {finalAsset && (
-                  <a
-                    href={finalAsset.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-lg bg-emerald-600 text-white px-1.5 py-0.5 text-[10px] font-bold inline-flex items-center gap-0.5"
-                  >
-                    File
-                    <ExternalLink className="w-2.5 h-2.5" />
-                  </a>
-                )}
+                {finalAsset &&
+                  (finalAsset.url.startsWith("data:image/") ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenMediaOrder?.(m.id)}
+                      className="rounded-lg bg-emerald-600 text-white px-1.5 py-0.5 text-[10px] font-bold inline-flex items-center gap-0.5 cursor-pointer"
+                    >
+                      Ảnh
+                    </button>
+                  ) : (
+                    <a
+                      href={finalAsset.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg bg-emerald-600 text-white px-1.5 py-0.5 text-[10px] font-bold inline-flex items-center gap-0.5"
+                    >
+                      File
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  ))}
               </div>
             );
           })}

@@ -12,13 +12,14 @@ import {
 } from "lucide-react";
 import { TaskStatusBadge } from "@/components/status-badge";
 import { TaskDrawer } from "@/components/task-drawer";
-import { PirateAvatar } from "@/components/pirate-art";
+import { TaskAssigneesBadges } from "@/components/task-assignees-badges";
 import { PlatformLogo } from "@/components/platform-logo";
 import { useToast } from "@/components/toast-provider";
 import { TASK_TYPE_META } from "@/lib/constants";
 import { normalizeMediaBriefItems } from "@/lib/media-brief";
 import { getPlatformChannelMeta } from "@/lib/platform-meta";
 import { formatVnDateTime } from "@/lib/dates";
+import { getTaskAssignees } from "@/lib/task-assignees";
 import type { TaskItem } from "@/types/crm";
 import type { UserRole } from "@/generated/prisma/client";
 
@@ -65,7 +66,7 @@ export function ReviewsBoard({
         const hit =
           t.title.toLowerCase().includes(q) ||
           t.code.toLowerCase().includes(q) ||
-          (t.assignee?.name.toLowerCase().includes(q) ?? false);
+          getTaskAssignees(t).some((u) => u.name.toLowerCase().includes(q));
         if (!hit) return false;
       }
       return true;
@@ -97,6 +98,7 @@ export function ReviewsBoard({
       if (res.ok) {
         const data = await res.json();
         handleTaskUpdated(data.task);
+        window.dispatchEvent(new Event("reviews-count-updated"));
         showToast(
           action === "APPROVE_BRIEF"
             ? `Đã duyệt Brief ${task.code}.`
@@ -233,21 +235,12 @@ export function ReviewsBoard({
                     )}
                     <div className="text-xs text-slate-500 flex flex-wrap items-center gap-3">
                       <span className="inline-flex items-center gap-1.5">
-                        {t.assignee && (
-                          <PirateAvatar
-                            name={t.assignee.name}
-                            color={t.assignee.avatarColor}
-                            scope={t.assignee.departmentScope}
-                            pirateCharacter={t.assignee.pirateCharacter}
-                            size="sm"
-                          />
-                        )}
-                        <span>
-                          Thực hiện:{" "}
-                          <strong className="text-slate-800">
-                            {t.assignee?.name || "Chưa gán"}
-                          </strong>
-                        </span>
+                        <span>Thực hiện:</span>
+                        <TaskAssigneesBadges
+                          task={t}
+                          size="sm"
+                          emptyLabel="Chưa gán"
+                        />
                       </span>
                       <span>
                         Lịch đăng:{" "}
@@ -269,17 +262,26 @@ export function ReviewsBoard({
                     className="flex flex-wrap items-center gap-2 shrink-0"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {latestAsset && (
-                      <a
-                        href={latestAsset.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-2 text-xs font-semibold inline-flex items-center gap-1.5"
-                      >
-                        Mở {latestAsset.label}
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
+                    {latestAsset &&
+                      (latestAsset.url.startsWith("data:image/") ? (
+                        <button
+                          type="button"
+                          onClick={() => setActiveTaskId(t.id)}
+                          className="rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-2 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          Xem {latestAsset.label}
+                        </button>
+                      ) : (
+                        <a
+                          href={latestAsset.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-2 text-xs font-semibold inline-flex items-center gap-1.5"
+                        >
+                          Mở {latestAsset.label}
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      ))}
 
                     {currentUserRole === "LEADER" && (
                       <>
@@ -341,19 +343,12 @@ export function ReviewsBoard({
                 </div>
                 <div className="text-sm font-bold text-slate-900">{t.title}</div>
                 <div className="text-xs text-slate-600 flex items-center gap-2 flex-wrap">
-                  {t.assignee && (
-                    <PirateAvatar
-                      name={t.assignee.name}
-                      color={t.assignee.avatarColor}
-                      scope={t.assignee.departmentScope}
-                      pirateCharacter={t.assignee.pirateCharacter}
-                      size="sm"
-                    />
-                  )}
-                  <span>
-                    Phụ trách: <strong>{t.assignee?.name || "Chưa gán"}</strong> • Hạn:{" "}
-                    {formatVnDateTime(t.dueAt)}
-                  </span>
+                  <TaskAssigneesBadges
+                    task={t}
+                    size="sm"
+                    emptyLabel="Chưa gán"
+                  />
+                  <span>• Hạn: {formatVnDateTime(t.dueAt)}</span>
                 </div>
               </div>
             ))}

@@ -11,7 +11,11 @@ import { recordActivity } from "@/lib/activity";
 import { TASK_TYPE_META, getProjectCodePrefix } from "@/lib/constants";
 import { normalizeSubtasks } from "@/lib/subtasks";
 import { normalizeMediaBriefItems } from "@/lib/media-brief";
-import { TASK_CARD_INCLUDE } from "@/lib/task-queries";
+import {
+  TASK_CARD_INCLUDE,
+  sanitizeTaskAssets,
+  sanitizeTasksAssets,
+} from "@/lib/task-queries";
 import { parseAssigneeIdsFromBody } from "@/lib/task-assignees";
 import type { AssetKind, Prisma, TaskPriority, TaskStatus, TaskType } from "@/generated/prisma/client";
 
@@ -58,7 +62,7 @@ export async function GET(request: Request) {
     include: TASK_CARD_INCLUDE,
   });
 
-  return NextResponse.json({ tasks });
+  return NextResponse.json({ tasks: sanitizeTasksAssets(tasks) });
 }
 
 export async function POST(request: Request) {
@@ -381,7 +385,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { task: created, warning: timing.warningMessage },
+      { task: sanitizeTaskAssets(created), warning: timing.warningMessage },
       { status: 201 }
     );
   } catch (err) {

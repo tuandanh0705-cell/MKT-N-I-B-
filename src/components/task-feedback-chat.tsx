@@ -230,10 +230,27 @@ export function TaskFeedbackChat({
     });
   }, []);
 
-  // Tải đầy đủ lịch sử feedback & đồng bộ tin mới dạng incremental mỗi 2.5s
+  // Tải đầy đủ lịch sử feedback & đồng bộ tin mới dạng incremental với cơ chế giãn nhịp khi rảnh (3s -> 8s -> 15s)
   useEffect(() => {
     let active = true;
     let inFlight = false;
+    let lastActivityAt = Date.now();
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    const getPollDelay = () => {
+      const idleMs = Date.now() - lastActivityAt;
+      if (idleMs < 30_000) return 3000;
+      if (idleMs < 90_000) return 8000;
+      return 15_000;
+    };
+
+    const scheduleNext = () => {
+      if (!active) return;
+      if (timerId) clearTimeout(timerId);
+      timerId = setTimeout(() => {
+        void pollIncremental().finally(scheduleNext);
+      }, getPollDelay());
+    };
 
     const loadInitial = async () => {
       try {
@@ -258,8 +275,6 @@ export function TaskFeedbackChat({
         if (active) setLoadingInitial(false);
       }
     };
-
-    void loadInitial();
 
     const pollIncremental = async () => {
       if (document.visibilityState !== "visible" || inFlight) return;
@@ -294,6 +309,7 @@ export function TaskFeedbackChat({
         });
 
         if (changed) {
+          lastActivityAt = Date.now();
           if (nextConfirmed) onCommentsChangedRef.current?.(nextConfirmed);
           scrollToBottom(true);
         }
@@ -304,21 +320,21 @@ export function TaskFeedbackChat({
       }
     };
 
+    void loadInitial().finally(scheduleNext);
+
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        void pollIncremental();
+        lastActivityAt = Date.now();
+        void pollIncremental().finally(scheduleNext);
       }
     };
 
-    const timer = setInterval(() => {
-      void pollIncremental();
-    }, 2500);
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       active = false;
-      clearInterval(timer);
+      if (timerId) clearTimeout(timerId);
       window.removeEventListener("focus", onVisible);
       document.removeEventListener("visibilitychange", onVisible);
     };

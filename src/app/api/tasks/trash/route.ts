@@ -13,6 +13,8 @@ export async function GET() {
     deletedAt: { not: null },
     OR: [
       { requesterId: user.id },
+      { assigneeId: user.id },
+      { assignees: { some: { userId: user.id } } },
       { deletedById: user.id },
       {
         project: {
@@ -39,6 +41,10 @@ export async function GET() {
     include: {
       project: { select: { id: true, slug: true, name: true, color: true } },
       assignee: { select: { id: true, name: true } },
+      assignees: {
+        orderBy: { assignedAt: "asc" },
+        include: { user: { select: { id: true, name: true } } },
+      },
       deletedBy: { select: { id: true, name: true } },
     },
   });
@@ -65,6 +71,8 @@ export async function POST(request: Request) {
               deletedAt: { not: null },
               OR: [
                 { requesterId: user.id },
+                { assigneeId: user.id },
+                { assignees: { some: { userId: user.id } } },
                 { deletedById: user.id },
                 {
                   project: {
@@ -116,6 +124,8 @@ export async function POST(request: Request) {
         title: true,
         projectId: true,
         requesterId: true,
+        assigneeId: true,
+        assignees: { select: { userId: true } },
         deletedById: true,
       },
     });
@@ -141,6 +151,8 @@ export async function POST(request: Request) {
     let canRestore =
       user.role === "LEADER" ||
       existing.requesterId === user.id ||
+      existing.assigneeId === user.id ||
+      existing.assignees.some((a) => a.userId === user.id) ||
       existing.deletedById === user.id;
 
     if (!canRestore) {

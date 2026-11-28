@@ -1,3 +1,4 @@
+import { getResourceLinks } from "@/lib/resource-links";
 import type { ProjectChannelSuggestions } from "@/types/crm";
 
 export type PlatformKind =
@@ -212,7 +213,12 @@ function extractDomainOrHandle(rawUrl: string): string {
 
 export function buildProjectChannelSuggestions(params: {
   fanpages?: Array<{ name: string; pageUrl?: string | null }>;
-  resources?: Array<{ title: string; url: string; tags?: string | null }>;
+  resources?: Array<{
+    title: string;
+    url: string;
+    linksJson?: unknown;
+    tags?: string | null;
+  }>;
   tasks?: Array<{ platform?: string | null; publishChannel?: string | null }>;
 }): ProjectChannelSuggestions {
   const fanpages = new Set<string>();
@@ -225,26 +231,43 @@ export function buildProjectChannelSuggestions(params: {
   }
 
   for (const res of params.resources ?? []) {
-    const urlLower = (res.url || "").toLowerCase();
-    const textLower = `${res.title} ${res.tags || ""}`.toLowerCase();
-    if (urlLower.includes("tiktok.com") || textLower.includes("tiktok")) {
-      const match = res.url.match(/tiktok\.com\/(@[\w.-]+)/i);
-      addUnique(tiktoks, match ? match[1] : res.title);
-    } else if (
-      urlLower.includes("facebook.com") ||
-      urlLower.includes("fb.com") ||
-      textLower.includes("fanpage")
-    ) {
-      addUnique(fanpages, res.title);
-    } else if (
-      urlLower.startsWith("http") &&
-      !urlLower.includes("drive.google.com") &&
-      !urlLower.includes("docs.google.com") &&
-      !urlLower.includes("canva.com") &&
-      !urlLower.includes("figma.com")
-    ) {
-      if (textLower.includes("web") || textLower.includes("site") || textLower.includes("blog")) {
-        addUnique(websites, extractDomainOrHandle(res.url));
+    const links = getResourceLinks({
+      url: res.url,
+      linksJson: res.linksJson,
+    });
+    const candidates =
+      links.length > 0
+        ? links.map((l) => ({
+            url: l.url,
+            label: l.label?.trim() || res.title,
+          }))
+        : [{ url: res.url, label: res.title }];
+    for (const item of candidates) {
+      const urlLower = (item.url || "").toLowerCase();
+      const textLower = `${item.label} ${res.title} ${res.tags || ""}`.toLowerCase();
+      if (urlLower.includes("tiktok.com") || textLower.includes("tiktok")) {
+        const match = item.url.match(/tiktok\.com\/(@[\w.-]+)/i);
+        addUnique(tiktoks, match ? match[1] : item.label);
+      } else if (
+        urlLower.includes("facebook.com") ||
+        urlLower.includes("fb.com") ||
+        textLower.includes("fanpage")
+      ) {
+        addUnique(fanpages, item.label);
+      } else if (
+        urlLower.startsWith("http") &&
+        !urlLower.includes("drive.google.com") &&
+        !urlLower.includes("docs.google.com") &&
+        !urlLower.includes("canva.com") &&
+        !urlLower.includes("figma.com")
+      ) {
+        if (
+          textLower.includes("web") ||
+          textLower.includes("site") ||
+          textLower.includes("blog")
+        ) {
+          addUnique(websites, extractDomainOrHandle(item.url));
+        }
       }
     }
   }

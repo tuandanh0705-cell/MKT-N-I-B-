@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { TASK_STATUS_META } from "@/lib/constants";
-import { getPresetDateTimeLocal } from "@/lib/dates";
+import { getPresetDateTimeLocal, parseVnDateTimeLocalToIso } from "@/lib/dates";
 import {
   createEmptyMediaBriefItem,
   getTaskPrimaryVideoKind,
@@ -23,6 +23,7 @@ import { canUserDeleteTask, softDeleteTasksByIds } from "@/lib/task-delete";
 import { getTaskAssignees } from "@/lib/task-assignees";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
 import { MediaBriefRow, formatVnShortDate } from "@/components/media-brief-row";
+import { MultiAssigneePicker } from "@/components/multi-assignee-picker";
 import { useToast } from "@/components/toast-provider";
 import type { SimpleProject, SimpleUser, TaskItem } from "@/types/crm";
 import type { TaskStatus, UserRole } from "@/generated/prisma/client";
@@ -109,7 +110,7 @@ export function MediaBriefBoard({
   const [qDeadline, setQDeadline] = useState(() =>
     getPresetDateTimeLocal(2, 17, 30)
   );
-  const [qAssigneeId, setQAssigneeId] = useState("");
+  const [qAssigneeIds, setQAssigneeIds] = useState<string[]>([]);
   const [qBriefUrl, setQBriefUrl] = useState("");
   const [qNote, setQNote] = useState("");
   const [creatingQuick, setCreatingQuick] = useState(false);
@@ -251,6 +252,7 @@ export function MediaBriefBoard({
       }
       setSelectedDeleteIds((prev) => prev.filter((id) => !removed.has(id)));
       if (deletedIds.length > 0) {
+        window.dispatchEvent(new Event("reviews-count-updated"));
         showToast(`Đã chuyển ${deletedIds.length} Order Media vào Thùng rác.`);
       } else {
         showToast("Không xóa được Order Media đã chọn.", "error");
@@ -279,6 +281,7 @@ export function MediaBriefBoard({
         return;
       }
       onTaskUpdated(data.task);
+      window.dispatchEvent(new Event("reviews-count-updated"));
       if (successMsg) showToast(successMsg);
     } finally {
       setBusyId(null);
@@ -303,8 +306,9 @@ export function MediaBriefBoard({
           isMediaOrder: true,
           isOutsideDepartment: briefKind === "OUTSIDE_TEAM",
           quantity: quickQty,
-          dueAt: qDeadline ? new Date(qDeadline).toISOString() : null,
-          assigneeId: qAssigneeId || null,
+          dueAt: parseVnDateTimeLocalToIso(qDeadline),
+          assigneeIds: qAssigneeIds,
+          assigneeId: qAssigneeIds[0] || null,
           briefLinkUrl: qBriefUrl.trim() || undefined,
           description: qNote.trim() || null,
           platform: isQuickVideo ? "TikTok" : "Fanpage",
@@ -325,6 +329,7 @@ export function MediaBriefBoard({
       onTaskCreated(data.task);
       setQTitle("");
       setQQty(1);
+      setQAssigneeIds([]);
       setQBriefUrl("");
       setQNote("");
       showToast(
@@ -434,7 +439,7 @@ export function MediaBriefBoard({
               className="rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 px-3 py-2 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
             >
               {quickOpen ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-              {quickOpen ? "Đóng thêm nhanh" : "+ Thêm dòng nhanh"}
+              {quickOpen ? "Đóng thêm nhanh" : "Thêm dòng nhanh"}
             </button>
             {onOpenCreateModal && (
               <button
@@ -455,7 +460,7 @@ export function MediaBriefBoard({
                 ) : (
                   <Camera className="w-3.5 h-3.5" />
                 )}
-                {briefKind === "MEDIA_VIDEO" ? "+ Tạo Brief Video" : "+ Tạo Brief Ảnh"}
+                {briefKind === "MEDIA_VIDEO" ? "Tạo Brief Video" : "Tạo Brief Ảnh"}
               </button>
             )}
           </div>
@@ -776,20 +781,15 @@ export function MediaBriefBoard({
                         </option>
                       </select>
                     )}
-                    <select
-                      value={qAssigneeId}
-                      onChange={(e) => setQAssigneeId(e.target.value)}
-                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px]"
-                    >
-                      <option value="">-- Giao Media --</option>
-                      {users
-                        .filter((u) => u.isActive !== false)
-                        .map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.name}
-                          </option>
-                        ))}
-                    </select>
+                    <div className="min-w-[165px]">
+                      <MultiAssigneePicker
+                        users={users}
+                        value={qAssigneeIds}
+                        onChange={setQAssigneeIds}
+                        compact
+                        placeholder="Giao Media..."
+                      />
+                    </div>
                     <input
                       type="url"
                       value={qBriefUrl}

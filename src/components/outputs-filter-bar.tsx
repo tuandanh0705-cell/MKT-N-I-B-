@@ -248,39 +248,45 @@ export function OutputsFilterBar({
 
       {/* Row 2: Tab hàng đợi duyệt & trạng thái Output (cuộn ngang 1 dòng trên Mobile) */}
       {!isMediaProduction && (
-        <div className="flex sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-slate-100 pb-2.5">
-          {readinessTabs.map((tab) => {
-            const active = readinessFilter === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => onSelectReadiness(tab.id)}
-                className={`rounded-xl px-2.5 sm:px-3 py-1.5 text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap transition cursor-pointer ${
-                  active
-                    ? tab.highlight
-                      ? "bg-rose-600 text-white shadow-xs"
-                      : "bg-[#0B2545] text-amber-300 shadow-xs"
-                    : tab.highlight && (tab.count ?? 0) > 0
-                      ? "bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                }`}
-              >
-                <span>{tab.label}</span>
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+        <div className="relative border-b border-slate-100 pb-2.5">
+          <div className="flex sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pr-8 sm:pr-0">
+            {readinessTabs.map((tab) => {
+              const active = readinessFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => onSelectReadiness(tab.id)}
+                  className={`rounded-xl px-2.5 sm:px-3 py-1.5 text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap transition cursor-pointer ${
                     active
-                      ? "bg-white/20 text-white"
+                      ? tab.highlight
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "bg-[#0B2545] text-amber-300 shadow-xs"
                       : tab.highlight && (tab.count ?? 0) > 0
-                        ? "bg-rose-600 text-white"
-                        : "bg-white text-slate-700"
+                        ? "bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                   }`}
                 >
-                  {tab.count ?? 0}
-                </span>
-              </button>
-            );
-          })}
+                  <span>{tab.label}</span>
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                      active
+                        ? "bg-white/20 text-white"
+                        : tab.highlight && (tab.count ?? 0) > 0
+                          ? "bg-rose-600 text-white"
+                          : "bg-white text-slate-700"
+                    }`}
+                  >
+                    {tab.count ?? 0}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div
+            aria-hidden="true"
+            className="sm:hidden pointer-events-none absolute right-0 top-0 bottom-2.5 w-8 bg-gradient-to-l from-white via-white/85 to-transparent"
+          />
         </div>
       )}
 

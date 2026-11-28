@@ -269,7 +269,7 @@ export function ChatCreateGroupModal({
       >
         <div className="flex items-center justify-between">
           <h3 className="text-base font-extrabold text-slate-900">
-            🏴‍☠️ Tạo Nhóm Chat Mới
+            ⚓ Tạo Nhóm Chat Mới
           </h3>
           <button
             type="button"

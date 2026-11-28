@@ -27,7 +27,7 @@ export const TONE_OPTIONS: {
   {
     mode: "PIRATE",
     label: "Hải Tặc Mũ Rơm",
-    emoji: "🏴‍☠️",
+    emoji: "⚓",
     desc: "Ra khơi, Kho báu, Gặp bão, Thousand Sunny",
   },
   {
@@ -45,7 +45,7 @@ export const TONE_OPTIONS: {
 ];
 
 export const ICON_PRESETS = [
-  "🏴‍☠️",
+  "⚓",
   "👒",
   "⚔️",
   "🧭",
@@ -113,7 +113,7 @@ export function getToneCopy(mode?: string | null): ToneCopy {
   return {
     mode: "PIRATE",
     label: "Hải Tặc Mũ Rơm",
-    emoji: "🏴‍☠️",
+    emoji: "⚓",
     badge: "⛵ Băng Mũ Rơm",
     greetingPrefix: "Chào thuyền viên",
     myWorkTitle: "Nhật Ký Hải Trình Cá Nhân",

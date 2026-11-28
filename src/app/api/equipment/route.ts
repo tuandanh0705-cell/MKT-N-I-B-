@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isMediaProductionUser } from "@/lib/constants";
 import type {
   EquipmentCategory,
   EquipmentCondition,
@@ -129,6 +130,15 @@ export async function PATCH(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   }
+  if (
+    user.role !== "LEADER" &&
+    !isMediaProductionUser(user.role, user.departmentScope)
+  ) {
+    return NextResponse.json(
+      { error: "Chỉ Leader hoặc đội ngũ Media mới có quyền chỉnh sửa danh mục thiết bị." },
+      { status: 403 }
+    );
+  }
 
   try {
     const body = await request.json();
@@ -168,6 +178,15 @@ export async function DELETE(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
+  }
+  if (
+    user.role !== "LEADER" &&
+    !isMediaProductionUser(user.role, user.departmentScope)
+  ) {
+    return NextResponse.json(
+      { error: "Chỉ Leader hoặc đội ngũ Media mới có quyền xóa thiết bị khỏi kho." },
+      { status: 403 }
+    );
   }
 
   const { searchParams } = new URL(request.url);

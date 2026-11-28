@@ -229,6 +229,19 @@ export function serializeChatRoomForViewer(
   });
 
   const lastMsgRaw = room.messages?.[0] ?? null;
+  const serializedLastMsg = lastMsgRaw
+    ? serializeChatMessage(lastMsgRaw, viewerUserId, {
+        forceAnonymousSenderId: isAnonymousThread
+          ? room.createdById
+          : undefined,
+        fallbackAlias: aliasLabel,
+      })
+    : null;
+  // Cắt chuỗi Base64 data:image/ nặng khỏi lastMessage ở danh sách phòng chat (sidebar chỉ hiển thị chữ)
+  const lightweightLastMsg =
+    serializedLastMsg && serializedLastMsg.attachmentUrl?.startsWith("data:image/")
+      ? { ...serializedLastMsg, attachmentUrl: null }
+      : serializedLastMsg;
 
   return {
     id: room.id,
@@ -244,14 +257,7 @@ export function serializeChatRoomForViewer(
     lastMessageAt: room.lastMessageAt.toISOString(),
     unreadCount,
     participants,
-    lastMessage: lastMsgRaw
-      ? serializeChatMessage(lastMsgRaw, viewerUserId, {
-          forceAnonymousSenderId: isAnonymousThread
-            ? room.createdById
-            : undefined,
-          fallbackAlias: aliasLabel,
-        })
-      : null,
+    lastMessage: lightweightLastMsg,
   };
 }
 

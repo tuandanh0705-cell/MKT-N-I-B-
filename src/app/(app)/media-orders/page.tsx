@@ -7,7 +7,11 @@ import {
   buildTaskVisibilityWhere,
 } from "@/lib/permissions";
 import { getAnonymizedTeamCapacity } from "@/lib/capacity";
-import { TASK_CARD_INCLUDE } from "@/lib/task-queries";
+import {
+  SIMPLE_PROJECT_SELECT,
+  TASK_CARD_INCLUDE,
+  sanitizeTasksAssets,
+} from "@/lib/task-queries";
 import { MediaOrdersPageClient } from "@/components/media-orders-page-client";
 
 export default async function MediaOrdersPage() {
@@ -17,7 +21,7 @@ export default async function MediaOrdersPage() {
     redirect("/my-work");
   }
 
-  const [tasks, projects, users, capacity] = await Promise.all([
+  const [rawTasks, projects, users, capacity] = await Promise.all([
     prisma.task.findMany({
       where: {
         AND: [
@@ -38,6 +42,7 @@ export default async function MediaOrdersPage() {
     prisma.project.findMany({
       where: buildProjectVisibilityWhere(user),
       orderBy: { createdAt: "asc" },
+      select: SIMPLE_PROJECT_SELECT,
     }),
     prisma.user.findMany({
       where: { isActive: true },
@@ -54,6 +59,8 @@ export default async function MediaOrdersPage() {
     }),
     getAnonymizedTeamCapacity(),
   ]);
+
+  const tasks = sanitizeTasksAssets(rawTasks);
 
   return (
     <MediaOrdersPageClient

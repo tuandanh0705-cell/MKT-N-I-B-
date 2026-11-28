@@ -229,3 +229,45 @@ export function shiftVnWeekStart(weekStartStr: string, deltaWeeks: number): stri
   anchor.setUTCDate(anchor.getUTCDate() + deltaWeeks * 7);
   return getVnWeekBounds(anchor).weekStartStr;
 }
+
+/**
+ * Parse chuỗi datetime-local (`YYYY-MM-DDTHH:mm` hoặc `YYYY-MM-DDTHH:mm:ss`) theo múi giờ Việt Nam (+07:00)
+ * và trả về ISO string chuẩn UTC, không phụ thuộc múi giờ máy người dùng.
+ */
+export function parseVnDateTimeLocalToIso(
+  value: string | null | undefined
+): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const d = new Date(`${trimmed}T00:00:00+07:00`);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) {
+    const d = new Date(`${trimmed}:00+07:00`);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(trimmed)) {
+    const d = new Date(`${trimmed}+07:00`);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+/**
+ * Thay đổi phần ngày (YYYY-MM-DD) nhưng giữ nguyên giờ:phút (HH:mm) theo giờ VN của mốc cũ nếu có.
+ */
+export function replaceVnDatePreservingTime(
+  newDateStr: string | null | undefined,
+  existingIso: Date | string | null | undefined,
+  fallbackTime = "17:00"
+): string | null {
+  if (!newDateStr || !newDateStr.trim()) return null;
+  const timePart = existingIso
+    ? getVnTimeString(existingIso, fallbackTime)
+    : fallbackTime;
+  const d = new Date(`${newDateStr.trim()}T${timePart}:00+07:00`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}

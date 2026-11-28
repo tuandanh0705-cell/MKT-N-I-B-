@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { canAccessProject } from "@/lib/permissions";
 import { getProjectCodePrefix } from "@/lib/constants";
+import { TASK_CARD_INCLUDE } from "@/lib/task-queries";
 
 interface ImportRowInput {
   publishDateIso?: string | null;
@@ -97,32 +98,11 @@ export async function POST(request: Request) {
           projectId,
           requesterId: user.id,
           assigneeId: user.id,
-        },
-        include: {
-          project: { select: { id: true, slug: true, name: true, color: true } },
-          assignee: {
-            select: {
-              id: true,
-              name: true,
-              title: true,
-              avatarColor: true,
-              pirateCharacter: true,
-              departmentScope: true,
-            },
+          assignees: {
+            create: [{ userId: user.id }],
           },
-          requester: {
-            select: {
-              id: true,
-              name: true,
-              title: true,
-              avatarColor: true,
-              pirateCharacter: true,
-            },
-          },
-          reviewer: { select: { id: true, name: true } },
-          assets: true,
-          _count: { select: { comments: true } },
         },
+        include: TASK_CARD_INCLUDE,
       });
       createdTasks.push(created);
     }

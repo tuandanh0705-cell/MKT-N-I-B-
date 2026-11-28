@@ -23,7 +23,11 @@ import {
   normalizeRouteSelectValue,
   type ProjectContentOptionKind,
 } from "@/lib/content-plan";
-import { getVnDateString, getVnTimeString } from "@/lib/dates";
+import {
+  getVnDateString,
+  getVnTimeString,
+  replaceVnDatePreservingTime,
+} from "@/lib/dates";
 import { normalizePlatformSelectValue } from "@/lib/platform-meta";
 import { getTaskAssigneeIds } from "@/lib/task-assignees";
 import type { GeminiQcCheckResponse } from "@/lib/gemini-shared";
@@ -474,7 +478,11 @@ export function ContentCalendarRow({
               disabled={rowBusy}
               onChange={(e) =>
                 onPatchTaskInline(t.id, {
-                  dueAt: e.target.value ? `${e.target.value}T17:00:00+07:00` : null,
+                  dueAt: replaceVnDatePreservingTime(
+                    e.target.value,
+                    t.dueAt,
+                    "17:00"
+                  ),
                 })
               }
               className="rounded-lg border border-slate-200 bg-white px-1.5 py-0.5 text-[11px]"
@@ -491,9 +499,11 @@ export function ContentCalendarRow({
               disabled={rowBusy}
               onChange={(e) =>
                 onPatchTaskInline(t.id, {
-                  mediaDueAt: e.target.value
-                    ? `${e.target.value}T17:00:00+07:00`
-                    : null,
+                  mediaDueAt: replaceVnDatePreservingTime(
+                    e.target.value,
+                    t.mediaDueAt,
+                    "17:00"
+                  ),
                 })
               }
               className="rounded-lg border border-slate-200 bg-white px-1.5 py-0.5 text-[11px]"
@@ -539,17 +549,27 @@ export function ContentCalendarRow({
                           ? "🔧 Media sửa"
                           : "🎨 Media đang làm"}
                   </button>
-                  {finalAsset && (
-                    <a
-                      href={finalAsset.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Mở link sản phẩm Media"
-                      className="text-emerald-700 hover:text-emerald-900"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
+                  {finalAsset &&
+                    (finalAsset.url.startsWith("data:image/") ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenMediaOrder?.(m.id)}
+                        title="Xem ảnh thành phẩm Media"
+                        className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    ) : (
+                      <a
+                        href={finalAsset.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Mở link sản phẩm Media"
+                        className="text-emerald-700 hover:text-emerald-900"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ))}
                 </div>
               );
             })}

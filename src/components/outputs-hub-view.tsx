@@ -2,7 +2,16 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import { Bot, Film, FolderCheck, Image as ImageIcon } from "lucide-react";
+import {
+  Bot,
+  CheckCheck,
+  CheckCircle2,
+  Film,
+  FolderCheck,
+  Image as ImageIcon,
+  Rocket,
+  X,
+} from "lucide-react";
 import {
   AiAndStandardsModal,
   type AiAndStandardsTab,
@@ -168,6 +177,8 @@ export function OutputsHubView({
     Record<string, boolean>
   >({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [batchActing, setBatchActing] = useState<"APPROVE" | "PUBLISH" | null>(null);
   const [quickApprovingId, setQuickApprovingId] = useState<string | null>(null);
 
   const [prevInitialTaskId, setPrevInitialTaskId] = useState<
@@ -259,7 +270,9 @@ export function OutputsHubView({
       if (q) {
         const assetMatch = (t.assets ?? []).some(
           (a) =>
-            a.label.toLowerCase().includes(q) || a.url.toLowerCase().includes(q)
+            a.label.toLowerCase().includes(q) ||
+            (!a.url.startsWith("data:image/") &&
+              a.url.toLowerCase().includes(q))
         );
         const matched =
           t.title.toLowerCase().includes(q) ||
@@ -547,6 +560,119 @@ export function OutputsHubView({
     }
   }
 
+  const visibleSelectedIds = useMemo(() => {
+    const visibleSet = new Set(filteredTasks.map((t) => t.id));
+    return selectedTaskIds.filter((id) => visibleSet.has(id));
+  }, [filteredTasks, selectedTaskIds]);
+
+  const approvableVisibleTasks = useMemo(
+    () =>
+      filteredTasks.filter(
+        (t) => t.status === "WAITING_APPROVAL" || t.status === "BRIEF_REVIEW"
+      ),
+    [filteredTasks]
+  );
+
+  const publishableVisibleTasks = useMemo(
+    () => filteredTasks.filter((t) => t.status === "APPROVED_FINAL"),
+    [filteredTasks]
+  );
+
+  const selectedApprovableTasks = useMemo(() => {
+    const sel = new Set(visibleSelectedIds);
+    return filteredTasks.filter(
+      (t) =>
+        sel.has(t.id) &&
+        (t.status === "WAITING_APPROVAL" || t.status === "BRIEF_REVIEW")
+    );
+  }, [filteredTasks, visibleSelectedIds]);
+
+  const selectedPublishableTasks = useMemo(() => {
+    const sel = new Set(visibleSelectedIds);
+    return filteredTasks.filter(
+      (t) => sel.has(t.id) && t.status !== "PUBLISHED"
+    );
+  }, [filteredTasks, visibleSelectedIds]);
+
+  function toggleTaskSelected(taskId: string) {
+    setSelectedTaskIds((prev) =>
+      prev.includes(taskId)
+        ? prev.filter((id) => id !== taskId)
+        : [...prev, taskId]
+    );
+  }
+
+  async function handleBatchAction(mode: "APPROVE" | "PUBLISH") {
+    const targets =
+      mode === "APPROVE" ? selectedApprovableTasks : selectedPublishableTasks;
+    if (targets.length === 0 || batchActing) return;
+
+    setBatchActing(mode);
+    let successCount = 0;
+    let failCount = 0;
+    const updatedMap = new Map<string, TaskItem>();
+
+    try {
+      const chunkSize = 5;
+      for (let i = 0; i < targets.length; i += chunkSize) {
+        const chunk = targets.slice(i, i + chunkSize);
+        const results = await Promise.allSettled(
+          chunk.map(async (task) => {
+            const action =
+              mode === "PUBLISH"
+                ? "MARK_PUBLISHED"
+                : task.status === "BRIEF_REVIEW"
+                  ? "APPROVE_BRIEF"
+                  : "APPROVE";
+            const res = await fetch(`/api/tasks/${task.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.task) {
+              throw new Error(data.error || "Thất bại");
+            }
+            return data.task as TaskItem;
+          })
+        );
+        for (const r of results) {
+          if (r.status === "fulfilled") {
+            updatedMap.set(r.value.id, r.value);
+            successCount += 1;
+          } else {
+            failCount += 1;
+          }
+        }
+      }
+
+      if (updatedMap.size > 0) {
+        setTasks((prev) =>
+          prev.map((t) => updatedMap.get(t.id) ?? t)
+        );
+        setSelectedTaskIds((prev) => prev.filter((id) => !updatedMap.has(id)));
+        window.dispatchEvent(new Event("reviews-count-updated"));
+      }
+
+      if (successCount > 0 && failCount === 0) {
+        showToast(
+          mode === "APPROVE"
+            ? `Đã duyệt hàng loạt ${successCount} bài thành công!`
+            : `Đã đánh dấu Đã đăng cho ${successCount} bài!`
+        );
+      } else if (successCount > 0) {
+        showToast(
+          `Hoàn tất ${successCount} bài, ${failCount} bài không thể xử lý.`,
+          "info"
+        );
+      } else {
+        showToast("Không xử lý được các bài đã chọn.", "error");
+      }
+    } finally {
+      setBatchActing(null);
+    }
+  }
+
   function handleExportCsv() {
     const headers = [
       "Nhân viên",
@@ -566,9 +692,12 @@ export function OutputsHubView({
     const rows = filteredTasks.map((t) => {
       const a = analyzeTaskOutputs(t);
       const links = a.deliverableAssets
-        .map(
-          (asset) => `${ASSET_KIND_LABEL[asset.kind] || asset.kind}: ${asset.url}`
-        )
+        .map((asset) => {
+          const displayUrl = asset.url.startsWith("data:image/")
+            ? `[Ảnh tải lên: ${asset.label}]`
+            : asset.url;
+          return `${ASSET_KIND_LABEL[asset.kind] || asset.kind}: ${displayUrl}`;
+        })
         .join(" | ");
       return [
         formatTaskAssigneesLabel(t, "Chưa gán"),
@@ -625,7 +754,7 @@ export function OutputsHubView({
       />
 
       {/* Results Header */}
-      <div className="flex items-center justify-between text-xs font-bold text-slate-600 px-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-600 px-1">
         <span>
           Đang hiển thị{" "}
           <span className="text-slate-900 font-extrabold">
@@ -658,6 +787,87 @@ export function OutputsHubView({
             </button>
           )}
       </div>
+
+      {/* Thanh thao tác hàng loạt cho Leader (Duyệt nhiều bài / Đánh dấu Đã đăng nhiều bài) */}
+      {isLeader && !isMediaProduction && filteredTasks.length > 0 && viewMode === "CARDS" && (
+        <div
+          className={`rounded-2xl border px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs transition ${
+            visibleSelectedIds.length > 0
+              ? "border-blue-300 bg-blue-50/70 shadow-xs"
+              : "border-slate-200 bg-slate-50/70"
+          }`}
+        >
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 font-extrabold text-slate-700 mr-1">
+              <CheckCheck className="w-4 h-4 text-blue-600" />
+              Thao tác hàng loạt:
+            </span>
+            {approvableVisibleTasks.length > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectedTaskIds(approvableVisibleTasks.map((t) => t.id))
+                }
+                className="rounded-lg border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-800 px-2.5 py-1 text-[11px] font-bold cursor-pointer"
+              >
+                Chọn bài chờ duyệt ({approvableVisibleTasks.length})
+              </button>
+            )}
+            {publishableVisibleTasks.length > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectedTaskIds(publishableVisibleTasks.map((t) => t.id))
+                }
+                className="rounded-lg border border-sky-200 bg-white hover:bg-sky-50 text-sky-800 px-2.5 py-1 text-[11px] font-bold cursor-pointer"
+              >
+                Chọn bài đã duyệt ({publishableVisibleTasks.length})
+              </button>
+            )}
+            {visibleSelectedIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedTaskIds([])}
+                className="rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 px-2 py-1 text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+                Bỏ chọn ({visibleSelectedIds.length})
+              </button>
+            )}
+          </div>
+
+          {visibleSelectedIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {selectedApprovableTasks.length > 0 && (
+                <button
+                  type="button"
+                  disabled={batchActing !== null}
+                  onClick={() => void handleBatchAction("APPROVE")}
+                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white px-3 py-1.5 text-xs font-extrabold inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {batchActing === "APPROVE"
+                    ? "Đang duyệt..."
+                    : `Duyệt hàng loạt (${selectedApprovableTasks.length})`}
+                </button>
+              )}
+              {selectedPublishableTasks.length > 0 && (
+                <button
+                  type="button"
+                  disabled={batchActing !== null}
+                  onClick={() => void handleBatchAction("PUBLISH")}
+                  className="rounded-xl bg-[#0B2545] hover:bg-slate-800 disabled:opacity-60 text-amber-300 px-3 py-1.5 text-xs font-extrabold inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <Rocket className="w-3.5 h-3.5" />
+                  {batchActing === "PUBLISH"
+                    ? "Đang cập nhật..."
+                    : `Đánh dấu Đã đăng (${selectedPublishableTasks.length})`}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Empty State */}
       {filteredTasks.length === 0 ? (
@@ -712,11 +922,15 @@ export function OutputsHubView({
               key={t.id}
               task={t}
               isLeader={isLeader}
+              isSelected={selectedTaskIds.includes(t.id)}
               isExpanded={Boolean(expandedCaptionIds[t.id])}
               copied={copiedId === t.id}
               aiChecking={aiCheckingTaskId === t.id}
               quickApproving={quickApprovingId === t.id}
               savedAiResult={getAiResultForTask(t)}
+              onToggleSelect={
+                isLeader ? () => toggleTaskSelected(t.id) : undefined
+              }
               onToggleExpand={() =>
                 setExpandedCaptionIds((prev) => ({
                   ...prev,

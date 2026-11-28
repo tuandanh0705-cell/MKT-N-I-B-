@@ -11,7 +11,10 @@ import {
 } from "lucide-react";
 import { TASK_TYPE_META, DEFAULT_CONTENT_PILLARS } from "@/lib/constants";
 import { getProjectContentOptions } from "@/lib/content-plan";
-import { getPresetDateTimeLocal } from "@/lib/dates";
+import {
+  getPresetDateTimeLocal,
+  parseVnDateTimeLocalToIso,
+} from "@/lib/dates";
 import { useToast } from "@/components/toast-provider";
 import { MultiAssigneePicker } from "@/components/multi-assignee-picker";
 import { PlatformLogo } from "@/components/platform-logo";
@@ -327,7 +330,7 @@ export function CreateTaskModal({
         ? publishChannel.trim().toLowerCase().includes("tiktok") ||
           publishChannel.trim().startsWith("@")
           ? "TikTok"
-          : "Fanpage"
+          : platform || "Fanpage"
         : platform;
       const effectiveQuantity = isMediaOrder
         ? Math.max(1, mediaBriefItems.length)
@@ -375,16 +378,10 @@ export function CreateTaskModal({
           quantity: effectiveQuantity,
           isMediaOrder,
           isOutsideDepartment,
-          dueAt: dueAt ? new Date(dueAt).toISOString() : null,
-          scheduledPublishAt: scheduledPublishAt
-            ? new Date(scheduledPublishAt).toISOString()
-            : null,
-          proposedBriefDueAt: proposedBriefDueAt
-            ? new Date(proposedBriefDueAt).toISOString()
-            : null,
-          proposedPublishAt: proposedPublishAt
-            ? new Date(proposedPublishAt).toISOString()
-            : null,
+          dueAt: parseVnDateTimeLocalToIso(dueAt),
+          scheduledPublishAt: parseVnDateTimeLocalToIso(scheduledPublishAt),
+          proposedBriefDueAt: parseVnDateTimeLocalToIso(proposedBriefDueAt),
+          proposedPublishAt: parseVnDateTimeLocalToIso(proposedPublishAt),
           contentPillar: contentPillar || null,
           campaignWeek: campaignWeek ? Number(campaignWeek) : null,
           fbPostLayout,

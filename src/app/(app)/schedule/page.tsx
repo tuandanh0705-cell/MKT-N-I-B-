@@ -13,9 +13,6 @@ export default async function SchedulePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  // Tự động gửi thông báo & lời chúc sinh nhật 1 lần/ngày nếu hôm nay có thành viên sinh nhật
-  await ensureDailyBirthdayCelebrations().catch(() => {});
-
   const todayStr = getVnDateString();
 
   const [leaves, meetings, teamMembers, projects] = await Promise.all([
@@ -84,6 +81,7 @@ export default async function SchedulePage() {
       orderBy: { createdAt: "asc" },
       select: { id: true, slug: true, name: true, color: true },
     }),
+    ensureDailyBirthdayCelebrations().catch(() => {}),
   ]);
 
   const { todayBirthdays, upcomingBirthdays } = computeBirthdayInfo(

@@ -535,7 +535,7 @@ export function ProjectWorkspace({
               <Plus className="w-4 h-4" />
               Order Media / Giao việc
             </button>
-            {viewMode !== "CONTENT_CALENDAR" && (
+            {viewMode !== "CONTENT_CALENDAR" && viewMode !== "CALENDAR" && (
               <button
                 type="button"
                 onClick={() => {
@@ -546,7 +546,7 @@ export function ProjectWorkspace({
                 className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <PenLine className="w-4 h-4" />
-                + Viết bài mới
+                Viết bài mới
               </button>
             )}
           </div>
@@ -663,8 +663,8 @@ export function ProjectWorkspace({
           </form>
         )}
 
-        <div className="mt-4 pt-3.5 border-t border-slate-100">
-          <div className="flex sm:inline-flex items-center overflow-x-auto no-scrollbar rounded-xl bg-slate-100 p-1 gap-1">
+        <div className="mt-4 pt-3.5 border-t border-slate-100 relative">
+          <div className="flex sm:inline-flex items-center overflow-x-auto no-scrollbar rounded-xl bg-slate-100 p-1 pr-7 sm:pr-1 gap-1">
             <button
               type="button"
               onClick={() => setViewMode("OVERVIEW")}
@@ -726,6 +726,10 @@ export function ProjectWorkspace({
               Brief Media ({mediaBriefsCount})
             </button>
           </div>
+          <div
+            aria-hidden="true"
+            className="sm:hidden pointer-events-none absolute right-0 top-3.5 bottom-0 w-8 bg-gradient-to-l from-white via-white/80 to-transparent rounded-r-xl"
+          />
         </div>
       </div>
 

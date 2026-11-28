@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { TASK_STATUS_META, isTaskOverdue } from "@/lib/constants";
-import { formatVnDateTime } from "@/lib/dates";
+import { formatVnDateTime, parseVnDateTimeLocalToIso } from "@/lib/dates";
 import {
   VIDEO_ORDER_KIND_META,
   countFilledScriptRows,
@@ -185,13 +185,32 @@ export function MediaBriefRow({
           <select
             value={t.status}
             disabled={busy}
-            onChange={(e) =>
+            onChange={(e) => {
+              const nextStatus = e.target.value as TaskStatus;
+              let payload: Record<string, unknown> = { status: nextStatus };
+              if (nextStatus === "WAITING_APPROVAL") {
+                payload = { action: "SUBMIT_FOR_REVIEW" };
+              } else if (nextStatus === "APPROVED_FINAL") {
+                payload = { action: "APPROVE" };
+              } else if (nextStatus === "REVISION_NEEDED") {
+                payload = { action: "REQUEST_REVISION" };
+              } else if (nextStatus === "PUBLISHED") {
+                payload = { action: "MARK_PUBLISHED" };
+              } else if (nextStatus === "DONE") {
+                payload = { action: "MARK_DONE" };
+              } else if (
+                nextStatus === "IN_PROGRESS" &&
+                t.status === "BRIEF_REVIEW" &&
+                currentUserRole === "LEADER"
+              ) {
+                payload = { action: "APPROVE_BRIEF" };
+              }
               onPatchTask(
                 t.id,
-                { status: e.target.value },
+                payload,
                 `Đã cập nhật tình trạng ${t.code}.`
-              )
-            }
+              );
+            }}
             className={`rounded-full border px-2.5 py-1 text-[11px] font-bold cursor-pointer ${stMeta.colorClass}`}
           >
             {allStatuses.map((st) => {
@@ -245,7 +264,7 @@ export function MediaBriefRow({
                 onPatchTask(
                   t.id,
                   {
-                    dueAt: nextVal ? new Date(nextVal).toISOString() : null,
+                    dueAt: parseVnDateTimeLocalToIso(nextVal),
                   },
                   `Đã cập nhật Deadline ${t.code}.`
                 );
@@ -360,30 +379,50 @@ export function MediaBriefRow({
               </span>
             );
           })}
-          {briefAsset && (
-            <a
-              href={briefAsset.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-0.5 rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 font-semibold text-amber-800 hover:underline"
-            >
-              <Link2 className="w-3 h-3" />
-              Brief
-              <ExternalLink className="w-2.5 h-2.5" />
-            </a>
-          )}
-          {outputAsset && (
-            <a
-              href={outputAsset.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-0.5 rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 font-semibold text-emerald-800 hover:underline"
-            >
-              <Send className="w-3 h-3" />
-              {outputAsset.kind === "FINAL" ? "Final" : "Demo"}
-              <ExternalLink className="w-2.5 h-2.5" />
-            </a>
-          )}
+          {briefAsset &&
+            (briefAsset.url.startsWith("data:image/") ? (
+              <button
+                type="button"
+                onClick={() => onSelectTask(t.id)}
+                className="inline-flex items-center gap-0.5 rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 font-semibold text-amber-800 hover:underline cursor-pointer"
+              >
+                <Link2 className="w-3 h-3" />
+                Ảnh Brief
+              </button>
+            ) : (
+              <a
+                href={briefAsset.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 font-semibold text-amber-800 hover:underline"
+              >
+                <Link2 className="w-3 h-3" />
+                Brief
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            ))}
+          {outputAsset &&
+            (outputAsset.url.startsWith("data:image/") ? (
+              <button
+                type="button"
+                onClick={() => onSelectTask(t.id)}
+                className="inline-flex items-center gap-0.5 rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 font-semibold text-emerald-800 hover:underline cursor-pointer"
+              >
+                <Send className="w-3 h-3" />
+                {outputAsset.kind === "FINAL" ? "Ảnh Final" : "Ảnh Demo"}
+              </button>
+            ) : (
+              <a
+                href={outputAsset.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 font-semibold text-emerald-800 hover:underline"
+              >
+                <Send className="w-3 h-3" />
+                {outputAsset.kind === "FINAL" ? "Final" : "Demo"}
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            ))}
         </div>
       </td>
 

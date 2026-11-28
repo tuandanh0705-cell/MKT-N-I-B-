@@ -61,7 +61,7 @@ export async function GET() {
         },
       },
       _count: {
-        select: { tasks: true },
+        select: { tasks: { where: { deletedAt: null } } },
       },
     },
   });
@@ -396,7 +396,9 @@ export async function PATCH(request: Request) {
           where: {
             projectId: id,
             deletedAt: null,
-            contentAngle: { in: matchValues },
+            OR: matchValues.map((val) => ({
+              contentAngle: { equals: val, mode: "insensitive" as const },
+            })),
           },
           data: { contentAngle: rn.to },
         });
@@ -406,7 +408,7 @@ export async function PATCH(request: Request) {
           where: {
             projectId: id,
             deletedAt: null,
-            platform: rn.from,
+            platform: { equals: rn.from, mode: "insensitive" },
           },
           data: { platform: rn.to },
         });
@@ -416,7 +418,7 @@ export async function PATCH(request: Request) {
           where: {
             projectId: id,
             deletedAt: null,
-            postFormat: rn.from,
+            postFormat: { equals: rn.from, mode: "insensitive" },
           },
           data: { postFormat: rn.to },
         });

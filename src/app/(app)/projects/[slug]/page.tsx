@@ -11,7 +11,11 @@ import {
 import { getAnonymizedTeamCapacity } from "@/lib/capacity";
 import { getGeminiConfigStatus } from "@/lib/gemini-ai";
 import { buildProjectChannelSuggestions } from "@/lib/platform-meta";
-import { TASK_CARD_INCLUDE } from "@/lib/task-queries";
+import {
+  SIMPLE_PROJECT_SELECT,
+  TASK_CARD_INCLUDE,
+  sanitizeTasksAssets,
+} from "@/lib/task-queries";
 import { ProjectWorkspace } from "@/components/project-workspace";
 
 export default async function ProjectDetailPage({
@@ -68,7 +72,7 @@ export default async function ProjectDetailPage({
     );
   }
 
-  const [tasks, allAccessibleProjects, users, capacity, fanpages, resources, aiConfig] =
+  const [rawTasks, allAccessibleProjects, users, capacity, fanpages, resources, aiConfig] =
     await Promise.all([
       prisma.task.findMany({
         where: buildTaskVisibilityWhere(user, project.id),
@@ -78,6 +82,7 @@ export default async function ProjectDetailPage({
       prisma.project.findMany({
         where: buildProjectVisibilityWhere(user),
         orderBy: { createdAt: "asc" },
+        select: SIMPLE_PROJECT_SELECT,
       }),
       prisma.user.findMany({
         where: { isActive: true },
@@ -105,13 +110,14 @@ export default async function ProjectDetailPage({
         where: {
           OR: [{ projectId: project.id }, { scope: "GLOBAL" }],
         },
-        select: { title: true, url: true, tags: true },
+        select: { title: true, url: true, linksJson: true, tags: true },
         orderBy: { createdAt: "desc" },
         take: 40,
       }),
       getGeminiConfigStatus(),
     ]);
 
+  const tasks = sanitizeTasksAssets(rawTasks);
   const baseChannelSuggestions = buildProjectChannelSuggestions({
     fanpages,
     resources,

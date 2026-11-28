@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { buildProjectVisibilityWhere, canAccessProject } from "@/lib/permissions";
 import { createNotification } from "@/lib/notifications";
-import { formatVnd } from "@/lib/dates";
+import { formatVnd, parseVnDateTimeLocalToIso } from "@/lib/dates";
 import type { BudgetCategory, BudgetStatus } from "@/generated/prisma/client";
 
 export async function GET() {
@@ -65,13 +65,25 @@ export async function POST(request: Request) {
       10 + Math.random() * 89
     )}`;
 
+    let parsedNeededBy: Date | null = null;
+    if (body.neededBy) {
+      const iso = parseVnDateTimeLocalToIso(String(body.neededBy));
+      if (!iso) {
+        return NextResponse.json(
+          { error: "Ngày cần chi không đúng định dạng." },
+          { status: 400 }
+        );
+      }
+      parsedNeededBy = new Date(iso);
+    }
+
     const created = await prisma.budgetRequest.create({
       data: {
         code,
         title,
         category: (body.category as BudgetCategory) || "SHOOT_PRODUCTION",
         amount,
-        neededBy: body.neededBy ? new Date(body.neededBy) : null,
+        neededBy: parsedNeededBy,
         note: body.note ? String(body.note).trim() : null,
         status: user.role === "LEADER" ? "APPROVED" : "PENDING",
         reviewerId: user.role === "LEADER" ? user.id : null,
@@ -148,13 +160,35 @@ export async function PATCH(request: Request) {
     });
 
     if (updated.requesterId !== user.id) {
+      const notifType =
+        status === "APPROVED"
+          ? "APPROVED"
+          : status === "REJECTED"
+            ? "REVISION_REQUESTED"
+            : "SYSTEM";
+      const notifTitle =
+        status === "APPROVED"
+          ? `Đã duyệt chi phí ${updated.code}`
+          : status === "REJECTED"
+            ? `Từ chối chi phí ${updated.code}`
+            : `Chuyển về chờ duyệt chi phí ${updated.code}`;
+      const notifMessage =
+        status === "APPROVED"
+          ? `Leader đã duyệt khoản "${updated.title}" (${formatVnd(updated.amount)})${
+              updated.reviewNote ? ` • Ghi chú: ${updated.reviewNote}` : ""
+            }.`
+          : status === "REJECTED"
+            ? `Leader từ chối khoản "${updated.title}" (${formatVnd(updated.amount)})${
+                updated.reviewNote ? ` • Lý do: ${updated.reviewNote}` : ""
+              }.`
+            : `Leader đã chuyển khoản "${updated.title}" (${formatVnd(updated.amount)}) về trạng thái chờ duyệt.`;
       await createNotification({
         userId: updated.requesterId,
-        type: status === "APPROVED" ? "APPROVED" : "REVISION_REQUESTED",
-        title: `${status === "APPROVED" ? "Đã duyệt chi phí" : "Từ chối chi phí"} ${updated.code}`,
-        message: `Leader ${status === "APPROVED" ? "đã duyệt" : "từ chối"} khoản "${updated.title}" (${formatVnd(updated.amount)}).`,
+        type: notifType,
+        title: notifTitle,
+        message: notifMessage,
         linkUrl: "/budgets",
-        sendEmailNow: true,
+        sendEmailNow: status !== "PENDING",
       });
     }
 

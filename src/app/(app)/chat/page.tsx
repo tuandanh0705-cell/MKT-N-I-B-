@@ -39,6 +39,7 @@ export default async function ChatPage({
   let initialMessages: ReturnType<typeof serializeChatMessage>[] = [];
   let initialReminders: ChatReminderItem[] = [];
   if (initialRoomId) {
+    const shouldMarkReadOnServer = Boolean(resolvedParams.room);
     const [rawMessagesDesc, initialRoomRaw, rawReminders] = await Promise.all([
       prisma.chatMessage.findMany({
         where: { roomId: initialRoomId },
@@ -60,12 +61,16 @@ export default async function ChatPage({
         take: 30,
         include: CHAT_REMINDER_INCLUDE,
       }),
-      prisma.chatParticipant.update({
-        where: {
-          roomId_userId: { roomId: initialRoomId, userId: user.id },
-        },
-        data: { lastReadAt: new Date() },
-      }),
+      ...(shouldMarkReadOnServer
+        ? [
+            prisma.chatParticipant.update({
+              where: {
+                roomId_userId: { roomId: initialRoomId, userId: user.id },
+              },
+              data: { lastReadAt: new Date() },
+            }),
+          ]
+        : []),
     ]);
 
     const msgSerializeOpts = initialRoomRaw?.isAnonymousThread
@@ -83,8 +88,10 @@ export default async function ChatPage({
       serializeChatReminder(rem, user.id, initialRoomRaw)
     );
 
-    const targetRoom = rooms.find((r) => r.id === initialRoomId);
-    if (targetRoom) targetRoom.unreadCount = 0;
+    if (shouldMarkReadOnServer) {
+      const targetRoom = rooms.find((r) => r.id === initialRoomId);
+      if (targetRoom) targetRoom.unreadCount = 0;
+    }
   }
 
   return (

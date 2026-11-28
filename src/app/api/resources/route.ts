@@ -292,7 +292,9 @@ export async function DELETE(request: Request) {
   }
 
   if (existing.projectId) {
-    const allowed = await canAccessProject(user, existing.projectId);
+    const allowed =
+      isMediaProductionUser(user.role, user.departmentScope) ||
+      (await canAccessProject(user, existing.projectId));
     if (!allowed && user.role !== "LEADER") {
       return NextResponse.json({ error: "Không có quyền xóa." }, { status: 403 });
     }

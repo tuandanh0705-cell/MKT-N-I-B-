@@ -65,16 +65,25 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!channel) {
-      channel = await prisma.fanpageChannel.findFirst({
+    if (!channel && !channelId && !pageUrl && !pageTitle) {
+      const activeChannels = await prisma.fanpageChannel.findMany({
         where: { isActive: true },
         orderBy: { createdAt: "asc" },
+        take: 2,
       });
+      if (activeChannels.length === 1) {
+        channel = activeChannels[0];
+      }
     }
 
     if (!channel) {
       return NextResponse.json(
-        { error: "Chưa có Fanpage nào được khai báo trên CRM." },
+        {
+          error:
+            pageUrl || pageTitle
+              ? `Không tìm thấy Fanpage nào trên CRM khớp với "${pageTitle || pageUrl}". Hãy khai báo đúng Tên / Link Fanpage trước khi đồng bộ.`
+              : "Không xác định được Fanpage cần đồng bộ trên CRM.",
+        },
         { status: 404, headers }
       );
     }

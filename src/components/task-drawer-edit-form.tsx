@@ -6,7 +6,7 @@ import { PlatformLogo } from "@/components/platform-logo";
 import { PublishChannelInput } from "@/components/publish-channel-input";
 import { CONTENT_PLATFORM_OPTIONS } from "@/lib/content-plan";
 import { TASK_TYPE_META } from "@/lib/constants";
-import { toVnDateTimeLocalValue } from "@/lib/dates";
+import { parseVnDateTimeLocalToIso, toVnDateTimeLocalValue } from "@/lib/dates";
 import { normalizePlatformSelectValue } from "@/lib/platform-meta";
 import { getTaskAssigneeIds } from "@/lib/task-assignees";
 import type { SimpleUser, TaskItem } from "@/types/crm";
@@ -60,10 +60,8 @@ export function TaskDrawerEditForm({
         assigneeIds: editAssigneeIds,
         assigneeId: editAssigneeIds[0] || null,
         quantity: editQuantity,
-        dueAt: editDueAt ? new Date(editDueAt).toISOString() : null,
-        scheduledPublishAt: editScheduleAt
-          ? new Date(editScheduleAt).toISOString()
-          : null,
+        dueAt: parseVnDateTimeLocalToIso(editDueAt),
+        scheduledPublishAt: parseVnDateTimeLocalToIso(editScheduleAt),
       },
       "Đã cập nhật thông tin công việc."
     );

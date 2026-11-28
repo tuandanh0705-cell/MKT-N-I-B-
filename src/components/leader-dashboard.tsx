@@ -238,6 +238,7 @@ export function LeaderDashboard({
         return;
       }
       if (data.task) handleTaskUpdated(data.task as TaskItem);
+      window.dispatchEvent(new Event("reviews-count-updated"));
       showToast(
         action === "APPROVE_BRIEF"
           ? `Đã duyệt Brief ${target.code}!`
@@ -430,7 +431,7 @@ export function LeaderDashboard({
       <div className="bg-white rounded-2xl border-2 border-amber-200/80 p-4 space-y-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-bold text-slate-900">
-            🏴‍☠️ Biệt đội 3D
+            ⚓ Biệt đội 3D
           </h2>
           <div className="flex items-center gap-3">
             {selectedAssigneeId !== "ALL" && (
@@ -697,17 +698,26 @@ export function LeaderDashboard({
                               {quickApprovingId === t.id ? "..." : "Duyệt"}
                             </button>
                           )}
-                          {latestAsset && (
-                            <a
-                              href={latestAsset.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-xs font-semibold text-sky-600 hover:underline"
-                            >
-                              Mở
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
+                          {latestAsset &&
+                            (latestAsset.url.startsWith("data:image/") ? (
+                              <button
+                                type="button"
+                                onClick={() => setActiveTaskId(t.id)}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-sky-600 hover:underline cursor-pointer"
+                              >
+                                Xem ảnh
+                              </button>
+                            ) : (
+                              <a
+                                href={latestAsset.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-sky-600 hover:underline"
+                              >
+                                Mở
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            ))}
                         </div>
                       </td>
                     </tr>
